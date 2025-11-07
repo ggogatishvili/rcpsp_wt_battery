@@ -1,0 +1,58 @@
+/*
+
+Copyright (c) 2025, Corentin JUVIGNY
+
+Permission to use, copy, modify, and/or distribute this software
+for any purpose with or without fee is hereby granted, provided
+that the above copyright notice and this permission notice appear
+in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+*/
+
+#include "solution.h"
+#include <gurobi_c.h>
+
+Solution::Solution( const Instance* ins
+                  , const double ObjVal
+                  , const double energyCost
+                  , const unsigned int makespan
+                  , const std::vector<int>& taskAssignments
+                  , const std::vector<double>& batteryLevels
+                  , const std::vector<MachineBlock>& machineBlocks
+                  , const SolutionStats&& stats
+                  , const ConstructorBehavior beh )
+   : ins(ins)
+   , objVal(ObjVal)
+   , energyCost(energyCost)
+   , makespan(makespan)
+   , taskAssignments(taskAssignments)
+   , batteryLevels(batteryLevels)
+   , machineBlocks(machineBlocks)
+   , stats(stats)
+{
+   if ( beh == Update ) this->energyCost = compute_energyCost();
+}
+
+double Solution::compute_energyCost() const
+{
+   double objVal = 0.0;
+   std::vector<std::pair<int, int>> ee_task_assignments;
+   ee_task_assignments.reserve(ins->ee_tasks.size());
+   iterate(j, ins->ee_tasks)
+   {
+      const int startingTime = taskAssignments[j];
+      ee_task_assignments.emplace_back(j, startingTime);
+      objVal += ins->cjob(j, startingTime);
+   }
+   std::ranges::sort(ee_task_assignments, {}, [](const auto e){ return e.second; });
+   return objVal;
+}

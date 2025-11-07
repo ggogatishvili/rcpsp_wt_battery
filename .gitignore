@@ -1,0 +1,12 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+./pyvenv
+.venv
+build
+build-debug
+CMakeuserPresets.json
+.cache
+target
+__pycache__
+CMakeUserPresets.json
+.zed
+results

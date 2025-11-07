@@ -1,0 +1,13 @@
+[requires]
+boost/1.87.0
+fmt/11.2.0
+onetbb/2022.0.0
+nlohmann_json/3.12.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[options]
+boos/*t:shared=True
+fmt/*:shared=False
