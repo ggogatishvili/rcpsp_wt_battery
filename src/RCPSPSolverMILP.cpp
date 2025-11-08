@@ -58,7 +58,8 @@ Solution RCPSPSolverMILP::_solve() {
     Map2<GRBVar> x; // 1 if task t starts in interval i
     Map2<GRBVar> y; // 1 if task t is running in interval i
     Map2<GRBVar> rs; // 1 if machine state is s in interval i
-    Map3<GRBVar> rt; // 1 if machine transitions from state s1 to s2 in interval i
+    Map3<GRBVar> rx; // 1 if machine starts transition from state s1 to s2 in interval i
+    Map3<GRBVar> ry; // 1 if machine is in transition from state s1 to s2 in interval i
     Map1<GRBVar> gMach; // grid energy used for machine in interval i
     Map1<GRBVar> gBatt; // grid energy used for charging battery in interval i
     Map1<GRBVar> bMach; // battery energy used for machine in interval i
@@ -78,7 +79,8 @@ Solution RCPSPSolverMILP::_solve() {
     }
 
     Loop(s1, 3) Loop(s2, 3) Loop(i, H) {
-        rt.set(s1, s2, i, model.addVar(0.0, 1.0, 0.0, GRB_BINARY, fmt::format("rt_{}_{}_{}", s1, s2, i)));
+        rx.set(s1, s2, i, model.addVar(0.0, 1.0, 0.0, GRB_BINARY, fmt::format("rt_{}_{}_{}", s1, s2, i)));
+        ry.set(s1, s2, i, model.addVar(0.0, 1.0, 0.0, GRB_BINARY, fmt::format("ry_{}_{}_{}", s1, s2, i)));
     }
 
     // Energy and battery
@@ -109,10 +111,10 @@ Solution RCPSPSolverMILP::_solve() {
 
     // (2) Running indicator definition y_{j,i}
     Loop(t, N) Loop(i, H) {
-            GRBLinExpr expr = 0;
-            LoopFrom(ip, std::max(0, i - ins->pj(t) + 1), i + 1)expr += x.i(t, ip);
-            model.addConstr(y.i(t, i) == expr, fmt::format("Ydef_{}_{}", t, i));
-        }
+        GRBLinExpr expr = 0;
+        LoopFrom(i2, std::max(0, i - ins->pj(t) + 1), i + 1) expr += x.i(t, i2);
+        model.addConstr(y.i(t, i) == expr, fmt::format("Ydef_{}_{}", t, i));
+    }
 
     // (3) Precedence constraints
     Loop(t1, N) iterate(t2, ins->successors(t1)) {
@@ -133,13 +135,13 @@ Solution RCPSPSolverMILP::_solve() {
             model.addConstr(expr <= ins->resource_capacities[q], fmt::format("ResCap_{}_{}", q, i));
         }
 
-    // (5) Machine state exclusivity
+    // (5) Machine is exactly in one state or in one transition at each time interval
     Loop(i, H) {
         GRBLinExpr expr = 0;
         Loop(s, 3) expr += rs.i(s, i);
         Loop(s1, 3) Loop(s2, 3) {
             if (s1 != s2)
-                expr += rt.get(s1, s2, i);
+                expr += ry.get(s1, s2, i);
         }
         model.addConstr(expr == 1, fmt::format("OneStateOrTransition_{}", i));
     }
@@ -151,14 +153,80 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(procNeeded <= rs.i((int) State::Proc, i) * N, fmt::format("ProcDuringEE_{}", i));
     }
 
-    // (7) Transition logic
-    Loop(i, H) Loop(s1, 3) Loop(s2, 3) {
-        // TODO Change everything
+    Loop(i, H-1) Loop(s1, 3) {
+        GRBLinExpr nextTrans = 0;
+        Loop(s2, 3) {
+            if (s1 != s2)
+                nextTrans += rx.get(s1, s2, i + 1);
+        }
+        model.addConstr(nextTrans >= rs.i(s1, i) - rs.i(s1, i + 1), fmt::format("StateToNextStateOrTrans_{}_{}", s1, i));
+    }
 
-        model.addConstr(rt.get(s1, s2, i) <= rs.i(s1, i), fmt::format("TransFromState_{}_{}_{}", s1, s2, i));
-        if (i + 1 < H)
-            model.addConstr(rt.get(s1, s2, i) <= rs.i(s2, i + 1),
-                            fmt::format("TransToState_{}_{}_{}", s1, s2, i));
+    // (7) Transition logic
+    LoopFrom(i, 1, H - 1) { // We can skip first and last interval for transitions (as they must be OFF state)
+        Loop(s1, 3) Loop(s2, 3) {
+            if (s1 == s2) continue;
+
+            int dur = 0;
+            if (s1 == 0 && s2 == 1) dur = ins->offOn.time;
+            else if (s1 == 1 && s2 == 0) dur = ins->onOff.time;
+            else if (s1 == 1 && s2 == 2) dur = ins->onIdle.time;
+            else if (s1 == 2 && s2 == 1) dur = ins->idleOn.time;
+
+            // Invalid transition
+            if (dur == 0) {
+                model.addConstr(rx.get(s1, s2, i) == 0, fmt::format("InvalidTransitionX_{}_{}_{}", s1, s2, i));
+                model.addConstr(ry.get(s1, s2, i) == 0, fmt::format("InvalidTransitionY_{}_{}_{}", s1, s2, i));
+                continue;
+            }
+
+            // Transition cannot start if it cannot end within horizon
+            if (i + dur >= H) {
+                model.addConstr(rx.get(s1, s2, i) == 0, fmt::format("TransitionOutOfHorizonX_{}_{}_{}", s1, s2, i));
+                model.addConstr(ry.get(s1, s2, i) == 0, fmt::format("TransitionOutOfHorizonY_{}_{}_{}", s1, s2, i));
+                continue;
+            }
+
+            // The transition can only start from an appropriate state
+            model.addConstr(rx.get(s1, s2, i) <= rs.i(s1, i - 1), fmt::format("TransFromState_{}_{}_{}", s1, s2, i));
+
+            // The transition can only end in an appropriate state
+            model.addConstr(rx.get(s1, s2, i) <= rs.i(s2, i + dur), fmt::format("TransToState_{}_{}_{}", s1, s2, i));
+
+            model.addConstr(rx.get(s1, s2, i) >= rs.i(s1, i - 1) + rs.i(s2, i + dur) - 1,fmt::format("ForceStartIfStatesMatch_{}_{}_{}", s1, s2, i));
+
+            // Transition lasts for its duration
+            Loop(i2, dur) {
+                model.addConstr(rx.get(s1, s2, i) <= ry.get(s1, s2, i + i2), fmt::format("TransDuration_{}_{}_{}_{}", s1, s2, i, i2));
+            }
+        }
+    }
+
+    // Only one transition can start at each time interval
+    Loop(i, H) {
+        GRBLinExpr transStart = 0;
+        Loop(s1, 3) Loop(s2, 3) {
+            transStart += rx.get(s1, s2, i);
+        }
+        model.addConstr(transStart <= 1, fmt::format("OneTransStart_{}", i));
+    }
+
+    // Two different states are not next to each other (they have transition in between)
+    Loop(i, H-1) Loop(s1, 3) Loop(s2, 3) {
+        if (s1 == s2) continue;
+        model.addConstr(rs.i(s1, i) + rs.i(s2, i+1) <= 1, fmt::format("NoDirectStateChange_{}_{}_{}", s1, s2, i));
+    }
+
+    // Two different transition are not next to each other (they have states in between)
+    Loop(i, H-1) {
+        Loop(s1, 3) Loop(s2, 3) {
+            if (s1 == s2) continue;
+            Loop(s3, 3) Loop(s4, 3) {
+                if (s3 == s4) continue;
+                if (s1 == s3 && s2 == s4) continue; // skip same transition
+                model.addConstr(ry.get(s1, s2, i) + ry.get(s3, s4, i + 1) <= 1, fmt::format("NoDirectTransChange_{}_{}_{}_{}_{}", s1, s2, s3, s4, i));
+            }
+        }
     }
 
     // (8) Start and end in OFF state
@@ -191,10 +259,10 @@ Solution RCPSPSolverMILP::_solve() {
         stateEnergy += rs.i((int) State::Proc, i) * ins->On.cost;
         stateEnergy += rs.i((int) State::Idle, i) * ins->Idle.cost;
 
-        transEnergy += rt.get((int) State::Off, (int) State::Proc, i) * ins->offOn.cost;
-        transEnergy += rt.get((int) State::Proc, (int) State::Off, i) * ins->onOff.cost;
-        transEnergy += rt.get((int) State::Proc, (int) State::Idle, i) * ins->onIdle.cost;
-        transEnergy += rt.get((int) State::Idle, (int) State::Proc, i) * ins->idleOn.cost;
+        transEnergy += ry.get((int) State::Off, (int) State::Proc, i) * ins->offOn.cost;
+        transEnergy += ry.get((int) State::Proc, (int) State::Off, i) * ins->onOff.cost;
+        transEnergy += ry.get((int) State::Proc, (int) State::Idle, i) * ins->onIdle.cost;
+        transEnergy += ry.get((int) State::Idle, (int) State::Proc, i) * ins->idleOn.cost;
 
         model.addConstr(eMach.get(i) == stateEnergy + transEnergy, fmt::format("MachineEnergy_{}", i));
     }
@@ -286,13 +354,13 @@ Solution RCPSPSolverMILP::_solve() {
             if (s1 == s2) continue; // skip same-state
             int start = -1;
             Loop(i, H) {
-                double val = rt.get(s1, s2, i).get(GRB_DoubleAttr_X);
+                double val = ry.get(s1, s2, i).get(GRB_DoubleAttr_X);
                 if (val > 0.999 && start == -1) {
                     start = i;
                 }
                 if ((val <= 0.999 || i == H-1) && start != -1) {
                     int end = (val <= 0.999) ? i-1 : i;
-                    std::string transName = fmt::format("Trans_{}_to_{}", s1, s2);
+                    std::string transName = fmt::format("{} -> {}", state_name((State)s1), state_name((State)s2));
                     machineBlocks.push_back({start, end, transName});
                     start = -1;
                 }

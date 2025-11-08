@@ -134,7 +134,7 @@ def display_price_graph(prices):
 
 if __name__ == "__main__":
     input_dir = "instances_original"
-    output_dir = "../instances"
+    output_dir = "../instances_new"
 
     os.makedirs(output_dir, exist_ok=True)  # Make sure output directory exists
 
