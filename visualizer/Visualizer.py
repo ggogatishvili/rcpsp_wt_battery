@@ -15,7 +15,72 @@ tasks = data["task_assignments"]
 resource_count = data["instance_summary"]["resource_count"]
 objective_value = data.get("objective_value", None)
 
-# --- Assign task rows ---
+# Colors
+ENERGY_COLOR = "#FF5C46"
+BATTERY_COLOR = "#A876FF"
+STATE_COLORS = {
+    "Off": "#B9B9B9",
+    "Transition": "#6D6D6D",
+    "Idle": "#52BDFF",
+    "Proc": "#008CE3",
+}
+TASK_COLORS = {
+    "regular": "#90EE90",
+    "energy_intensive": "#006400",
+    "tardy_regular": "#FFA500",
+    "tardy_energy_intensive": "#FF7500"
+}
+
+# --- Create figure ---
+fig = go.Figure()
+
+# Define vertical domains (stacked layout)
+task_domain = [0.0, 0.4]
+machine_state_domain = [0.4, 0.45]
+battery_domain = [0.45, 0.65]
+energy_domain = [0.65, 1.0]
+
+# --- ENERGY COST LINE ---
+fig.add_trace(go.Scatter(
+    x=list(range(len(energy))),
+    y=energy,
+    mode="lines+markers",
+    name="Energy cost",
+    line=dict(color=ENERGY_COLOR),
+    hovertemplate="Energy cost: %{y:.2f}<extra></extra>",
+    yaxis="y4"
+))
+
+# --- BATTERY LINE ---
+fig.add_trace(go.Scatter(
+    x=list(range(len(battery))),
+    y=battery,
+    mode="lines+markers",
+    name="Battery level",
+    line=dict(color=BATTERY_COLOR),
+    hovertemplate="Battery level: %{y:.2f}<extra></extra>",
+    yaxis="y3"
+))
+
+# --- MACHINE STATE LINE ---
+for block in data["machine_blocks"]:
+    state = block["description"]
+    start, end = block["start_time"], block["end_time"]
+    color = STATE_COLORS.get(state, STATE_COLORS.get("Transition"))
+
+    fig.add_trace(go.Scatter(
+        x=[start, end + 1, end + 1, start], # The end is inclusive, so we add 1 to extend it to the end of current time interval
+        y=[0, 0, 1, 1],  # fill a single line from 0 to 1 in yaxis2
+        fill="toself",
+        mode="lines",
+        line=dict(width=1, color=color),
+        showlegend=False,
+        yaxis="y2",
+        hoverinfo="text",
+        text=f"State: {state}<br>Start: {start}<br>End: {end}"
+    ))
+
+# --- TASK BARS ---
 def assign_task_rows(tasks):
     rows = []
     task_rows = {}
@@ -33,36 +98,19 @@ def assign_task_rows(tasks):
 
 task_rows, max_task_rows = assign_task_rows(tasks)
 
-# --- Create figure ---
-fig = go.Figure()
-
-# Define vertical domains (stacked layout)
-task_domain = [0.0, 0.4]
-machine_state_domain = [0.4, 0.45]
-battery_domain = [0.45, 0.65]
-energy_domain = [0.65, 1.0]
-
-# --- TASK BARS ---
-COLORS = {
-    "regular": "#90EE90",
-    "energy_intensive": "#006400",
-    "tardy_regular": "#FFA500",
-    "tardy_energy_intensive": "#FF7500"
-}
-
 for t in tasks:
     row = task_rows[t["task_id"]]
     uses_R0 = t["resource_requests"][0] > 0
     is_tardy = t.get("due_date", float('inf')) < t["end_time"]
 
     if is_tardy and uses_R0:
-        color = COLORS["tardy_energy_intensive"]
+        color = TASK_COLORS["tardy_energy_intensive"]
     elif is_tardy:
-        color = COLORS["tardy_regular"]
+        color = TASK_COLORS["tardy_regular"]
     elif uses_R0:
-        color = COLORS["energy_intensive"]
+        color = TASK_COLORS["energy_intensive"]
     else:
-        color = COLORS["regular"]
+        color = TASK_COLORS["regular"]
 
     task_name = f"T{t['task_id']}"
     start, end = t["start_time"], t["end_time"]
@@ -70,7 +118,7 @@ for t in tasks:
     hover_text = (
         f"<b>{task_name}</b><br>"
         f"Start: {t['start_time']}<br>"
-        f"End: {t['end_time']}<br>" 
+        f"End: {t['end_time']}<br>"
         f"Duration: {t['duration']}<br>"
         f"Release: {t['release_date']}<br>"
         f"Due: {t['due_date']}<br>"
@@ -92,70 +140,37 @@ for t in tasks:
         yaxis="y"
     ))
 
-# --- MACHINE STATE LINE ---
-# --- MACHINE STATE LINE ---
-STATE_COLORS = {
-    "Off": "lightcoral",       # light red
-    "Idle": "lightsalmon",     # light orange
-    "Proc": "lightgreen"       # light green
-}
-
-machine_blocks = data["machine_blocks"]
-
-for block in machine_blocks:
-    state = block["description"]
-    start, end = block["start_time"], block["end_time"]
-    color = STATE_COLORS.get(state, "lightgrey")  # fallback color
-
-    fig.add_trace(go.Scatter(
-        x=[start, end + 1, end + 1, start], # The end is inclusive, so we add 1 to extend it to the end of current time interval
-        y=[0, 0, 1, 1],  # fill a single line from 0 to 1 in yaxis2
-        fill="toself",
-        mode="lines",
-        line=dict(width=1, color=color),
-        showlegend=False,
-        yaxis="y2",
-        hoverinfo="text",
-        text=f"State: {state}<br>Start: {start}<br>End: {end}"
-    ))
-
-
-# --- BATTERY LINE ---
-fig.add_trace(go.Scatter(
-    x=list(range(len(battery))),
-    y=battery,
-    mode="lines+markers",
-    name="Battery level",
-    line=dict(color="blue"),
-    hovertemplate="Battery level: %{y:.2f}<extra></extra>",
-    yaxis="y3"
-))
-
-# --- ENERGY COST LINE ---
-fig.add_trace(go.Scatter(
-    x=list(range(len(energy))),
-    y=energy,
-    mode="lines+markers",
-    name="Energy cost",
-    line=dict(color="red"),
-    hovertemplate="Energy cost: %{y:.2f}<extra></extra>",
-    yaxis="y4"
-))
-
 # --- LEGEND ITEMS ---
-legend_items = [
-    (COLORS["regular"], "Regular task"),
-    (COLORS["energy_intensive"], "Energy-intensive task"),
-    (COLORS["tardy_regular"], "Tardy regular task"),
-    (COLORS["tardy_energy_intensive"], "Tardy energy-intensive task"),
+legend_items1 = [
+    (STATE_COLORS["Off"], "Machine Off"),
+    (STATE_COLORS["Transition"], "Machine Transitioning"),
+    (STATE_COLORS["Idle"], "Machine Idle"),
+    (STATE_COLORS["Proc"], "Machine Processing"),
 ]
 
-for color, desc in legend_items:
+for color, desc in legend_items1:
     fig.add_trace(go.Scatter(
         x=[None], y=[None],
         mode="markers",
         marker=dict(size=10, color=color),
-        legendgroup="legend",
+        legendgroup="legend1",
+        showlegend=True,
+        name=desc
+    ))
+
+legend_items2 = [
+        (TASK_COLORS["regular"], "Regular task"),
+        (TASK_COLORS["energy_intensive"], "Energy-intensive task"),
+        (TASK_COLORS["tardy_regular"], "Tardy regular task"),
+        (TASK_COLORS["tardy_energy_intensive"], "Tardy energy-intensive task"),
+    ]
+
+for color, desc in legend_items2:
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None],
+        mode="markers",
+        marker=dict(size=10, color=color),
+        legendgroup="legend2",
         showlegend=True,
         name=desc
     ))
@@ -166,39 +181,41 @@ fig.update_layout(
           + (f"<br><sup>Total cost: {objective_value:.2f}</sup>" if objective_value is not None else ""),
     xaxis=dict(title="Time", domain=[0, 1]),
 
-    # Tasks
-    yaxis=dict(
-        title="Tasks",
-        domain=task_domain,
-        showticklabels=False
+
+    # Energy
+    yaxis4=dict(
+        title=dict(text="Energy Cost", font=dict(color=ENERGY_COLOR)),
+        tickfont=dict(color="red"),
+        domain=energy_domain,
+        anchor="x",
+        side="left"
+    ),
+
+    # Battery
+    yaxis3=dict(
+        title=dict(text="Battery Level", font=dict(color=BATTERY_COLOR)),
+        tickfont=dict(color=BATTERY_COLOR),
+        domain=battery_domain,
+        anchor="x",
+        side="left"
     ),
 
     # Machine states
     yaxis2=dict(
-        title=dict(text="Machine State", font=dict(color="grey")),
-        tickfont=dict(color="grey"),
+        title=dict(text="Machine State", font=dict(color="#6D6D6D")),
+        tickfont=dict(color="#6D6D6D"),
         domain=machine_state_domain,
         anchor="x",
         side="left",
         showticklabels=False
     ),
 
-    # Battery
-    yaxis3=dict(
-        title=dict(text="Battery Level", font=dict(color="blue")),
-        tickfont=dict(color="blue"),
-        domain=battery_domain,
-        anchor="x",
-        side="left"
-    ),
-
-    # Energy
-    yaxis4=dict(
-        title=dict(text="Energy Cost", font=dict(color="red")),
-        tickfont=dict(color="red"),
-        domain=energy_domain,
-        anchor="x",
-        side="left"
+    # Tasks
+    yaxis=dict(
+        title=dict(text="Tasks", font=dict(color="#6D6D6D")),
+        tickfont=dict(color="#6D6D6D"),
+        domain=task_domain,
+        showticklabels=False
     ),
 
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
