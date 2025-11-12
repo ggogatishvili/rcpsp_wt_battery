@@ -1,9 +1,17 @@
+import sys
 import json
 import plotly.graph_objects as go
 import os
 
-file = "../results/1_10.json"
+
+# --- Parse command line arguments ---
+if len(sys.argv) < 2:
+    print("Usage: python script.py <input_file>")
+    sys.exit(1)
+
+file = sys.argv[1]
 filename = os.path.basename(file)
+
 
 # Load JSON data
 with open(file, "r") as f:
@@ -87,7 +95,7 @@ def assign_task_rows(tasks):
     for t in sorted(tasks, key=lambda x: x["start_time"]):
         start, end = t["start_time"], t["end_time"]
         for i, intervals in enumerate(rows):
-            if all(end <= s or start >= e for s, e in intervals):
+            if all(end < s or start > e for s, e in intervals):
                 intervals.append((start, end))
                 task_rows[t["task_id"]] = i
                 break
@@ -112,9 +120,11 @@ for t in tasks:
     else:
         color = TASK_COLORS["regular"]
 
-    task_name = f"T{t['task_id']}"
+    task_name = f"T{t['task_id']+1}" # Task IDs are 0-based in data, so we add 1 for display
     start, end = t["start_time"], t["end_time"]
     resources_desc = ", ".join([f"R{i}={r}" for i, r in enumerate(t["resource_requests"])])
+    successors = [f"T{int(s) + 1}" for s in t["successors"]] # Convert to 1-based IDs
+    successors_str = ", ".join(successors) if successors else "None"
     hover_text = (
         f"<b>{task_name}</b><br>"
         f"Start: {t['start_time']}<br>"
@@ -123,7 +133,8 @@ for t in tasks:
         f"Release: {t['release_date']}<br>"
         f"Due: {t['due_date']}<br>"
         f"Weight: {t['weight']}<br>"
-        f"Resources: {resources_desc}"
+        f"Resources: {resources_desc}<br>"
+        f"Successors: {successors_str}"
     )
 
     fig.add_trace(go.Scatter(
@@ -139,6 +150,20 @@ for t in tasks:
         showlegend=False,
         yaxis="y"
     ))
+
+    x_center = (start + end + 1) / 2  # center of the bar (end is inclusive, bars use end+1)
+    y_center = row + 0.4              # middle of the bar vertical span (row .. row+0.8)
+    fig.add_annotation(
+        x=x_center,
+        y=y_center,
+        text=task_name,
+        showarrow=False,
+        font=dict(color="black", size=10),
+        align="center",
+        xanchor="center",
+        yanchor="middle",
+        bgcolor="rgba(255,255,255,0.6)"  # optional: semi-transparent bg for readability
+    )
 
 # --- LEGEND ITEMS ---
 legend_items1 = [
@@ -176,9 +201,39 @@ for color, desc in legend_items2:
     ))
 
 # --- LAYOUT ---
+
+# Toggle buttons for task annotations
+annotations = fig.layout.annotations
+layout_with_ann = list(annotations)
+layout_without_ann = []
+
 fig.update_layout(
+    updatemenus=[
+        {
+            "type": "buttons",
+            "direction": "left",
+            "x": 0,
+            "xanchor": "left",
+            "y": -0.04,
+            "yanchor": "top",
+            "buttons": [
+                {
+                    "label": "Show Task Names",
+                    "method": "relayout",
+                    "args": [{"annotations": layout_with_ann}],
+                },
+                {
+                    "label": "Hide Task Names",
+                    "method": "relayout",
+                    "args": [{"annotations": layout_without_ann}],
+                },
+            ],
+        }
+    ],
+
     title=f"Schedule Visualization – {filename}"
           + (f"<br><sup>Total cost: {objective_value:.2f}</sup>" if objective_value is not None else ""),
+
     xaxis=dict(title="Time", domain=[0, 1]),
 
 
@@ -219,6 +274,7 @@ fig.update_layout(
     ),
 
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+
     height=700
 )
 

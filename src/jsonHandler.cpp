@@ -44,21 +44,21 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
    // Create task details with timing information
    for (size_t i = 0; i < taskAssignments.size(); i++) {
       nlohmann::json taskJson;
-      taskJson["task_id"] = i + 1;  // 1-based task ID
+      taskJson["task_id"] = i;
       taskJson["start_time"] = taskAssignments[i];
 
       // Add task details from the instance
       if ( instance && i < instance->tasks.size() ) {
-         const Task& task = instance->tasks[i];
-         taskJson["duration"] = task.duration();
-         taskJson["end_time"] = taskAssignments[i] + task.duration() - 1; // Inclusive end time
-         taskJson["successors"] = task.get_successors();
-         taskJson["release_date"] = task.get_release_date();
-        taskJson["due_date"] = task.get_due_date();
-        taskJson["weight"] = task.get_weight();
+          const Task& task = instance->tasks[i];
+          taskJson["duration"] = task.duration();
+          taskJson["end_time"] = taskAssignments[i] + task.duration() - 1; // Inclusive end time
+          taskJson["successors"] = task.get_successors();
+          taskJson["release_date"] = task.get_release_date();
+          taskJson["due_date"] = task.get_due_date();
+          taskJson["weight"] = task.get_weight();
 
-         // Add resource requests
-         taskJson["resource_requests"] = nlohmann::json(task.get_resource_requests());
+          // Add resource requests
+          taskJson["resource_requests"] = nlohmann::json(task.get_resource_requests());
       }
 
       json["task_assignments"].push_back(taskJson);
