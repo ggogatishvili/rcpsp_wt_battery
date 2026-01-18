@@ -51,9 +51,8 @@ Solution RCPSPSolverMILP::_solve() {
     const int H = ins->maxDuration();
     const int N = ins->nbr_tasks();
 
-    /* =============================
-     *  Decision Variables
-     * ============================= */
+
+    // Decision Variables
 
     Map2<GRBVar> x; // 1 if task t starts in interval i
     Map2<GRBVar> y; // 1 if task t is being processed during interval i
@@ -100,9 +99,8 @@ Solution RCPSPSolverMILP::_solve() {
 
     model.update();
 
-    /* =============================
-     *  Constraints
-     * ============================= */
+
+    // Constraints
 
     // Every task must start exactly once
     Loop(t, N) {
@@ -285,9 +283,8 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(tard.get(t) >= 0, fmt::format("TardinessNonNeg_{}", t));
     }
 
-    /* =============================
-     *  Objective
-     * ============================= */
+
+    // Objective
 
     GRBLinExpr obj = 0.0;
 
@@ -299,29 +296,24 @@ Solution RCPSPSolverMILP::_solve() {
 
     model.setObjective(obj, GRB_MINIMIZE);
 
-    /* =============================
-     *  Solver parameters
-     * ============================= */
 
+    // Solver parameters
     model.set(GRB_DoubleParam_TimeLimit, (1.0) * Config::timeLimit);
     model.set(GRB_IntParam_Threads, Config::threadLimit);
     model.set(GRB_DoubleParam_SoftMemLimit, Config::memoryLimit);
     model.set(GRB_IntParam_NumericFocus, 2);
     model.set(GRB_IntParam_OutputFlag, Config::verbose);
 
-    /* =============================
-     *  Solve
-     * ============================= */
+
+    // Solve
     try {
         model.optimize();
     } catch (const GRBException &err) {
         fmt::println(stderr, "Gurobi error: {}", err.getMessage());
     }
 
-    /* =============================
-     *  Extract Solution
-     * ============================= */
 
+    // Solution extraction
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL) {
         std::vector<int> taskAssignments(N, -1);
         Loop(t, N) Loop(i, H) {
