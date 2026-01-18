@@ -56,16 +56,18 @@ Solution RCPSPSolverMILP::_solve() {
      * ============================= */
 
     Map2<GRBVar> x; // 1 if task t starts in interval i
-    Map2<GRBVar> y; // 1 if task t is running in interval i
+    Map2<GRBVar> y; // 1 if task t is being processed during interval i
+    Map1<GRBVar> tard; // tardiness for task t in time intervals
+
     Map2<GRBVar> rs; // 1 if machine state is s in interval i
     Map3<GRBVar> rx; // 1 if machine starts transition from state s1 to s2 in interval i
     Map3<GRBVar> ry; // 1 if machine is in transition from state s1 to s2 in interval i
+
     Map1<GRBVar> gMach; // grid energy used for machine in interval i
     Map1<GRBVar> gBatt; // grid energy used for charging battery in interval i
     Map1<GRBVar> bMach; // battery energy used for machine in interval i
     Map1<GRBVar> bLevel; // battery level at the start of interval i
     Map1<GRBVar> eMach; // energy demand of machine at interval i
-    Map1<GRBVar> tard; // tardiness for task j
 
     /* Variables initialization */
     Loop(t, N) Loop(i, H) {
@@ -102,40 +104,40 @@ Solution RCPSPSolverMILP::_solve() {
      *  Constraints
      * ============================= */
 
-    // (1) Every task must start exactly once
+    // Every task must start exactly once
     Loop(t, N) {
         GRBLinExpr expr = 0;
         Loop(i, H) expr += x.i(t, i);
         model.addConstr(expr == 1, fmt::format("TaskOnce_{}", t));
     }
 
-    // (2) Running indicator definition y_{j,i}
+    // Running indicator definition y_{j,i}
     Loop(t, N) Loop(i, H) {
         GRBLinExpr expr = 0;
-        LoopFrom(i2, std::max(0, i - ins->pj(t) + 1), i + 1) expr += x.i(t, i2);
+        LoopFrom(i2, std::max(0, i - ins->pt(t) + 1), i + 1) expr += x.i(t, i2);
         model.addConstr(y.i(t, i) == expr, fmt::format("Ydef_{}_{}", t, i));
     }
 
-    // (3) Precedence constraints
+    // Precedence constraints
     Loop(t1, N) iterate(t2, ins->successors(t1)) {
         GRBLinExpr start_i = 0, start_j = 0;
         Loop(i, H) {
             start_i += i * x.i(t1, i);
             start_j += i * x.i(t2, i);
         }
-        model.addConstr(start_i + ins->pj(t1) <= start_j, fmt::format("preced_{}_{}", t1, t2));
+        model.addConstr(start_i + ins->pt(t1) <= start_j, fmt::format("preced_{}_{}", t1, t2));
     }
 
-    // (4) Resource capacities
+    // Resource capacities
     Loop(q, ins->nbr_resources()) Loop(i, H) {
             GRBLinExpr expr = 0;
-            Loop(t, N) LoopFrom(l, std::max(0, i - ins->pj(t) + 1), i + 1) {
-                 expr += ins->rj(t, q) * x.i(t, l);
+            Loop(t, N) LoopFrom(l, std::max(0, i - ins->pt(t) + 1), i + 1) {
+                 expr += ins->rt(t, q) * x.i(t, l);
             }
             model.addConstr(expr <= ins->resource_capacities[q], fmt::format("ResCap_{}_{}", q, i));
         }
 
-    // (5) Machine is exactly in one state or in one transition at each time interval
+    // 1 state or transition at a time
     Loop(i, H) {
         GRBLinExpr expr = 0;
         Loop(s, 3) expr += rs.i(s, i);
@@ -146,13 +148,14 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(expr == 1, fmt::format("OneStateOrTransition_{}", i));
     }
 
-    // (6) Machine in processing state when executing EE task
+    // Machine in proc state when executing EE tasks
     Loop(i, H) {
         GRBLinExpr procNeeded = 0;
         iterate(j, ins->ee_tasks) procNeeded += y.i(j, i);
         model.addConstr(procNeeded <= rs.i((int) State::Proc, i) * N, fmt::format("ProcDuringEE_{}", i));
     }
 
+    // Transition from s1 to another state if the state changes
     Loop(i, H-1) Loop(s1, 3) {
         GRBLinExpr nextTrans = 0;
         Loop(s2, 3) {
@@ -162,7 +165,7 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(nextTrans >= rs.i(s1, i) - rs.i(s1, i + 1), fmt::format("StateToNextStateOrTrans_{}_{}", s1, i));
     }
 
-    // (7) Transition logic
+    // Transition logic
     LoopFrom(i, 1, H - 1) { // We can skip first and last interval for transitions (as they must be OFF state)
         Loop(s1, 3) Loop(s2, 3) {
             if (s1 == s2) continue;
@@ -193,6 +196,7 @@ Solution RCPSPSolverMILP::_solve() {
             // The transition can only end in an appropriate state
             model.addConstr(rx.get(s1, s2, i) <= rs.i(s2, i + dur), fmt::format("TransToState_{}_{}_{}", s1, s2, i));
 
+            // The transition must start if the machine is in the appropriate state after the duration
             model.addConstr(rx.get(s1, s2, i) >= rs.i(s1, i - 1) + rs.i(s2, i + dur) - 1,fmt::format("ForceStartIfStatesMatch_{}_{}_{}", s1, s2, i));
 
             // Transition lasts for its duration
@@ -229,14 +233,14 @@ Solution RCPSPSolverMILP::_solve() {
         }
     }
 
-    // (8) Start and end in OFF state
+    // Start and end in OFF state
     model.addConstr(rs.i((int) State::Off, 0) == 1, "StartOff");
     model.addConstr(rs.i((int) State::Off, H - 1) == 1, "EndOff");
 
-    // (9) Battery initialization
+    // Battery initialization
     model.addConstr(bLevel.get(0) == 0, "BatteryInit");
 
-    // (10) Battery balance
+    // Battery balance
     for (int i = 1; i < H; ++i) {
         model.addConstr(
                 bLevel.get(i) == bLevel.get(i - 1)
@@ -246,13 +250,13 @@ Solution RCPSPSolverMILP::_solve() {
         );
     }
 
-    // (11) Battery capacity
+    // Battery capacity
     Loop(i, H) {
         model.addConstr(bLevel.get(i) >= 0, fmt::format("BatteryNonNeg_{}", i));
         model.addConstr(bLevel.get(i) <= ins->Battery.B_max, fmt::format("BatteryCap_{}", i));
     }
 
-    // (12) Machine energy requirement
+    // Machine energy requirement
     Loop(i, H) {
         GRBLinExpr stateEnergy = 0, transEnergy = 0;
         stateEnergy += rs.i((int) State::Off, i) * ins->Off.cost;
@@ -267,18 +271,18 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(eMach.get(i) == stateEnergy + transEnergy, fmt::format("MachineEnergy_{}", i));
     }
 
-    // (13) Energy supply balance
+    // Energy supply balance
     Loop(i, H) {
         model.addConstr(eMach.get(i) == gMach.get(i) + ins->Battery.EF_discharge * bMach.get(i),
                         fmt::format("EnergyBalance_{}", i));
     }
 
-    // (14) Tardiness definition
-    Loop(j, N) {
+    // Tardiness definition
+    Loop(t, N) {
         GRBLinExpr completion = 0;
-        Loop(i, H) completion += (i + ins->pj(j) - 1) * x.i(j, i);
-        model.addConstr(tard.get(j) >= completion - ins->tasks[j].get_due_date(), fmt::format("Tardiness_{}", j));
-        model.addConstr(tard.get(j) >= 0, fmt::format("TardinessNonNeg_{}", j));
+        Loop(i, H) completion += (i + ins->pt(t) - 1) * x.i(t, i);
+        model.addConstr(tard.get(t) >= completion - ins->tasks[t].get_due_date(), fmt::format("Tardiness_{}", t));
+        model.addConstr(tard.get(t) >= 0, fmt::format("TardinessNonNeg_{}", t));
     }
 
     /* =============================
@@ -288,7 +292,7 @@ Solution RCPSPSolverMILP::_solve() {
     GRBLinExpr obj = 0.0;
 
     // Weighted tardiness
-    Loop(j, N)obj += ins->tasks[j].get_weight() * tard.get(j);
+    Loop(t, N)obj += ins->tasks[t].get_weight() * tard.get(t);
 
     // Energy cost
     Loop(i, H)obj += (gMach.get(i) + gBatt.get(i)) * ins->costs[i];

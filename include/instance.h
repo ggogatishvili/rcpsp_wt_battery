@@ -135,19 +135,19 @@ class Instance
          return std::accumulate(costs.begin() + start, costs.begin() + start + length, 0.0);
       }
 
-      inline auto successors(const int j) const -> const std::vector<int>&
+      inline auto successors(const int t) const -> const std::vector<int>&
       {
-         return tasks[j].get_successors();
+         return tasks[t].get_successors();
       }
 
-      inline auto rj(const int j, const int k) const -> double
+      inline auto rt(const int t, const int k) const -> double
       {
-         return tasks[j].get_resource_requests()[k];
+         return tasks[t].get_resource_requests()[k];
       }
 
-      inline auto pj(const int i) const -> int
+      inline auto pt(const int t) const -> int
       {
-         return tasks[i].duration();
+         return tasks[t].duration();
       }
 
       inline auto task_is_feasible(const int j, const int i) const -> bool
@@ -155,7 +155,7 @@ class Instance
          if ( j >= tasks.size() )
             return i <= maxDuration();
          else
-            return i + pj(j) - 1 <= maxDuration();
+            return i + pt(j) - 1 <= maxDuration();
       }
 
       inline auto minimal_distance(const int i, const int j) const -> long
@@ -182,7 +182,8 @@ class Instance
 
       inline double cjob(const int j, const int i) const
       {
-         return i + pj(j) - 1 > maxDuration() ? BIG_M : On.cost * std::accumulate(costs.cbegin() + i, costs.cbegin() + i + pj(j), 0.0);
+         return i + pt(j) - 1 > maxDuration() ? BIG_M : On.cost * std::accumulate(costs.cbegin() + i, costs.cbegin() + i +
+                                                                                                      pt(j), 0.0);
       }
 
       // Transition costs & durations

@@ -30,7 +30,7 @@ PrecedenceGraph::PrecedenceGraph(const Instance * const ins)
 {
    Loop(i, ins->nbr_tasks()) iterate(j, ins->tasks[i].get_successors())
    {
-      boost::add_edge(i, j, -ins->pj(i), graph);
+      boost::add_edge(i, j, -ins->pt(i), graph);
    }
 }
 
