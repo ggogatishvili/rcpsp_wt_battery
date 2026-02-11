@@ -20,6 +20,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include "Solver.h"
 #include "RCPSPSolverMILP.h"
+#include "RCPSPSolverHeuristic1.h"
 #include "config.h"
 #include "Clock.h"
 #include <algorithm>
@@ -36,19 +37,21 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 Solution solver::solve(const Instance* ins, const Config::ResolutionMethod method, const double alpha)
 {
-   const long global_timelimit = Config::timeLimit;
-   const unsigned int bounds_timelimit = 300;
-   try {
-      switch ( method ) {
-         case Config::ResolutionMethod::ILP:
-            return RCPSPSolverMILP(ins)();
-         default:
-            throw std::runtime_error("Unknown resolution method");
-      }
-   } catch ( const GRBException& err ) {
-      fmt::println(stderr, "While solving instance {} with method = {} and ⍺ = {}", ins->instName(), method, alpha);
-      fmt::println(stderr, "Error({}): {}", err.getErrorCode(), err.getMessage());
-      Config::timeLimit = global_timelimit;
-      return Solution::infeasibleSolution(ins);
-   }
+    const long global_timelimit = Config::timeLimit;
+    const unsigned int bounds_timelimit = 300;
+    try {
+        switch ( method ) {
+            case Config::ResolutionMethod::MILP:
+                return RCPSPSolverMILP(ins)();
+            case Config::ResolutionMethod::HEURISTIC1:
+                return RCPSPSolverHeuristic1(ins)();
+            default:
+                throw std::runtime_error("Unknown resolution method");
+        }
+    } catch ( const GRBException& err ) {
+        fmt::println(stderr, "While solving instance {} with method = {} and ⍺ = {}", ins->instName(), method, alpha);
+        fmt::println(stderr, "Error({}): {}", err.getErrorCode(), err.getMessage());
+        Config::timeLimit = global_timelimit;
+        return Solution::infeasibleSolution(ins);
+    }
 }

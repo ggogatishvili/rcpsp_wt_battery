@@ -28,73 +28,77 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 class Config
 {
-   public:
-      // Resolution method class
-      enum class ResolutionMethod
-      {
-         // Resolution is performed using the ILP
-         ILP,
-         // No resolution method chosen
-         None
-      };
+public:
+    // Resolution method class
+    enum class ResolutionMethod
+    {
+        // Resolution is performed using the ILP
+        MILP,
+        HEURISTIC1,
+        // No resolution method chosen
+        None
+    };
 
-      // Displays current configuration
-      static void showConfig();
+    // Displays current configuration
+    static void showConfig();
 
-      // Parses command line arguments
-      static void fromArgs(const int argc, const char* const argv[]);
+    // Parses command line arguments
+    static void fromArgs(const int argc, const char* const argv[]);
 
-      // Configuration settings and their default values
+    // Configuration settings and their default values
 
-      // Input file: mandatory
-      inline static std::string inputFile = "default_input_file.txt";
+    // Input file: mandatory
+    inline static std::string inputFile = "default_input_file.txt";
 
-      // Output file: if not specified, no output file is generated. Json format.
-      inline static std::optional<std::string> outputFile = std::nullopt;
+    // Output file: if not specified, no output file is generated. Json format.
+    inline static std::optional<std::string> outputFile = std::nullopt;
 
-      // Verbose mode: if true, prints Gurobi output
-      inline static bool verbose = false;
+    // Verbose mode: if true, prints Gurobi output
+    inline static bool verbose = false;
 
-      // When quiet, indicates if stats are printed or not
-      inline static bool withStats = false;
+    // When quiet, indicates if stats are printed or not
+    inline static bool withStats = false;
 
-      // Time limit: in seconds
-      inline static long timeLimit = 3600;
+    // Time limit: in seconds
+    inline static long timeLimit = 3600;
 
-      // Thread limit: number of threads used by Gurobi (Fixed at initialization, if compiled with GCC/Clang)
-      inline static unsigned threadLimit = 12;
+    // Thread limit: number of threads used by Gurobi (Fixed at initialization, if compiled with GCC/Clang)
+    inline static unsigned threadLimit = 12;
 
-      // Memory limit (in Gb)
-      inline static long memoryLimit = 25;
+    // Memory limit (in Gb)
+    inline static long memoryLimit = 25;
 
-      // ⍺ in [0, 1]: ⍺ value of objective function
-      inline static double alpha = 1.0;
+    // ⍺ in [0, 1]: ⍺ value of objective function
+    inline static double alpha = 1.0;
 
-      // Default resolution method
-      inline static ResolutionMethod method = ResolutionMethod::ILP;
+    // Default resolution method
+    inline static ResolutionMethod method = ResolutionMethod::MILP;
 
-   private:
-      // Private constructor ("Called once at program startup")
-      [[gnu::constructor]] static void init_config();
+private:
+    // Private constructor ("Called once at program startup")
+    [[gnu::constructor]] static void init_config();
 
-      // Parses a string to a resolution method
-      static ResolutionMethod parseResolutionMethod(const std::string& method);
+    // Parses a string to a resolution method
+    static ResolutionMethod parseResolutionMethod(const std::string& method);
 };
 
 // Template specialization for fmt to format ResolutionMethod enum
 template <>
 struct fmt::formatter<Config::ResolutionMethod> : formatter<string_view>
 {
-   constexpr auto format(Config::ResolutionMethod method, format_context& ctx) const
-   {
-      string_view name = "unknown";
-      switch ( method ) {
-         case Config::ResolutionMethod::ILP:
-            name = "ILP";
-            break;
-         default:
-            break;
-      }
-      return formatter<string_view>::format(name, ctx);
-   }
+    constexpr auto format(Config::ResolutionMethod method, format_context& ctx) const
+    {
+        string_view name = "unknown";
+        switch ( method ) {
+            case Config::ResolutionMethod::MILP:
+                name = "MILP";
+                break;
+            case Config::ResolutionMethod::HEURISTIC1:
+                name = "HEURISTIC1";
+                break;
+            default:
+                break;
+        }
+        return formatter<string_view>::format(name, ctx);
+    }
 };
