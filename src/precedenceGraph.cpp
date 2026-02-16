@@ -30,7 +30,7 @@ PrecedenceGraph::PrecedenceGraph(const Instance * const ins)
 {
    Loop(i, ins->nbr_tasks()) iterate(j, ins->tasks[i].get_successors())
    {
-      boost::add_edge(i, j, -ins->pt(i), graph);
+      boost::add_edge(i, j, -ins->getProcessingTime(i), graph);
    }
 }
 
@@ -44,16 +44,16 @@ std::vector<std::vector<long>> PrecedenceGraph::operator()() const
       throw std::runtime_error("Precedence constraints are corrupted: precedence graph is not a DAG!");
 }
 
-void PrecedenceGraph::writeGraphviz(std::ostream& out, const std::optional<std::list<int>>& ee_tasks) const
+void PrecedenceGraph::writeGraphviz(std::ostream& out, const std::optional<std::list<int>>& ei_tasks) const
 {
    boost::write_graphviz(out, graph,
       [&](std::ostream& os, const auto vertex)
       {
-         const bool is_ee_task = ee_tasks && std::ranges::find(*ee_tasks, vertex) != ee_tasks->cend();
-         fmt::format_to( std::ostream_iterator<char>(os)
+         const bool is_ei_task = ei_tasks && std::ranges::find(*ei_tasks, vertex) != ei_tasks->cend();
+         fmt::format_to(std::ostream_iterator<char>(os)
                        , "[label=\"{}\"{}]"
                        , boost::get(boost::vertex_index, graph, vertex)
-                       , is_ee_task ? ", style=filled, fillcolor=lightgrey" : "" );
+                       , is_ei_task ? ", style=filled, fillcolor=lightgrey" : "" );
       },
       [&](std::ostream& os, const auto edge)
       {

@@ -70,7 +70,7 @@ class Task
       inline auto get_end_time() const ->  std::optional<int> { return end_time; }
       inline auto duration() const -> int { return _duration; }
 
-      inline bool is_ee_task() const { return resource_requests[0] > 0; }
+      inline bool is_ei_task() const { return resource_requests[0] > 0; }
 
       // Method to convert to string for formatting
       std::string to_string() const
@@ -118,11 +118,11 @@ class Instance
       inline auto instName() const & -> std::string { return instancename; }
       inline auto instName() const && -> std::string { return std::move(instancename); }
       inline auto nbr_tasks() const -> size_t { return tasks.size(); }
-      inline auto nbr_ee_tasks() const -> size_t { return ee_tasks.size(); }
+      inline auto nbr_ei_tasks() const -> size_t { return ei_tasks.size(); }
       inline auto nbr_resources() const -> size_t { return resource_capacities.size(); }
-      inline auto firstOn() const -> int { return offOn.time + 1; }
+      inline auto firstOn() const -> int { return offProc.time + 1; }
       inline auto lastOn() const -> int { return lastOn(maxDuration()); }
-      inline auto lastOn(const int makespan) const -> int { return makespan - onOff.time - 1; }
+      inline auto lastOn(const int makespan) const -> int { return makespan - procOff.time - 1; }
 
       inline auto maxDuration() const -> unsigned int { return costs.size(); }
 
@@ -145,7 +145,7 @@ class Instance
          return tasks[t].get_resource_requests()[k];
       }
 
-      inline auto pt(const int t) const -> int
+      inline auto getProcessingTime(const int t) const -> int
       {
          return tasks[t].duration();
       }
@@ -155,7 +155,7 @@ class Instance
          if ( j >= tasks.size() )
             return i <= maxDuration();
          else
-            return i + pt(j) - 1 <= maxDuration();
+            return i + getProcessingTime(j) - 1 <= maxDuration();
       }
 
       inline auto minimal_distance(const int i, const int j) const -> long
@@ -175,41 +175,41 @@ class Instance
          return is_successor(i, j);
       }
 
-      inline auto is_ee_task(const int j) const -> bool
+      inline auto is_ei_task(const int j) const -> bool
       {
-         return tasks[j].is_ee_task();
+         return tasks[j].is_ei_task();
       }
 
       inline double cjob(const int j, const int i) const
       {
-         return i + pt(j) - 1 > maxDuration() ? BIG_M : On.cost * std::accumulate(costs.cbegin() + i, costs.cbegin() + i +
-                                                                                                      pt(j), 0.0);
+         return i + getProcessingTime(j) - 1 > maxDuration() ? BIG_M : Proc.cost * std::accumulate(costs.cbegin() + i, costs.cbegin() + i +
+                                                                                                                       getProcessingTime(j), 0.0);
       }
 
       // Transition costs & durations
       const struct {
          int time = 1;
          double cost = 1;
-      } onOff;
+      } procOff;
 
       const struct {
          int time = 2;
          double cost = 5;
-      } offOn;
+      } offProc;
 
       const struct {
          int time = 1;
          double cost = 2;
-      } onIdle;
+      } procIdle;
 
       const struct {
          int time = 1;
          double cost = 2;
-      } idleOn;
+      } idleProc;
 
       const struct {
          int cost = 4;
-      } On;
+      } Proc;
 
       const struct {
          int cost = 0;
@@ -229,13 +229,12 @@ class Instance
       std::vector<Task> tasks;
       std::vector<double> costs;
       std::vector<std::vector<long>> precedence_graph;
-      std::list<int> ee_tasks;
+      std::list<int> ei_tasks;
       std::string instancename;
 };
 
 // Formatter specialization for Instance
-template <>
-struct fmt::formatter<Instance>
+template <> struct fmt::formatter<Instance>
 {
    constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin())
    {

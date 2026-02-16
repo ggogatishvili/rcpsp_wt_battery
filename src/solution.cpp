@@ -28,8 +28,7 @@ Solution::Solution( const Instance* ins
                   , const std::vector<int>& taskAssignments
                   , const std::vector<double>& batteryLevels
                   , const std::vector<MachineBlock>& machineBlocks
-                  , const SolutionStats&& stats
-                  , const ConstructorBehavior beh )
+                  , const SolutionStats&& stats)
    : ins(ins)
    , objVal(ObjVal)
    , energyCost(energyCost)
@@ -38,21 +37,4 @@ Solution::Solution( const Instance* ins
    , batteryLevels(batteryLevels)
    , machineBlocks(machineBlocks)
    , stats(stats)
-{
-   if ( beh == Update ) this->energyCost = compute_energyCost();
-}
-
-double Solution::compute_energyCost() const
-{
-   double objVal = 0.0;
-   std::vector<std::pair<int, int>> ee_task_assignments;
-   ee_task_assignments.reserve(ins->ee_tasks.size());
-   iterate(j, ins->ee_tasks)
-   {
-      const int startingTime = taskAssignments[j];
-      ee_task_assignments.emplace_back(j, startingTime);
-      objVal += ins->cjob(j, startingTime);
-   }
-   std::ranges::sort(ee_task_assignments, {}, [](const auto e){ return e.second; });
-   return objVal;
-}
+{}

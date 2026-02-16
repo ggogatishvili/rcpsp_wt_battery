@@ -112,7 +112,7 @@ Solution RCPSPSolverMILP::_solve() {
     // Running indicator definition y_{j,i}
     Loop(t, N) Loop(i, H) {
         GRBLinExpr expr = 0;
-        LoopFrom(i2, std::max(0, i - ins->pt(t) + 1), i + 1) expr += x.i(t, i2);
+        LoopFrom(i2, std::max(0, i - ins->getProcessingTime(t) + 1), i + 1) expr += x.i(t, i2);
         model.addConstr(y.i(t, i) == expr, fmt::format("Ydef_{}_{}", t, i));
     }
 
@@ -123,13 +123,13 @@ Solution RCPSPSolverMILP::_solve() {
             start_i += i * x.i(t1, i);
             start_j += i * x.i(t2, i);
         }
-        model.addConstr(start_i + ins->pt(t1) <= start_j, fmt::format("preced_{}_{}", t1, t2));
+        model.addConstr(start_i + ins->getProcessingTime(t1) <= start_j, fmt::format("preced_{}_{}", t1, t2));
     }
 
     // Resource capacities
     Loop(q, ins->nbr_resources()) Loop(i, H) {
             GRBLinExpr expr = 0;
-            Loop(t, N) LoopFrom(l, std::max(0, i - ins->pt(t) + 1), i + 1) {
+            Loop(t, N) LoopFrom(l, std::max(0, i - ins->getProcessingTime(t) + 1), i + 1) {
                  expr += ins->rt(t, q) * x.i(t, l);
             }
             model.addConstr(expr <= ins->resource_capacities[q], fmt::format("ResCap_{}_{}", q, i));
@@ -146,10 +146,10 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(expr == 1, fmt::format("OneStateOrTransition_{}", i));
     }
 
-    // Machine in proc state when executing EE tasks
+    // Machine in proc state when executing EI tasks
     Loop(i, H) {
         GRBLinExpr procNeeded = 0;
-        iterate(j, ins->ee_tasks) procNeeded += y.i(j, i);
+        iterate(j, ins->ei_tasks) procNeeded += y.i(j, i);
         model.addConstr(procNeeded <= rs.i((int) State::Proc, i) * N, fmt::format("ProcDuringEE_{}", i));
     }
 
@@ -169,10 +169,10 @@ Solution RCPSPSolverMILP::_solve() {
             if (s1 == s2) continue;
 
             int dur = 0;
-            if (s1 == 0 && s2 == 1) dur = ins->offOn.time;
-            else if (s1 == 1 && s2 == 0) dur = ins->onOff.time;
-            else if (s1 == 1 && s2 == 2) dur = ins->onIdle.time;
-            else if (s1 == 2 && s2 == 1) dur = ins->idleOn.time;
+            if (s1 == 0 && s2 == 1) dur = ins->offProc.time;
+            else if (s1 == 1 && s2 == 0) dur = ins->procOff.time;
+            else if (s1 == 1 && s2 == 2) dur = ins->procIdle.time;
+            else if (s1 == 2 && s2 == 1) dur = ins->idleProc.time;
 
             // Invalid transition
             if (dur == 0) {
@@ -258,13 +258,13 @@ Solution RCPSPSolverMILP::_solve() {
     Loop(i, H) {
         GRBLinExpr stateEnergy = 0, transEnergy = 0;
         stateEnergy += rs.i((int) State::Off, i) * ins->Off.cost;
-        stateEnergy += rs.i((int) State::Proc, i) * ins->On.cost;
+        stateEnergy += rs.i((int) State::Proc, i) * ins->Proc.cost;
         stateEnergy += rs.i((int) State::Idle, i) * ins->Idle.cost;
 
-        transEnergy += ry.get((int) State::Off, (int) State::Proc, i) * ins->offOn.cost;
-        transEnergy += ry.get((int) State::Proc, (int) State::Off, i) * ins->onOff.cost;
-        transEnergy += ry.get((int) State::Proc, (int) State::Idle, i) * ins->onIdle.cost;
-        transEnergy += ry.get((int) State::Idle, (int) State::Proc, i) * ins->idleOn.cost;
+        transEnergy += ry.get((int) State::Off, (int) State::Proc, i) * ins->offProc.cost;
+        transEnergy += ry.get((int) State::Proc, (int) State::Off, i) * ins->procOff.cost;
+        transEnergy += ry.get((int) State::Proc, (int) State::Idle, i) * ins->procIdle.cost;
+        transEnergy += ry.get((int) State::Idle, (int) State::Proc, i) * ins->idleProc.cost;
 
         model.addConstr(eMach.get(i) == stateEnergy + transEnergy, fmt::format("MachineEnergy_{}", i));
     }
@@ -278,7 +278,7 @@ Solution RCPSPSolverMILP::_solve() {
     // Tardiness definition
     Loop(t, N) {
         GRBLinExpr completion = 0;
-        Loop(i, H) completion += (i + ins->pt(t) - 1) * x.i(t, i);
+        Loop(i, H) completion += (i + ins->getProcessingTime(t) - 1) * x.i(t, i);
         model.addConstr(tard.get(t) >= completion - ins->tasks[t].get_due_date(), fmt::format("Tardiness_{}", t));
         model.addConstr(tard.get(t) >= 0, fmt::format("TardinessNonNeg_{}", t));
     }
@@ -338,9 +338,7 @@ Solution RCPSPSolverMILP::_solve() {
                 }
                 if ((val <= 0.999 || i == H-1) && start != -1) {
                     int end = (val <= 0.999) ? i-1 : i;
-                    auto st = static_cast<State>(s);
-                    std::string stateName = std::string(state_name(st));
-                    machineBlocks.push_back({start, end, stateName});
+                    machineBlocks.emplace_back(start, (State)s, end, (State)s);
                     start = -1;
                 }
             }
@@ -356,15 +354,14 @@ Solution RCPSPSolverMILP::_solve() {
                 }
                 if ((val <= 0.999 || i == H-1) && start != -1) {
                     int end = (val <= 0.999) ? i-1 : i;
-                    std::string transName = fmt::format("{} -> {}", state_name((State)s1), state_name((State)s2));
-                    machineBlocks.push_back({start, end, transName});
+                    machineBlocks.emplace_back(start, (State)s1, end, (State)s2);
                     start = -1;
                 }
             }
         }
 
         return Solution(ins, model.get(GRB_DoubleAttr_ObjVal), 0.0, 0.0, taskAssignments,
-                        batteryLevels, machineBlocks, {model.get(GRB_DoubleAttr_MIPGap)}, Solution::NoUpdate);
+                        batteryLevels, machineBlocks, {model.get(GRB_DoubleAttr_MIPGap)});
     } else {
         return Solution::infeasibleSolution();
     }
