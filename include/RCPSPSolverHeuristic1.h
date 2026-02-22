@@ -31,7 +31,7 @@ struct PeakInterval {
     int end;
     int peak;
 
-    vector<int> orderedTimes; // times in this interval ordered by price descending
+    vector<int> orderedTimes; // times in this interval ordered by cost descending
 };
 
 class RCPSPSolverHeuristic1
@@ -88,7 +88,7 @@ private:
      * @param startTimes vector of start times for each task, indexed by task ID
      * @return vector of intervals (inclusive) during which the machine must be in Proc state
      */
-    vector<Interval> getProcRequiredIntervals(const vector<int>& startTimes);
+    vector<Interval> computeProcRequiredIntervals(const vector<int>& startTimes);
 
     /**
      * Given the SPACES graph, find the optimal path from a given start time and state to a given end time and state, minimizing the total cost of the path.
@@ -101,10 +101,10 @@ private:
      * @param endState  the required state of the machine at endTime
      * @return vector of MachineBlocks representing the optimal path from (startTime, startState) to (endTime, endState), where each block indicates a contiguous time interval during which the machine is in a specific state or transitioning between states
      */
-    vector<MachineBlock> getOptimalPath(const vector<vector<vector<Edge>>>& graph, int startTime, State startState, int endTime, State endState);
+    vector<MachineBlock> findOptimalPath(const vector<vector<vector<Edge>>>& graph, int startTime, State startState, int endTime, State endState);
 
     /**
-     * Phase 3: Given the energy requirements of the machine at each time unit, schedule the usage of the battery to minimize energy costs by reducing the usage of the grid during peak price times while ensuring that the battery constraints (capacity, charge/discharge efficiency) are respected.
+     * Phase 3: Given the energy requirements of the machine at each time unit, schedule the usage of the battery to minimize energy costs by reducing the usage of the grid during peak times while ensuring that the battery constraints (capacity, charge/discharge efficiency) are respected.
      * @param energyRequirements vector of energy requirements for each time unit, indexed by time
      * @return vector of battery levels for each time unit, indexed by time
      */
@@ -124,45 +124,45 @@ private:
      * @param processed vector of booleans indicating whether each time unit has already been processed, indexed by time
      * @return an Interval (inclusive) representing the next contiguous time interval during which the machine has energy requirements and has not yet been processed, or {-1, -1} if no such interval exists
      */
-    Interval getNextEnergyRequiredInterval(int start, const vector<double>& energyRequirements, const vector<bool>& processed);
+    Interval findNextEnergyRequiredInterval(int start, const vector<double>& energyRequirements, const vector<bool>& processed);
 
     /**
-     * Build a max-heap of grid prices for the given interval, where each element in the heap is a pair of (price, time) and the heap is ordered by price in descending order.
-     * @param interval an Interval (inclusive) representing the time interval for which to build the max-heap of grid prices
-     * @return a priority_queue (max-heap) of pairs (price, time) for each time unit in the given interval, ordered by price in descending order
+     * Build a max-heap of grid costs for the given interval, where each element in the heap is a pair of (cost, time) and the heap is ordered by cost in descending order.
+     * @param interval an Interval (inclusive) representing the time interval for which to build the max-heap of grid costs
+     * @return a priority_queue (max-heap) of pairs (cost, time) for each time unit in the given interval, ordered by cost in descending order
      */
-    priority_queue<pair<double,int>> getPriceMaxHeapForInterval(const Interval& interval);
+    priority_queue<pair<double,int>> buildCostMaxHeapForInterval(const Interval& interval);
 
     /**
-     * Get the time with the highest grid price from the max-heap that has not yet been processed.
-     * @param priceMaxHeap a priority_queue (max-heap) of pairs (price, time) for a given interval, ordered by price in descending order
+     * Find the time with the highest grid cost from the max-heap that has not yet been processed.
+     * @param costMaxHeap a priority_queue (max-heap) of pairs (cost, time) for a given interval, ordered by cost in descending order
      * @param processed vector of booleans indicating whether each time unit has already been processed, indexed by time
-     * @return the time with the highest grid price from the max-heap that has not yet been processed, or -1 if all time units in the max-heap have been processed
+     * @return the time with the highest grid cost from the max-heap that has not yet been processed, or -1 if all time units in the max-heap have been processed
      */
-    int getUnprocessedPeakTime(priority_queue<pair<double,int>>& priceMaxHeap, const vector<bool>& processed);
+    int findUnprocessedPeakTime(priority_queue<pair<double,int>>& costMaxHeap, const vector<bool>& processed);
 
     /**
      * Attempt to make the given peak and the surrounding times units cheaper by scheduling battery usage.
      * @param peakTime the time unit representing the peak time that we want to make cheaper by scheduling battery usage
      * @param energyRequiredInterval the Interval (inclusive) representing the contiguous time interval during which the machine has energy requirements and includes the peakTime
      * @param batteryLevels vector of battery levels for each time unit, which will be updated if we schedule battery usage to make the peak cheaper
-     * @param processed vector of booleans indicating whether each time unit has already been processed, which will be updated to mark time units as processed when we have scheduled battery usage or determined that the time units could not be used to make the price cheaper
+     * @param processed vector of booleans indicating whether each time unit has already been processed, which will be updated to mark time units as processed when we have scheduled battery usage or determined that the time units could not be used to make the cost cheaper
      * @param energyRequirements vector of energy requirements for each time unit, which may be used to determine how much battery usage is needed to make the peak cheaper
      * @return true if the peak was successfully made cheaper by scheduling battery usage, or false if it was determined that the peak cannot be made cheaper and the relevant time units have been marked as processed accordingly
      */
     bool makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements);
 
     /**
-     * Get the cheapest time unit before the given peak time that has not yet been processed.
+     * Find the cheapest time unit before the given peak time that has not yet been processed.
      * @param peakTime the time unit representing the peak time for which to find the cheapest unprocessed time before it
      * @param processed vector of booleans indicating whether each time unit has already been processed, indexed by time
      * @return the time with the cheapest time before the peak or -1 if not found
      */
-    int getCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool>& processed);
+    int findCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool>& processed);
 
     /**
-     * Mark all the unprocessed following times after start (not included) as processed if the prices are descending (excluding the last cheapest time)
-     * Reasoning: if the prices are descending after the start, then it is not worth trying to charge the battery at these times.
+     * Mark all the unprocessed following times after start (not included) as processed if the costs are descending (excluding the last cheapest time)
+     * Reasoning: if the costs are descending after the start, then it is not worth trying to charge the battery at these times.
      * We keep the last cheapest time unprocessed because it could be still useful for later iterations.
      * @param start the starting time after which to mark following times as processed
      * @param processed vector of booleans indicating whether each time unit has already been processed, indexed by time
@@ -170,39 +170,39 @@ private:
     void markFollowingTimesAsProcessed(int start, vector<bool>& processed);
 
     /**
-     * Calculate the upper threshold price for charging the battery at a time before the peak, based on the energy efficiency of charging and discharging the battery and the cost of the peak.
-     * It should represent the maximum price at which it would still be beneficial to charge the battery.
-     * @param peakTime the time representing the peak time for which to calculate the threshold price for charging before it
+     * Compute the upper threshold cost for charging the battery at a time before the peak, based on the energy efficiency of charging and discharging the battery and the cost of the peak.
+     * It should represent the maximum cost at which it would still be beneficial to charge the battery.
+     * @param peakTime the time representing the peak time for which to compute the threshold cost for charging before it
      * @param cheapestTimeBeforePeak the time representing the cheapest unprocessed time before the peak time, which is being considered for charging the battery
      * @param EFComplete the complete energy efficiency of charging and discharging the battery (EF_charge * EF_discharge)
-     * @return the upper threshold price for charging the battery
+     * @return the upper threshold cost for charging the battery
      */
-    double getUpperThresholdPriceForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete);
+    double computeUpperThresholdCostForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete);
 
     /**
-     * Get a time between the cheapest time before the peak and the peak time that has a price below the given threshold, which would make it beneficial to charge the battery at that time.
+     * Find a time between the cheapest time before the peak and the peak time that has a cost below the given threshold, which would make it beneficial to charge the battery at that time.
      * We don't necessarily want to use the cheapest time before the peak for charging, because it might be too far from the peak and it would block the usage of the battery for other peaks in between.
      * @param peakTime the time representing the peak time for which to find a cheap enough time before it for charging the battery
      * @param cheapestTimeBeforePeak the time representing the cheapest unprocessed time before the peak time, which is being considered for charging the battery
-     * @param upperThresholdCost the upper threshold price for charging the battery
-     * @return a time between the cheapest time before the peak and the peak time that has a price below the given threshold, or -1 if no such time exists
+     * @param upperThresholdCost the upper threshold cost for charging the battery
+     * @return a time between the cheapest time before the peak and the peak time that has a cost below the given threshold, or -1 if no such time exists
      */
-    int getCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost);
+    int findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost);
 
     /**
-     * Calculate the tardiness cost of the scheduled tasks based on their start times and the instance data (processing times, due dates, weights).
+     * Compute the tardiness cost of the scheduled tasks based on their start times and the instance data (processing times, due dates, weights).
      * @param startTimes vector of start times for each task, indexed by task ID
      * @return the total tardiness cost of the scheduled tasks
      */
-    double calculateTardinessCost(const vector<int>& startTimes);
+    double computeTardinessCost(const vector<int>& startTimes);
 
     /**
-     * Calculate the cost of energy from the grid used to charge the battery and directly used by the machine.
+     * Compute the cost of energy from the grid used to charge the battery and directly used by the machine.
      * @param machineBlocks vector of MachineBlocks representing the machine state schedule
      * @param batteryLevels vector of battery levels for each time unit, which indicates when we are charging or discharging the battery
      * @return the total cost of energy from the grid
      */
-    double calculateEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels);
+    double computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels);
 
     // Intern solver function
     Solution _solve();
