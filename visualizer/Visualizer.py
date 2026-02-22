@@ -29,14 +29,14 @@ BATTERY_COLOR = "#A876FF"
 STATE_COLORS = {
     "Off": "#B9B9B9",
     "Transition": "#6D6D6D",
-    "Idle": "#52BDFF",
-    "Proc": "#008CE3",
+    "Idle": "#5CA3AF",
+    "Proc": "#005EBC",
 }
 TASK_COLORS = {
     "regular": "#90EE90",
     "energy_intensive": "#006400",
-    "tardy_regular": "#FFA500",
-    "tardy_energy_intensive": "#FF7500"
+    "tardy_regular": "#FFC547",
+    "tardy_energy_intensive": "#D66C00"
 }
 
 # --- Create figure ---

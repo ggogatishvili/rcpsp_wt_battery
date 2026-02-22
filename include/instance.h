@@ -204,7 +204,7 @@ class Instance
 
       const struct {
          int time = 1;
-         double cost = 2;
+         double cost = 2.5;
       } idleProc;
 
       const struct {

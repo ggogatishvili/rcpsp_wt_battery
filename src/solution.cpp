@@ -23,16 +23,12 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 Solution::Solution( const Instance* ins
                   , const double ObjVal
-                  , const double energyCost
-                  , const unsigned int makespan
                   , const std::vector<int>& taskAssignments
                   , const std::vector<double>& batteryLevels
                   , const std::vector<MachineBlock>& machineBlocks
                   , const SolutionStats&& stats)
    : ins(ins)
    , objVal(ObjVal)
-   , energyCost(energyCost)
-   , makespan(makespan)
    , taskAssignments(taskAssignments)
    , batteryLevels(batteryLevels)
    , machineBlocks(machineBlocks)

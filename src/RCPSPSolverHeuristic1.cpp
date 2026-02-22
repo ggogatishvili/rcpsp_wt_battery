@@ -2,43 +2,45 @@
 #include <algorithm>
 #include <vector>
 #include <fmt/base.h>
+#include "queue"
 
 using namespace std;
 
-RCPSPSolverHeuristic1::RCPSPSolverHeuristic1(const Instance* const instance) : ins(instance) {}
+RCPSPSolverHeuristic1::RCPSPSolverHeuristic1(const Instance* const instance)
+    : ins(instance), H(instance->maxDuration()), N(instance->nbr_tasks()), R(instance->nbr_resources()) {}
 
 
 Solution RCPSPSolverHeuristic1::_solve() {
-    const int H = ins->maxDuration();
-
     try {
         // Phase 1
         vector<int> startTimes = scheduleTasks();
 
         // Phase 2
-        vector<MachineBlock> machineBlocks = scheduleMachineBlocks(startTimes);
+        vector<MachineBlock> machineBlocks = scheduleMachineUsage(startTimes);
+        vector<double> energyRequirements = getEnergyRequirements(machineBlocks);
 
-        // For now placeholders
-        vector<double> batteryLevels(H, 0.0);
+        // Phase 3
+        vector<double> batteryLevels = scheduleBatteryUsage(energyRequirements);
 
-        double tardinessCost = 0.0;
-        double energyCost = 0.0;
+
+        auto tardinessCost = calculateTardinessCost(startTimes);
+
+        double energyCost = calculateEnergyCost(energyRequirements, batteryLevels);
+
         double totalCost = tardinessCost + energyCost;
 
-        return Solution(ins,
-                        totalCost,
-                        0.0,
-                        0,
-                        startTimes,
-                        batteryLevels,
-                        machineBlocks,
-                        SolutionStats::defaultStats());
+
+        return {
+                ins,
+                totalCost,
+                startTimes,
+                batteryLevels,
+                machineBlocks,
+                SolutionStats::defaultStats()
+        };
     }
     catch (const exception& e) {
-        fmt::println(stderr,
-                     "Heuristic1 failed while solving instance {}: {}",
-                     ins->instName(),
-                     e.what());
+        fmt::println(stderr, "Heuristic1 failed while solving instance {}: {}", ins->instName(), e.what());
 
         return Solution::infeasibleSolution(ins);
     }
@@ -46,10 +48,6 @@ Solution RCPSPSolverHeuristic1::_solve() {
 
 
 vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
-    const int N = ins->nbr_tasks();
-    const int H = ins->maxDuration();
-    const int R = ins->nbr_resources();
-
     vector<int> startTimes(N, -1);
     vector<int> earliestStartTimes(N);
     vector<int> remainingPredecessors(N, 0);
@@ -217,9 +215,7 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
 
 
 
-vector<MachineBlock> RCPSPSolverHeuristic1::scheduleMachineBlocks(const vector<int>& startTimes) {
-    const int H = ins->maxDuration();
-
+vector<MachineBlock> RCPSPSolverHeuristic1::scheduleMachineUsage(const vector<int>& startTimes) {
     //Build SPACES graph
     auto spacesGraph = buildSPACESGraph();
 
@@ -292,10 +288,7 @@ vector<MachineBlock> RCPSPSolverHeuristic1::scheduleMachineBlocks(const vector<i
     return machineBlocks;
 }
 
-
 vector<Interval> RCPSPSolverHeuristic1::getProcRequiredIntervals(const vector<int>& startTimes) {
-    const int H = ins->maxDuration();
-
     // Initialize all time units as not requiring Proc
     vector<bool> requiredTimes(H, false);
 
@@ -328,11 +321,7 @@ vector<Interval> RCPSPSolverHeuristic1::getProcRequiredIntervals(const vector<in
     return requiredIntervals;
 }
 
-
 vector<vector<vector<Edge>>> RCPSPSolverHeuristic1::buildSPACESGraph() {
-    const int H = ins->maxDuration();
-    const int S = 3;
-
     // 2D graph: graph[time][state] = list of outgoing edges
     vector<vector<vector<Edge>>> graph(H,vector<vector<Edge>>(S));
 
@@ -410,7 +399,6 @@ vector<vector<vector<Edge>>> RCPSPSolverHeuristic1::buildSPACESGraph() {
     return graph;
 }
 
-
 vector<MachineBlock> RCPSPSolverHeuristic1::getOptimalPath(
         const vector<vector<vector<Edge>>>& graph,
         int startTime,
@@ -418,9 +406,6 @@ vector<MachineBlock> RCPSPSolverHeuristic1::getOptimalPath(
         int endTime,
         State endState
 ) {
-    const int H = ins->maxDuration();
-    const int S = 3;
-
     // Total cost to reach each node (time, state) initialized to infinity, except for the start node
     vector<vector<double>> totalPathCost(H, vector<double>(S, BIG_M));
     totalPathCost[startTime][(int)startState] = 0.0;
@@ -432,24 +417,24 @@ vector<MachineBlock> RCPSPSolverHeuristic1::getOptimalPath(
     // Search for the optimal path using the shortest path algorithm
     // The graph is acyclic with edges going forward in time (there might be negative cost edges)
     // We can safely use a topological order traversal (time from start to end) to find the shortest path
-    for (int t = startTime; t < endTime; t++) {
+    for (int i = startTime; i < endTime; i++) {
         for (int s = 0; s < S; s++) {
             // Skip unreachable nodes
-            if (totalPathCost[t][s] >= BIG_M) {
+            if (GREATEREQ(totalPathCost[i][s], BIG_M)) {
                 continue;
             }
 
             // Explore outgoing edges from the current node (t, s)
-            for (const Edge& e : graph[t][s]) {
+            for (const Edge& e : graph[i][s]) {
                 // Skip edges that go beyond the end time
                 if (e.toTime > endTime) {
                     continue;
                 }
 
-                double newCost = totalPathCost[t][s] + e.cost;
+                double newCost = totalPathCost[i][s] + e.cost;
 
                 // Update cost and best incoming edge if a cheaper path is found
-                if (newCost < totalPathCost[e.toTime][(int)e.toState]) {
+                if (LESSER(newCost, totalPathCost[e.toTime][(int)e.toState])) {
                     totalPathCost[e.toTime][(int)e.toState] = newCost;
                     bestIncomingEdge[e.toTime][(int)e.toState] = e;
                 }
@@ -457,7 +442,7 @@ vector<MachineBlock> RCPSPSolverHeuristic1::getOptimalPath(
         }
     }
 
-    if (totalPathCost[endTime][(int)endState] >= BIG_M) {
+    if (GREATEREQ(totalPathCost[endTime][(int)endState], BIG_M)) {
         throw runtime_error(
                 fmt::format(
                         "No path found in SPACES graph from time {} state {} to time {} state {}.",
@@ -502,4 +487,308 @@ vector<MachineBlock> RCPSPSolverHeuristic1::getOptimalPath(
     reverse(reversedBlocks.begin(), reversedBlocks.end());
 
     return reversedBlocks;
+}
+
+
+
+
+vector<double> RCPSPSolverHeuristic1::scheduleBatteryUsage(const vector<double>& energyRequirements) {
+    vector<double> batteryLevels(H, 0.0);
+    vector<bool> processed(H, false);
+
+    int i = 0;
+    while (true) {
+        // Find next interval with energy requirements that has not been processed yet
+        auto energyRequiredInterval = getNextEnergyRequiredInterval(i, energyRequirements, processed);
+
+        if (energyRequiredInterval.start == -1) {
+            break;
+        }
+
+        // Build max-heap of the prices for the current interval
+        auto priceMaxHeap = getPriceMaxHeapForInterval(energyRequiredInterval);
+
+        while (!priceMaxHeap.empty()) {
+
+            auto peakTime = getUnprocessedPeakTime(priceMaxHeap, processed);
+
+            if (peakTime == -1) {
+                break;
+            }
+
+            auto success = makePeakCheaper(peakTime, energyRequiredInterval, batteryLevels, processed, energyRequirements);
+
+            // If the current peak could not be made cheaper, we don't need to try the same for the smaller peaks in the current interval
+            if (!success) {
+                break;
+            }
+        }
+
+        i = energyRequiredInterval.end + 1;
+    }
+
+    return batteryLevels;
+}
+
+vector<double> RCPSPSolverHeuristic1::getEnergyRequirements(const vector<MachineBlock> &machineBlocks) {
+    vector<double> energyRequirements(H, 0.0);
+
+    for (const auto& block : machineBlocks) {
+        double perTimeUnit = block.getRequiredEnergyPerTimeUnit(ins);
+
+        for (int i = block.startTime; i <= block.endTime; i++) {
+            energyRequirements[i] = perTimeUnit;
+        }
+    }
+
+    return energyRequirements;
+}
+
+Interval RCPSPSolverHeuristic1::getNextEnergyRequiredInterval(int start, const vector<double> &energyRequirements, const vector<bool> &processed) {
+    // Find the start of the next interval where energy is required and not yet processed
+    int i = start;
+    while (i < H && (EQUALS(energyRequirements[i], 0.0) || processed[i])) {
+        i++;
+    }
+
+    if (i >= H) {
+        return {-1, -1};
+    }
+
+    // Find the end of this interval
+    int j = i;
+    while (j + 1 < H && GREATER(energyRequirements[j + 1], 0.0) && !processed[j + 1]) {
+        j++;
+    }
+
+    return {i, j};
+}
+
+priority_queue<pair<double, int>>RCPSPSolverHeuristic1::getPriceMaxHeapForInterval(const Interval &interval) {
+    priority_queue<pair<double,int>> maxHeap;
+
+    for (int i = interval.start; i <= interval.end; i++) {
+        maxHeap.emplace(ins->costs[i], i);
+    }
+
+    return maxHeap;
+}
+
+int RCPSPSolverHeuristic1::getUnprocessedPeakTime(priority_queue<pair<double, int>>& priceMaxHeap, const vector<bool>& processed) {
+    int peakTime = -1;
+
+    while (!priceMaxHeap.empty()) {
+        auto [price, time] = priceMaxHeap.top();
+        priceMaxHeap.pop();
+        if (!processed[time]) {
+            peakTime = time;
+            break;
+        }
+    }
+
+    return peakTime;
+}
+
+bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements) {
+    const double Bmax = ins->Battery.B_max;
+    const double EFc  = ins->Battery.EF_charge;
+    const double EFd  = ins->Battery.EF_discharge;
+    const double EFComplete = EFc * EFd;
+
+    // Find the cheapest unprocessed time before the peak
+    auto cheapestTimeBeforePeak = getCheapestUnprocessedTimeBeforePeak(peakTime, processed);
+
+    // If the cheapest time before the peak is not cheap enough compared to the peak, we skip trying to charge before the peak and mark all times up to the peak as processed
+    if (cheapestTimeBeforePeak == -1 || GREATEREQ(ins->costs[cheapestTimeBeforePeak], ins->costs[peakTime] * EFComplete)) {
+        int j = peakTime;
+        while (j >= 0 && !processed[j]) {
+            processed[j] = true;
+            j--;
+        }
+        markFollowingTimesAsProcessed(peakTime, processed);
+        return false;
+    }
+
+    // Find a time before the peak that is cheap enough to charge the battery
+    auto upperThreshold = getUpperThresholdPriceForCharging(peakTime, cheapestTimeBeforePeak, EFComplete);
+    auto cheapEnoughTimeBeforePeak = getCheapEnoughTimeBeforePeak(peakTime, cheapestTimeBeforePeak, upperThreshold);
+    double cheapEnoughPrice =  ins->costs[cheapEnoughTimeBeforePeak];
+
+    // Time interval around the peak which we are making cheaper by discharging the battery
+    int currentTime = peakTime;
+    int left = peakTime;
+    int right = peakTime;
+
+    double initialChargeAmount = 0.0; // The amount of charge we are putting in the battery during cheapEnoughTimeBeforePeak
+
+    while (LESSER(initialChargeAmount, Bmax)) {
+        // Calculate how much we need to charge the battery at cheapEnoughTimeBeforePeak to make the current time cheaper
+        double currentEnergyRequirement = energyRequirements[currentTime]; // The amount of energy the machine needs at the current time
+        double currentEnergyChargeRequirement = max(0.0, currentEnergyRequirement / EFd); // The amount of energy we need to put in the battery to cover the current energy requirement, considering the discharge efficiency
+        double currentAvailableSpaceInBattery = max(0.0, Bmax - initialChargeAmount); // The available space in the battery considering the charge we are already putting in at cheapEnoughTimeBeforePeak
+        double currentChargeAmount = min(currentAvailableSpaceInBattery, currentEnergyChargeRequirement); // Resulting charge amount needed at cheapEnoughTimeBeforePeak to make the current time cheaper
+
+        // Update the initial charge amount and the battery levels with the current charge amount
+        initialChargeAmount += currentChargeAmount;
+        for (int i = cheapEnoughTimeBeforePeak; i < currentTime; i++) {
+            batteryLevels[i] += currentChargeAmount;
+        }
+
+        // Expand the time interval around the peak that we are making cheaper to the left or right (whichever is more expensive thus more beneficial to make cheaper)
+
+        double nextLeftPrice = (left - 1 >= energyRequiredInterval.start && left - 1 > cheapEnoughTimeBeforePeak &&
+                                !processed[left - 1] && GREATER(ins->costs[left - 1] * EFComplete, cheapEnoughPrice))
+                               ? ins->costs[left-1]
+                               : -BIG_M;
+
+        double nextRightPrice = (right + 1 <= energyRequiredInterval.end &&
+                                 !processed[right + 1] && GREATER(ins->costs[right + 1] * EFComplete, cheapEnoughPrice))
+                                ? ins->costs[right+1]
+                                : -BIG_M;
+
+        if (GREATER(nextLeftPrice, nextRightPrice) && GREATER(nextLeftPrice, -BIG_M)) {
+            left--;
+            currentTime = left;
+        }
+        else if (GREATER(nextRightPrice, -BIG_M)) {
+            right++;
+            currentTime = right;
+        } else {
+            break;
+        }
+    }
+
+    // Mark the time units from charging to the last discharged time unit as processed
+    for (int j = cheapEnoughTimeBeforePeak; j <= right; j++) {
+        processed[j] = true;
+    }
+
+    // Also mark the following times as processed if the prices are descending, as it would not be worth trying to charge at these times in later iterations
+    markFollowingTimesAsProcessed(right, processed);
+
+    return true;
+}
+
+int RCPSPSolverHeuristic1::getCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool> &processed) {
+    int cheapestTime = -1;
+    double cheapestCost = BIG_M;
+
+    int i = peakTime - 1;
+    while (i >= 0 && !processed[i])
+    {
+        if (ins->costs[i] < cheapestCost) {
+            cheapestCost = ins->costs[i];
+            cheapestTime = i;
+        }
+        i--;
+    }
+
+    return cheapestTime;
+}
+
+void RCPSPSolverHeuristic1::markFollowingTimesAsProcessed(int start, vector<bool> &processed) {
+    int i = start + 1;
+
+    while (i + 1 < H && ins->costs[i - 1] >= ins->costs[i] && ins->costs[i] >= ins->costs[i + 1]) {
+        processed[i] = true;
+        i++;
+    }
+}
+
+double RCPSPSolverHeuristic1::getUpperThresholdPriceForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete) {
+    vector<double> prices;
+
+    for (int i = cheapestTimeBeforePeak; i <= peakTime; i++) {
+        prices.push_back(ins->costs[i]);
+    }
+
+    sort(prices.begin(), prices.end());
+
+    double percentile = 0.50;
+    double threshold = prices[max(0, (int)(percentile * prices.size()))];
+
+    threshold = min(threshold, ins->costs[peakTime] * EFComplete);
+
+    return threshold;
+}
+
+int RCPSPSolverHeuristic1::getCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost) {
+    int cheapEnoughTime = -1;
+    double cheapEnoughCost = BIG_M;
+
+    bool below = false;
+
+    for (int i = peakTime; i >= cheapestTimeBeforePeak; i--) {
+        // Remember we crossed below the threshold
+        if (ins->costs[i] < upperThresholdCost) {
+            below = true;
+        }
+
+        // Break if we went back above the threshold after crossing below
+        if (below && ins->costs[i] > upperThresholdCost) {
+            break;
+        }
+
+        if (ins->costs[i] < cheapEnoughCost) {
+            cheapEnoughCost = ins->costs[i];
+            cheapEnoughTime = i;
+        }
+    }
+
+    return cheapEnoughTime;
+}
+
+
+
+
+double RCPSPSolverHeuristic1::calculateTardinessCost(const vector<int>& startTimes) {
+    double tardinessCost = 0.0;
+
+    // Iterate over tasks and calculate their tardiness cost if they are completed after their due date
+    for (int t = 0; t < N; t++) {
+        int completion = startTimes[t] + ins->getProcessingTime(t) - 1;
+        int due = ins->tasks[t].get_due_date();
+
+        if (completion > due) {
+            tardinessCost += ins->tasks[t].get_weight() * (completion - due);
+        }
+    }
+
+    return tardinessCost;
+}
+
+double RCPSPSolverHeuristic1::calculateEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels) {
+    const double EFc  = ins->Battery.EF_charge;
+    const double EFd  = ins->Battery.EF_discharge;
+
+    double totalEnergyCost = 0.0;
+
+    // Iterate over time units and calculate the cost of energy from the grid used to charge the battery and directly used by the machine
+    for (int i = 0; i < H; ++i) {
+        double currentEnergyPrice = ins->costs[i];
+
+        // Calculate the change in battery level from the previous time unit during the current time unit
+        double previousBatteryLevel = (i == 0 ? 0.0 : batteryLevels[i - 1]);
+        double currentBatteryLevel = batteryLevels[i];
+        double batteryDelta = currentBatteryLevel - previousBatteryLevel;
+
+        // Add the cost of charging the battery
+        if (batteryDelta > 0) {
+            totalEnergyCost += currentEnergyPrice * (batteryDelta / EFc);
+        }
+
+        // Calculate if and how much energy are we taking from the battery
+        double batteryDischarge = batteryDelta < 0 ? -batteryDelta : 0.0;
+        double energyFromBattery = batteryDischarge * EFd;
+
+        // Calculate how much energy we are using directly from the grid
+        double directGridUsage = energyRequirements[i] - energyFromBattery;
+
+        // Add cost of using energy from the grid directly for the machine
+        if (directGridUsage > 0) {
+            totalEnergyCost += currentEnergyPrice * directGridUsage;
+        }
+    }
+
+    return totalEnergyCost;
 }

@@ -360,8 +360,14 @@ Solution RCPSPSolverMILP::_solve() {
             }
         }
 
-        return Solution(ins, model.get(GRB_DoubleAttr_ObjVal), 0.0, 0.0, taskAssignments,
-                        batteryLevels, machineBlocks, {model.get(GRB_DoubleAttr_MIPGap)});
+        return {
+                ins,
+                model.get(GRB_DoubleAttr_ObjVal),
+                taskAssignments,
+                batteryLevels,
+                machineBlocks,
+                {model.get(GRB_DoubleAttr_MIPGap)}
+        };
     } else {
         return Solution::infeasibleSolution();
     }

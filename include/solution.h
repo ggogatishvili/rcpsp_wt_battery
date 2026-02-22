@@ -43,6 +43,36 @@ struct MachineBlock {
                ? fmt::format("{} -> {}", state_name(startState), state_name(endState))
                : std::string(state_name(startState));
     }
+
+    double getRequiredEnergyPerTimeUnit(const Instance* ins) const {
+        if (isTransition()) {
+            if (startState == State::Off && endState == State::Proc) {
+                return ins->offProc.cost;
+            } else if (startState == State::Proc && endState == State::Off) {
+                return ins->procOff.cost;
+            } else if (startState == State::Idle && endState == State::Proc) {
+                return ins->idleProc.cost;
+            } else if (startState == State::Proc && endState == State::Idle) {
+                return ins->procIdle.cost;
+            }
+        } else {
+            switch (startState) {
+                case State::Proc:
+                    return ins->Proc.cost;
+                case State::Off:
+                    return ins->Off.cost;
+                case State::Idle:
+                    return ins->Idle.cost;
+                default:
+                    break;
+            }
+        }
+        return -1; // Default case, should not happen
+    }
+
+    double getTotalRequiredEnergy(const Instance* ins) const {
+        return getRequiredEnergyPerTimeUnit(ins) * (endTime - startTime + 1);
+    }
 };
 
 struct SolutionStats
@@ -75,8 +105,6 @@ public:
 
     Solution( const Instance* ins
             , const double ObjVal
-            , const double energyCost
-            , const unsigned int makespan
             , const std::vector<int>& taskAssignments
             , const std::vector<double>& batteryLevels
             , const std::vector<MachineBlock>& machineBlocks
@@ -84,13 +112,10 @@ public:
 
     static inline Solution infeasibleSolution(const Instance* const ins = nullptr) noexcept
     {
-        return Solution { ins, INFINITE, INFINITE, std::numeric_limits<unsigned int>::max(), {}, {}, {}, SolutionStats::defaultStats() };
+        return Solution { ins, INFINITE, {}, {}, {}, SolutionStats::defaultStats() };
     }
 
     double getObjVal() const { return objVal; }
-    double getObjVal(const double alpha, const double lb_energy, const double lb_makespan) const { return alpha * lb_energy * energyCost + (1 - alpha) * lb_makespan * makespan; }
-    double getEnergyCost() const { return energyCost; }
-    unsigned int getMakespan() const { return makespan; }
     const SolutionStats& getStats() const & { return stats; }
     const std::vector<int>& getTaskAssignments() const & { return taskAssignments; }
     const std::vector<double>& getBatteryLevels() const & { return batteryLevels; }
@@ -100,13 +125,11 @@ public:
     void setObjVal(const double objval) { objVal = objval; }
     void setStats(const SolutionStats& newStats) { stats = newStats; }
     void setStats(const SolutionStats&& newStats) { stats = newStats; }
-    bool isInfeasible() const { return objVal >= GRB_INFINITY && makespan == std::numeric_limits<unsigned int>::max(); }
+    bool isInfeasible() const { return objVal >= GRB_INFINITY; }
 
 private:
     const Instance* ins;
     double objVal;
-    double energyCost;
-    unsigned int makespan;
     std::vector<int> taskAssignments;
     std::vector<double> batteryLevels;
     std::vector<MachineBlock> machineBlocks;
@@ -129,8 +152,6 @@ struct fmt::formatter<Solution>
         std::stringstream ss;
         ss << "Solution: \n"
            << "   optimal value: " << s.getObjVal() << "\n"
-           << "   energy cost:   " << s.getEnergyCost() << "\n"
-           << "   makespan:      " << s.getMakespan() << "\n"
            << "   task assignments: ";
         for (int i = 0; i < s.getTaskAssignments().size(); i++, ss << " ")
             ss << fmt::format("({}, {})", i+1, s.getTaskAssignments()[i]);

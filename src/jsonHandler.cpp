@@ -30,7 +30,6 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
    // Basic solution informations
    json["objective_value"] = solution.getObjVal();
    json["computation_time"] = computationTime;
-   json["makespan"] = solution.getMakespan();
 
    // Task assignments
    auto& taskAssignments = solution.getTaskAssignments();
