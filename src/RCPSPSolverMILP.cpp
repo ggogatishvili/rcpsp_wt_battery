@@ -315,6 +315,14 @@ Solution RCPSPSolverMILP::_solve() {
 
     // Solution extraction
     if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL) {
+        double objVal = model.get(GRB_DoubleAttr_ObjVal);
+
+        double energyCost = 0.0;
+        Loop(i, H) energyCost += (gMach.get(i).get(GRB_DoubleAttr_X) + gBatt.get(i).get(GRB_DoubleAttr_X)) * ins->costs[i];
+
+        double tardinessCost = 0.0;
+        Loop(t, N) tardinessCost += ins->tasks[t].get_weight() * tard.get(t).get(GRB_DoubleAttr_X);
+
         std::vector<int> taskAssignments(N, -1);
         Loop(t, N) Loop(i, H) {
                 if (x.i(t, i).get(GRB_DoubleAttr_X) > 0.999)
@@ -362,7 +370,9 @@ Solution RCPSPSolverMILP::_solve() {
 
         return {
                 ins,
-                model.get(GRB_DoubleAttr_ObjVal),
+                objVal,
+                energyCost,
+                tardinessCost,
                 taskAssignments,
                 batteryLevels,
                 machineBlocks,

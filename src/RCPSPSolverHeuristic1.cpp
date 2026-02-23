@@ -33,6 +33,8 @@ Solution RCPSPSolverHeuristic1::_solve() {
         return {
                 ins,
                 totalCost,
+                energyCost,
+                tardinessCost,
                 startTimes,
                 batteryLevels,
                 machineBlocks,

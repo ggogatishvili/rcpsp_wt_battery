@@ -29,6 +29,8 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
 
    // Basic solution informations
    json["objective_value"] = solution.getObjVal();
+   json["energy_cost"] = solution.getEnergyCost();
+   json["tardiness_cost"] = solution.getTardinessCost();
    json["computation_time"] = computationTime;
 
    // Task assignments

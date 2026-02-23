@@ -22,15 +22,19 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <gurobi_c.h>
 
 Solution::Solution( const Instance* ins
-                  , const double ObjVal
+                  , const double objVal
+                  , const double energyCost
+                  , const double tardinessCost
                   , const std::vector<int>& taskAssignments
                   , const std::vector<double>& batteryLevels
                   , const std::vector<MachineBlock>& machineBlocks
                   , const SolutionStats&& stats)
-   : ins(ins)
-   , objVal(ObjVal)
-   , taskAssignments(taskAssignments)
-   , batteryLevels(batteryLevels)
-   , machineBlocks(machineBlocks)
-   , stats(stats)
+        : ins(ins)
+        , objVal(objVal)
+        , energyCost(energyCost)
+        , tardinessCost(tardinessCost)
+        , taskAssignments(taskAssignments)
+        , batteryLevels(batteryLevels)
+        , machineBlocks(machineBlocks)
+        , stats(stats)
 {}

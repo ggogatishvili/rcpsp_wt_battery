@@ -22,6 +22,23 @@ energy = data["instance_summary"]["energy_costs"]
 tasks = data["task_assignments"]
 resource_count = data["instance_summary"]["resource_count"]
 objective_value = data.get("objective_value", None)
+energy_cost = data.get("energy_cost", None)
+tardiness_cost = data.get("tardiness_cost", None)
+
+
+# Time formatting
+DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+def hour_to_full_str(hour_index):
+    week = hour_index // 168
+    hour_in_week = hour_index % 168
+    day = hour_in_week // 24
+    hour = hour_in_week % 24
+    return f"Week {week+1} - {DAYS[day]} {hour:02d}:00"
+
+def hour_to_short_str(hour_index):
+    hour = hour_index % 24
+    return f"{hour:02d}"
 
 # Colors
 ENERGY_COLOR = "#FF5C46"
@@ -48,9 +65,11 @@ machine_state_domain = [0.4, 0.45]
 battery_domain = [0.45, 0.65]
 energy_domain = [0.65, 1.0]
 
+time_horizon = len(energy)
+
 # --- ENERGY COST LINE ---
 fig.add_trace(go.Scatter(
-    x=list(range(len(energy))),
+    x=list(range(time_horizon)),
     y=energy,
     mode="lines+markers",
     name="Energy cost",
@@ -61,7 +80,7 @@ fig.add_trace(go.Scatter(
 
 # --- BATTERY LINE ---
 fig.add_trace(go.Scatter(
-    x=list(range(len(battery))),
+    x=list(range(time_horizon)),
     y=battery,
     mode="lines+markers",
     name="Battery level",
@@ -85,7 +104,11 @@ for block in data["machine_blocks"]:
         showlegend=False,
         yaxis="y2",
         hoverinfo="text",
-        text=f"State: {state}<br>Start: {start}<br>End: {end}"
+        text=(
+            f"State: {state}<br>"
+            f"Start: {hour_to_full_str(start)}<br>"
+            f"End: {hour_to_full_str(end + 1)}"
+        )
     ))
 
 # --- TASK BARS ---
@@ -127,12 +150,12 @@ for t in tasks:
     successors_str = ", ".join(successors) if successors else "None"
     hover_text = (
         f"<b>{task_name}</b><br>"
-        f"Start: {t['start_time']}<br>"
-        f"End: {t['end_time']}<br>"
-        f"Duration: {t['duration']}<br>"
-        f"Release: {t['release_date']}<br>"
-        f"Due: {t['due_date']}<br>"
-        f"Weight: {t['weight']}<br>"
+        f"Start: {hour_to_full_str(start)}<br>"
+        f"End: {hour_to_full_str(end + 1)}<br>"
+        f"Duration: {t['duration']} [h]<br>"
+        f"Release: {hour_to_full_str(t['release_date'])}<br>"
+        f"Due: {hour_to_full_str(t['due_date'] + 1)}<br>"
+        f"Tardiness cost: {t['weight']} [EUR/h]<br>"
         f"Resources: {resources_desc}<br>"
         f"Successors: {successors_str}"
     )
@@ -202,10 +225,46 @@ for color, desc in legend_items2:
 
 # --- LAYOUT ---
 
+# Day labels
+total_days = (time_horizon - 1) // 24 + 1
+for d in range(total_days):
+    day_start = d * 24
+    day_name = DAYS[d % 7]
+
+    fig.add_annotation(
+        x=day_start,
+        y=-0.10,
+        xref="x",
+        yref="paper",
+        text=day_name,
+        showarrow=False,
+        xanchor="left",
+        font=dict(size=11)
+    )
+
+
+# Week labels
+total_weeks = (time_horizon - 1) // 168 + 1
+if total_weeks > 1:
+    for w in range(total_weeks):
+        week_start = w * 168
+
+        fig.add_annotation(
+            x=week_start,
+            y=-0.15,
+            xref="x",
+            yref="paper",
+            text=f"Week {w+1}",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=12)
+        )
+
 # Toggle buttons for task annotations
-annotations = fig.layout.annotations
-layout_with_ann = list(annotations)
-layout_without_ann = []
+all_annotations = list(fig.layout.annotations)
+num_task_annotations = len(tasks)
+task_annotations = all_annotations[:num_task_annotations]  # First annotations are task labels
+static_annotations = all_annotations[num_task_annotations:]
 
 fig.update_layout(
     updatemenus=[
@@ -214,32 +273,49 @@ fig.update_layout(
             "direction": "left",
             "x": 0,
             "xanchor": "left",
-            "y": -0.04,
+            "y": -0.17,
             "yanchor": "top",
             "buttons": [
                 {
                     "label": "Show Task Names",
                     "method": "relayout",
-                    "args": [{"annotations": layout_with_ann}],
+                    "args": [{
+                        "annotations": task_annotations + static_annotations
+                    }],
                 },
                 {
                     "label": "Hide Task Names",
                     "method": "relayout",
-                    "args": [{"annotations": layout_without_ann}],
+                    "args": [{
+                        "annotations": static_annotations
+                    }],
                 },
             ],
         }
     ],
 
-    title=f"Schedule Visualization – {filename}"
-          + (f"<br><sup>Total cost: {objective_value:.2f}</sup>" if objective_value is not None else ""),
+    title=(
+        f"Schedule Visualization \u2013 {filename}"
+        + (
+            f"<br><sup>Total cost: {objective_value:.2f} EUR (energy: {(lambda v: f'{v:.2f}' if v is not None else 'N/A')(energy_cost)}, tardiness: {(lambda v: f'{v:.2f}' if v is not None else 'N/A')(tardiness_cost)})</sup>"
+        ) if objective_value is not None else ""
+    ),
 
-    xaxis=dict(title="Time", domain=[0, 1]),
+    xaxis=dict(
+        title=dict(
+            text="Time",
+            standoff=84
+        ),
+        tickmode="array",
+        tickvals=list(range(0, time_horizon + 1, 12)),
+        ticktext=[hour_to_short_str(t) for t in range(0, time_horizon + 1, 12)],
+        domain=[0, 1]
+    ),
 
 
     # Energy
     yaxis4=dict(
-        title=dict(text="Energy Cost", font=dict(color=ENERGY_COLOR)),
+        title=dict(text="Energy Cost<br>[EUR/MWh]", font=dict(color=ENERGY_COLOR)),
         tickfont=dict(color="red"),
         domain=energy_domain,
         anchor="x",
@@ -248,7 +324,7 @@ fig.update_layout(
 
     # Battery
     yaxis3=dict(
-        title=dict(text="Battery Level", font=dict(color=BATTERY_COLOR)),
+        title=dict(text="Battery Level<br>[MWh]", font=dict(color=BATTERY_COLOR)),
         tickfont=dict(color=BATTERY_COLOR),
         domain=battery_domain,
         anchor="x",
@@ -257,7 +333,7 @@ fig.update_layout(
 
     # Machine states
     yaxis2=dict(
-        title=dict(text="Machine State", font=dict(color="#6D6D6D")),
+        title=dict(text="Machine<br>State", font=dict(color="#6D6D6D")),
         tickfont=dict(color="#6D6D6D"),
         domain=machine_state_domain,
         anchor="x",
@@ -275,7 +351,7 @@ fig.update_layout(
 
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
 
-    height=700
+    height=750
 )
 
 fig.show()

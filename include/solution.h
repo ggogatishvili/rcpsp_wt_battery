@@ -104,7 +104,9 @@ public:
     Solution() noexcept : Solution(infeasibleSolution()) { }
 
     Solution( const Instance* ins
-            , const double ObjVal
+            , const double objVal
+            , const double energyCost
+            , const double tardinessCost
             , const std::vector<int>& taskAssignments
             , const std::vector<double>& batteryLevels
             , const std::vector<MachineBlock>& machineBlocks
@@ -112,10 +114,12 @@ public:
 
     static inline Solution infeasibleSolution(const Instance* const ins = nullptr) noexcept
     {
-        return Solution { ins, INFINITE, {}, {}, {}, SolutionStats::defaultStats() };
+        return Solution { ins, INFINITE, INFINITE, INFINITE, {}, {}, {}, SolutionStats::defaultStats() };
     }
 
     double getObjVal() const { return objVal; }
+    double getEnergyCost() const { return energyCost; }
+    double getTardinessCost() const { return tardinessCost; }
     const SolutionStats& getStats() const & { return stats; }
     const std::vector<int>& getTaskAssignments() const & { return taskAssignments; }
     const std::vector<double>& getBatteryLevels() const & { return batteryLevels; }
@@ -130,6 +134,8 @@ public:
 private:
     const Instance* ins;
     double objVal;
+    double energyCost;
+    double tardinessCost;
     std::vector<int> taskAssignments;
     std::vector<double> batteryLevels;
     std::vector<MachineBlock> machineBlocks;
