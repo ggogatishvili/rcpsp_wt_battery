@@ -47,6 +47,8 @@ Solution RCPSPSolverHeuristic1::_solve() {
 }
 
 
+
+
 vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
     vector<int> startTimes(N, -1);
     vector<int> earliestStartTimes(N);
@@ -220,7 +222,6 @@ vector<int> RCPSPSolverHeuristic1::getAvailableTasks(int currentTime, const vect
 
     return availableTasks;
 }
-
 
 int RCPSPSolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks) {
     const vector<int>* tasksToUse = &availableTasks;

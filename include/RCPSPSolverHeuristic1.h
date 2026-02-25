@@ -10,6 +10,7 @@
 
 using namespace std;
 
+
 struct Edge {
     int fromTime;
     State fromState;
@@ -24,15 +25,9 @@ struct Edge {
     }
 };
 
+
 struct Interval { int start; int end; }; // inclusive
 
-struct PeakInterval {
-    int start;
-    int end;
-    int peak;
-
-    vector<int> orderedTimes; // times in this interval ordered by cost descending
-};
 
 class RCPSPSolverHeuristic1
 {
@@ -57,12 +52,17 @@ public:
     }
 
 private:
-    // Pointer to the instance to solve
-    const Instance* ins;
+    const Instance* ins; // Pointer to the instance to solve
     const int H; // Planning horizon (max duration of the instance)
     const int N; // Number of tasks
     const int R; // Number of resources
     const int S = 3; // Number of machine states (Proc, Idle, Off)
+
+
+    Solution _solve();
+
+
+
 
     /**
      * Phase 1: Schedule tasks while respecting precedence and resource constraints, using a heuristic approach (e.g., EDD with EI clustering).
@@ -238,7 +238,4 @@ private:
      * @return the total cost of energy from the grid
      */
     double computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels);
-
-    // Intern solver function
-    Solution _solve();
 };
