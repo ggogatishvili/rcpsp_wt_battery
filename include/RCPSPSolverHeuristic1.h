@@ -71,6 +71,38 @@ private:
     vector<int> scheduleTasks();
 
     /**
+     * Get the list of ready tasks at the current time, which are the tasks that are precedence-free (all predecessors have been scheduled) and can start at the current time based on their earliest start times.
+     * @param currentTime the current time unit for which to determine the ready tasks
+     * @param unscheduledPrecedenceFreeTasks vector of task IDs that are currently unscheduled but have no remaining predecessors
+     * @param earliestStartTimes vector of earliest start times for each task, indexed by task ID, which indicates the earliest time at which each task can start based on release dates and precedence constraints
+     * @return vector of task IDs from unscheduledPrecedenceFreeTasks that are ready to be scheduled at the current time
+     */
+    vector<int> getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes);
+
+    /**
+     * Get the list of tasks from the given ready tasks that can be scheduled at the current time based on the availability of resources for the entire processing time of each task.
+     * @param currentTime the current time unit for which to determine the available tasks
+     * @param readyTasks vector of task IDs that are ready to be scheduled at the current time (precedence-free and earliest start time <= current time)
+     * @param availableResources 2D vector of available resources for each time unit and resource type, indexed by time and resource, which indicates how much of each resource is available at each time unit
+     * @return vector of task IDs from the readyTasks that can be scheduled at the current time based on resource availability for their entire processing time
+     */
+    vector<int> getAvailableTasks(int currentTime, const vector<int>& readyTasks, const vector<vector<int>>& availableResources);
+
+    /**
+     * Select a task to schedule from the given available tasks.
+     * If we are just after an EI task, we prefer to schedule another EI task to keep the machine in Proc state and avoid unnecessary transitions.
+     * We are using earliest due date (EDD) approach among either all available tasks or just the available EI tasks.
+     * @param currentTime the current time unit for which to select a task to schedule
+     * @param lastEiTaskEnd the end time of the last scheduled EI task, which can be used to determine if we are just after an EI task (e.g., if currentTime is equal to lastEiTaskEnd + 1)
+     * @param availableTasks vector of task IDs that are available to be scheduled at the current time based on release date, precedence and resource constraints
+     * @return the ID of the selected task
+     */
+    int selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks);
+
+
+
+
+    /**
      * Phase 2: Given the scheduled tasks and their start times, determine the optimal machine state schedule (Proc, Idle, Off) over time to minimize energy costs while ensuring that the machine is in Proc state whenever an EI task is being processed.
      * @param startTimes vector of start times for each task, indexed by task ID
      * @return vector of MachineBlocks representing the machine state schedule, where each block indicates a contiguous time interval during which the machine is in a specific state (Proc, Idle, Off) or transitioning between states
@@ -102,6 +134,9 @@ private:
      * @return vector of MachineBlocks representing the optimal path from (startTime, startState) to (endTime, endState), where each block indicates a contiguous time interval during which the machine is in a specific state or transitioning between states
      */
     vector<MachineBlock> findOptimalPath(const vector<vector<vector<Edge>>>& graph, int startTime, State startState, int endTime, State endState);
+
+
+
 
     /**
      * Phase 3: Given the energy requirements of the machine at each time unit, schedule the usage of the battery to minimize energy costs by reducing the usage of the grid during peak times while ensuring that the battery constraints (capacity, charge/discharge efficiency) are respected.

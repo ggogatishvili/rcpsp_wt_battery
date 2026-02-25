@@ -53,6 +53,8 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
     vector<int> startTimes(N, -1);
     vector<int> earliestStartTimes(N);
     vector<int> remainingPredecessors(N, 0);
+    vector<int> unscheduledPrecedenceFreeTasks;
+    vector<vector<int>> availableResources(H, vector<int>(R));
 
     // Initialize the earliest start times with release dates
     for (int task = 0; task < N; task++) {
@@ -64,23 +66,21 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
         }
     }
 
-    // Count predecessors
+    // Initialize remaining predecessors counts
     for (int task = 0; task < N; task++) {
         for (int successor : ins->successors(task)) {
             remainingPredecessors[successor]++;
         }
     }
 
-    // Unscheduled tasks with no predecessors or all predecessors scheduled
-    vector<int> unscheduledPrecedenceFreeTasks;
+    // Initialize unscheduled tasks with no predecessors or all predecessors scheduled
     for (int task = 0; task < N; task++) {
         if (remainingPredecessors[task] == 0) {
             unscheduledPrecedenceFreeTasks.push_back(task);
         }
     }
 
-    // Resource availability
-    vector<vector<int>> availableResources(H, vector<int>(R));
+    // Initialize available resources
     for (int resource = 0; resource < R; resource++) {
         for (int i = 0; i < H; i++) {
             availableResources[i][resource] = ins->resource_capacities[resource];
@@ -88,7 +88,7 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
     }
 
     int scheduledCount = 0;
-    int lastEnergyTaskEnd = -1;
+    int lastEiTaskEnd = -1;
 
     // Iterate over the planning horizon
     for (int currentTime = 0; currentTime < H; currentTime++) {
@@ -103,115 +103,158 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
             );
         }
 
-        // Build available set
-        vector<int> availableTasks;
+        // Get tasks that are ready to be scheduled at the current time (precedence-free and earliest start time <= current time)
+        auto readyTasks = getReadyTasks(currentTime, unscheduledPrecedenceFreeTasks, earliestStartTimes);
 
-        for (int task : unscheduledPrecedenceFreeTasks) {
-            if (currentTime < earliestStartTimes[task]) {
-                continue;
-            }
-
-            int processingTime = ins->getProcessingTime(task);
-
-            if (currentTime + processingTime > H) {
-                // Error: Task cannot be scheduled within horizon
-                throw runtime_error(
-                        fmt::format(
-                                "Task {} cannot be scheduled at time {} (duration {}) — exceeds planning horizon {}.",
-                                task, currentTime, processingTime, H
-                        )
-                );
-            }
-
-            bool resourcesAvailable = true;
-
-            for (int i = currentTime; i < currentTime + processingTime; i++) {
-                for (int resource = 0; resource < R; resource++) {
-                    if (availableResources[i][resource] < ins->rt(task, resource)) {
-                        resourcesAvailable = false;
-                        break;
-                    }
-                }
-
-                if (!resourcesAvailable) {
-                    break;
-                }
-            }
-
-            if (resourcesAvailable) {
-                availableTasks.push_back(task);
-            }
-        }
-
-        if (availableTasks.empty()) {
+        if (readyTasks.empty()) {
             continue;
         }
 
-        // EI clustering preference
-        bool justAfterEITask = (currentTime <= lastEnergyTaskEnd + 1);
+        // Try to schedule every ready task
+        while (true) {
+            // Get tasks that are ready and have available resources at the current time
+            auto availableTasks = getAvailableTasks(currentTime, readyTasks, availableResources);
 
-        if (justAfterEITask) {
-            vector<int> eeOnly;
-            for (int task : availableTasks) {
-                if (ins->is_ei_task(task)) {
-                    eeOnly.push_back(task);
+            if (availableTasks.empty()) {
+                break;
+            }
+
+            // Select a task to schedule
+            auto selectedTask = selectTaskToSchedule(currentTime, lastEiTaskEnd, availableTasks);
+
+            // Schedule the selected task
+            startTimes[selectedTask] = currentTime;
+            scheduledCount++;
+
+            int processingTime = ins->getProcessingTime(selectedTask);
+
+            // Reserve resources
+            for (int i = currentTime; i < currentTime + processingTime; i++) {
+                for (int resource = 0; resource < R; resource++) {
+                    availableResources[i][resource] -= ins->rt(selectedTask, resource);
                 }
             }
 
-            if (!eeOnly.empty()) {
-                availableTasks = eeOnly;
+            // Remove from readyTasks
+            readyTasks.erase(
+                    remove(readyTasks.begin(), readyTasks.end(), selectedTask),
+                    readyTasks.end()
+            );
+
+            // Remove from unscheduledPrecedenceFreeTasks
+            unscheduledPrecedenceFreeTasks.erase(
+                    remove(unscheduledPrecedenceFreeTasks.begin(), unscheduledPrecedenceFreeTasks.end(), selectedTask),
+                    unscheduledPrecedenceFreeTasks.end()
+            );
+
+            // Update successors
+            for (int successor : ins->successors(selectedTask)) {
+                earliestStartTimes[successor] = max(earliestStartTimes[successor], currentTime + processingTime);
+
+                remainingPredecessors[successor]--;
+
+                if (remainingPredecessors[successor] == 0) {
+                    unscheduledPrecedenceFreeTasks.push_back(successor);
+                }
+            }
+
+            // Update EI clustering info
+            if (ins->is_ei_task(selectedTask)) {
+                lastEiTaskEnd = currentTime + processingTime - 1;
             }
         }
 
-        // Earliest Due Date (EDD)
-        int selectedTask = *min_element(
-                availableTasks.begin(),
-                availableTasks.end(),
-                [&](int a, int b)
-                {
-                    return ins->tasks[a].get_due_date() < ins->tasks[b].get_due_date();
-                });
-
-        // Schedule task
-        startTimes[selectedTask] = currentTime;
-
-        scheduledCount++;
         if (scheduledCount == N) {
             break;
-        }
-
-        int processingTime = ins->getProcessingTime(selectedTask);
-
-        // Reserve resources
-        for (int i = currentTime; i < currentTime + processingTime; i++) {
-            for (int resource = 0; resource < R; resource++) {
-                availableResources[i][resource] -= ins->rt(selectedTask, resource);
-            }
-        }
-
-        // Remove from eligible
-        unscheduledPrecedenceFreeTasks.erase(
-                remove(unscheduledPrecedenceFreeTasks.begin(), unscheduledPrecedenceFreeTasks.end(), selectedTask),
-                unscheduledPrecedenceFreeTasks.end()
-        );
-
-        // Update successors
-        for (int successor : ins->successors(selectedTask)) {
-            earliestStartTimes[successor] = max(earliestStartTimes[successor], currentTime + processingTime);
-
-            remainingPredecessors[successor]--;
-
-            if (remainingPredecessors[successor] == 0) {
-                unscheduledPrecedenceFreeTasks.push_back(successor);
-            }
-        }
-
-        if (ins->is_ei_task(selectedTask)) {
-            lastEnergyTaskEnd = currentTime + processingTime - 1;
         }
     }
 
     return startTimes;
+}
+
+vector<int> RCPSPSolverHeuristic1::getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes) {
+    vector<int> readyTasks;
+
+    for (int task : unscheduledPrecedenceFreeTasks) {
+        if (currentTime < earliestStartTimes[task]) {
+            continue;
+        }
+
+        int processingTime = ins->getProcessingTime(task);
+
+        if (currentTime + processingTime - 1 > H - 1 - ins->procOff.time) { // H - 1 must be Off and there must be time for procOff transition if we start the task at currentTime
+            // Error: Task cannot be scheduled within horizon
+            throw runtime_error(
+                    fmt::format(
+                            "Task {} cannot be scheduled at time {} (duration {}) — exceeds planning horizon {} (with respect to turning off the machine).",
+                            task, currentTime, processingTime, H
+                    )
+            );
+        }
+
+        readyTasks.push_back(task);
+    }
+
+    return readyTasks;
+}
+
+vector<int> RCPSPSolverHeuristic1::getAvailableTasks(int currentTime, const vector<int>& readyTasks, const vector<vector<int>>& availableResources) {
+    vector<int> availableTasks;
+
+    for (int task : readyTasks) {
+        bool resourcesAvailable = true;
+
+        int processingTime = ins->getProcessingTime(task);
+
+        for (int i = currentTime; i < currentTime + processingTime && resourcesAvailable; i++) {
+            for (int resource = 0; resource < R; resource++) {
+                if (availableResources[i][resource] < ins->rt(task, resource)) {
+                    resourcesAvailable = false;
+                    break;
+                }
+            }
+        }
+
+        if (resourcesAvailable) {
+            availableTasks.push_back(task);
+        }
+    }
+
+    return availableTasks;
+}
+
+
+int RCPSPSolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks) {
+    const vector<int>* tasksToUse = &availableTasks;
+
+    // EI clustering
+    // If we are just after an EI task, we prefer to schedule another EI task if available to keep the machine in Proc state and avoid unnecessary transitions.
+    bool justAfterEiTask = (currentTime <= lastEiTaskEnd + 1);
+
+    vector<int> availableEiTasks;
+
+    if (justAfterEiTask) {
+        for (int task : availableTasks) {
+            if (ins->is_ei_task(task)) {
+                availableEiTasks.push_back(task);
+            }
+        }
+
+        if (!availableEiTasks.empty()) {
+            tasksToUse = &availableEiTasks;
+        }
+    }
+
+    // Select earliest due date
+    int selectedTask = *min_element(
+            tasksToUse->begin(),
+            tasksToUse->end(),
+            [&](int a, int b) {
+                return ins->tasks[a].get_due_date() < ins->tasks[b].get_due_date();
+            }
+    );
+
+    return selectedTask;
 }
 
 
@@ -243,16 +286,37 @@ vector<MachineBlock> RCPSPSolverHeuristic1::scheduleMachineUsage(const vector<in
                     State::Proc
             );
 
-            machineBlocks.insert(machineBlocks.end(), path.begin(), path.end());
+            // If previous block is Proc and the first block of the path is also Proc, we can merge them into one block
+            if (!machineBlocks.empty() &&
+                !machineBlocks.back().isTransition() && machineBlocks.back().startState == State::Proc &&
+                !path.front().isTransition() && path.front().startState == State::Proc)
+            {
+                // Extend previous block to cover first path block
+                machineBlocks.back().endTime = path.front().endTime;
+
+                // Insert remaining blocks (skip first)
+                machineBlocks.insert(machineBlocks.end(), path.begin() + 1, path.end());
+            }
+            // Otherwise, insert all blocks from the path
+            else {
+                machineBlocks.insert(machineBlocks.end(), path.begin(), path.end());
+            }
         }
 
         // Add the required Proc block
-        machineBlocks.emplace_back(
-                procRequiredInterval.start,
-                State::Proc,
-                procRequiredInterval.end,
-                State::Proc
-        );
+        if (!machineBlocks.empty() && !machineBlocks.back().isTransition() && machineBlocks.back().startState == State::Proc)
+        {
+            // Extend existing Proc block
+            machineBlocks.back().endTime = procRequiredInterval.end;
+        }
+        else { // Add new Proc block
+            machineBlocks.emplace_back(
+                    procRequiredInterval.start,
+                    State::Proc,
+                    procRequiredInterval.end,
+                    State::Proc
+            );
+        }
 
         currentTime = procRequiredInterval.end + 1;
         currentState = State::Proc;
@@ -614,6 +678,9 @@ bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energy
     // Find a time before the peak that is cheap enough to charge the battery
     auto upperThreshold = computeUpperThresholdCostForCharging(peakTime, cheapestTimeBeforePeak, EFComplete);
     auto cheapEnoughTimeBeforePeak = findCheapEnoughTimeBeforePeak(peakTime, cheapestTimeBeforePeak, upperThreshold);
+    if (cheapEnoughTimeBeforePeak <= energyRequiredInterval.start) {
+        cheapEnoughTimeBeforePeak = cheapestTimeBeforePeak; // There can't be any more unprocessed peaks between the cheapest time and the peak, so we can safely use the cheapest time
+    }
     double cheapEnoughCost =  ins->costs[cheapEnoughTimeBeforePeak];
 
     // Time interval around the peak which we are making cheaper by discharging the battery
