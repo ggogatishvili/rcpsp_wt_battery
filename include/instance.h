@@ -140,7 +140,7 @@ class Instance
          return tasks[t].get_successors();
       }
 
-      inline auto rt(const int t, const int k) const -> double
+      inline auto rt(const int t, const int k) const -> int
       {
          return tasks[t].get_resource_requests()[k];
       }

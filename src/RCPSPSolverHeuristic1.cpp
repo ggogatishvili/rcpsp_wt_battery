@@ -24,9 +24,7 @@ Solution RCPSPSolverHeuristic1::_solve() {
 
 
         auto tardinessCost = computeTardinessCost(startTimes);
-
         double energyCost = computeEnergyCost(energyRequirements, batteryLevels);
-
         double totalCost = tardinessCost + energyCost;
 
 
