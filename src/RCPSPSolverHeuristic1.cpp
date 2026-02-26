@@ -110,15 +110,11 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
             continue;
         }
 
-        // Try to schedule every ready task
-        while (true) {
-            // Get tasks that are ready and have available resources at the current time
-            auto availableTasks = getAvailableTasks(currentTime, readyTasks, availableResources);
+        // Get tasks that are ready and have available resources at the current time
+        auto availableTasks = getAvailableTasks(currentTime, readyTasks, availableResources);
 
-            if (availableTasks.empty()) {
-                break;
-            }
-
+        // Try to schedule as many tasks as possible
+        while (!availableTasks.empty()) {
             // Select a task to schedule
             auto selectedTask = selectTaskToSchedule(currentTime, lastEiTaskEnd, availableTasks);
 
@@ -135,11 +131,14 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
                 }
             }
 
-            // Remove from readyTasks
-            readyTasks.erase(
-                    remove(readyTasks.begin(), readyTasks.end(), selectedTask),
-                    readyTasks.end()
+            // Remove from availableTasks
+            availableTasks.erase(
+                    remove(availableTasks.begin(), availableTasks.end(), selectedTask),
+                    availableTasks.end()
             );
+
+            // Update availableTasks - resource availability has changed
+            availableTasks = getAvailableTasks(currentTime, availableTasks, availableResources);
 
             // Remove from unscheduledPrecedenceFreeTasks
             unscheduledPrecedenceFreeTasks.erase(
@@ -164,6 +163,7 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
             }
         }
 
+        // All tasks scheduled
         if (scheduledCount == N) {
             break;
         }
