@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
          fmt::println("{:.5f} {:.2f} {:.5f} {} {}", sol.getObjVal(), clock.elapsed()
             , sol.getStats().gap_to_optimal, sol.getStats().nbr_lazy, sol.getStats().nbr_subproblems);
       else
-         fmt::println("{:.5f} {:.2f} ", sol.getObjVal(), clock.elapsed());
+         fmt::println("{:.5f} {:.3f} ", sol.getObjVal(), clock.elapsed());
 
       if ( Config::verbose )
          Config::showConfig();

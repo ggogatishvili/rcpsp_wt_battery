@@ -52,12 +52,12 @@ make
 From the repository root, run the solver with specified method, input file, and output file:
 
 ```
-./build/rcpsp_wt_battery -m ILP -i ../instances/1_10.txt -o ../results/1_10.txt
+./build/rcpsp_wt_battery -m MILP -i ../instances/1_10.txt -o ../results/1_10.txt
 ```
 
 Alternatively, set up CLion target to rcpsp_wt_battery with program arguments:
 ```
--m ILP -i ../instances/1_10.txt -o ../results/1_10.txt
+-m MILP -i ../instances/1_10.txt -o ../results/1_10.txt
 ```
 
 You can aso check --help for more options:

@@ -22,37 +22,19 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <gurobi_c.h>
 
 Solution::Solution( const Instance* ins
-                  , const double ObjVal
+                  , const double objVal
                   , const double energyCost
-                  , const unsigned int makespan
+                  , const double tardinessCost
                   , const std::vector<int>& taskAssignments
                   , const std::vector<double>& batteryLevels
                   , const std::vector<MachineBlock>& machineBlocks
-                  , const SolutionStats&& stats
-                  , const ConstructorBehavior beh )
-   : ins(ins)
-   , objVal(ObjVal)
-   , energyCost(energyCost)
-   , makespan(makespan)
-   , taskAssignments(taskAssignments)
-   , batteryLevels(batteryLevels)
-   , machineBlocks(machineBlocks)
-   , stats(stats)
-{
-   if ( beh == Update ) this->energyCost = compute_energyCost();
-}
-
-double Solution::compute_energyCost() const
-{
-   double objVal = 0.0;
-   std::vector<std::pair<int, int>> ee_task_assignments;
-   ee_task_assignments.reserve(ins->ee_tasks.size());
-   iterate(j, ins->ee_tasks)
-   {
-      const int startingTime = taskAssignments[j];
-      ee_task_assignments.emplace_back(j, startingTime);
-      objVal += ins->cjob(j, startingTime);
-   }
-   std::ranges::sort(ee_task_assignments, {}, [](const auto e){ return e.second; });
-   return objVal;
-}
+                  , const SolutionStats&& stats)
+        : ins(ins)
+        , objVal(objVal)
+        , energyCost(energyCost)
+        , tardinessCost(tardinessCost)
+        , taskAssignments(taskAssignments)
+        , batteryLevels(batteryLevels)
+        , machineBlocks(machineBlocks)
+        , stats(stats)
+{}

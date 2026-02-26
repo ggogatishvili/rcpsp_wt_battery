@@ -28,7 +28,7 @@ class PrecedenceGraph
    public:
       PrecedenceGraph(const Instance * const ins);
 
-      void writeGraphviz(std::ostream& out, const std::optional<std::list<int>>& ee_tasks = std::nullopt) const;
+      void writeGraphviz(std::ostream& out, const std::optional<std::list<int>>& ei_tasks = std::nullopt) const;
 
       auto operator()() const -> std::vector<std::vector<long>>;
 

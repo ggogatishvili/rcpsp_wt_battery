@@ -40,8 +40,8 @@ Instance::Instance(const std::string& _instance_name, const std::vector<int>& _r
 {
    // Computation of basic information
    std::ranges::for_each( std::views::iota(0ul, tasks.size())
-                        | std::views::filter([this](const auto i) { return tasks[i].is_ee_task(); })
-                        , [this](const auto i) { ee_tasks.push_back(i); } );
+                        | std::views::filter([this](const auto i) { return tasks[i].is_ei_task(); })
+                        , [this](const auto i) { ei_tasks.push_back(i); } );
 
    // Computation of precedence graph
    precedence_graph = PrecedenceGraph(this)();

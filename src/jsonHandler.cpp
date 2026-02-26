@@ -29,8 +29,9 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
 
    // Basic solution informations
    json["objective_value"] = solution.getObjVal();
+   json["energy_cost"] = solution.getEnergyCost();
+   json["tardiness_cost"] = solution.getTardinessCost();
    json["computation_time"] = computationTime;
-   json["makespan"] = solution.getMakespan();
 
    // Task assignments
    auto& taskAssignments = solution.getTaskAssignments();
@@ -70,7 +71,7 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
       nlohmann::json machineBlockJson;
       machineBlockJson["start_time"] = machineBlock.startTime;
       machineBlockJson["end_time"] = machineBlock.endTime;  // Inclusive end time
-      machineBlockJson["description"] = machineBlock.desc;
+      machineBlockJson["description"] = machineBlock.getDescription();
       json["machine_blocks"].push_back(machineBlockJson);
    }
 
