@@ -62,7 +62,7 @@ double Clock::elapsed() const
    else
       end = end_time;
 
-   return std::chrono::duration_cast<std::chrono::milliseconds>(end - start_time).count() / 1000.0;
+   return std::chrono::duration_cast<std::chrono::microseconds>(end - start_time).count() / 1000000.0;
 }
 
 bool Clock::timeout() const

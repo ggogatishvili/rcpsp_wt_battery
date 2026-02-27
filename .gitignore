@@ -9,4 +9,4 @@ target
 __pycache__
 CMakeUserPresets.json
 .zed
-results
+*result*
