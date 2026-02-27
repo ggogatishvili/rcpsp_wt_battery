@@ -1,12 +1,10 @@
 #include "RCPSPSolverMILP.h"
 #include <algorithm>
-#include <boost/mpl/min_max.hpp>
 #include <helpers.h>
 #include <config.h>
 #include <fmt/base.h>
 #include <gurobi_c++.h>
 #include <gurobi_c.h>
-#include <ilcp/cp.h>
 #include <memory>
 #include <solution.h>
 

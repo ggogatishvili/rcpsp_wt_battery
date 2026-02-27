@@ -21,7 +21,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #pragma once
 
 #include <map>
-#include "Helpers.h"
+#include "helpers.h"
 
 template <class T>
 class Map3
