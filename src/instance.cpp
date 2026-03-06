@@ -32,11 +32,12 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "instance.h"
 #include "helpers.h"
 
-Instance::Instance(const std::string& _instance_name, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs)
+Instance::Instance(const std::string& _instance_name, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs, int battery_capacity)
    : instancename(_instance_name)
    , resource_capacities(_resource_capacities)
    , tasks(_tasks)
    , costs(_costs)
+   , Battery{ .batteryCapacity = battery_capacity }
 {
    // Computation of basic information
    std::ranges::for_each( std::views::iota(0ul, tasks.size())
@@ -71,7 +72,7 @@ void Instance::showInstance() const
    }
 }
 
-Instance Instance::fromFile(const std::string& fileName)
+Instance Instance::from(const std::string& fileName, int battery_capacity)
 {
    std::vector<int> resource_capacities;
    std::vector<Task> tasks;
@@ -133,5 +134,5 @@ Instance Instance::fromFile(const std::string& fileName)
          costs.push_back(v);
    }
 
-   return Instance { fileName, resource_capacities, tasks, costs };
+   return Instance { fileName, resource_capacities, tasks, costs, battery_capacity };
 }

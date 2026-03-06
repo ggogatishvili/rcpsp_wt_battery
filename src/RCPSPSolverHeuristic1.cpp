@@ -655,16 +655,16 @@ int RCPSPSolverHeuristic1::findUnprocessedPeakTime(priority_queue<pair<double, i
 }
 
 bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements) {
-    const double Bmax = ins->Battery.B_max;
-    const double EFc  = ins->Battery.EF_charge;
-    const double EFd  = ins->Battery.EF_discharge;
-    const double EFComplete = EFc * EFd;
+    const double batteryCapacity = ins->Battery.batteryCapacity;
+    const double chargingEfficiency  = ins->Battery.chargingEfficiency;
+    const double dischargingEfficiency  = ins->Battery.dischargingEfficiency;
+    const double roundtripEfficiency = chargingEfficiency * dischargingEfficiency;
 
     // Find the cheapest unprocessed time before the peak
     auto cheapestTimeBeforePeak = findCheapestUnprocessedTimeBeforePeak(peakTime, processed);
 
     // If the cheapest time before the peak is not cheap enough compared to the peak, we skip trying to charge before the peak and mark all times up to the peak as processed
-    if (cheapestTimeBeforePeak == -1 || GREATEREQ(ins->costs[cheapestTimeBeforePeak], ins->costs[peakTime] * EFComplete)) {
+    if (cheapestTimeBeforePeak == -1 || GREATEREQ(ins->costs[cheapestTimeBeforePeak], ins->costs[peakTime] * roundtripEfficiency)) {
         int j = peakTime;
         while (j >= 0 && !processed[j]) {
             processed[j] = true;
@@ -675,7 +675,7 @@ bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energy
     }
 
     // Find a time before the peak that is cheap enough to charge the battery
-    auto upperThreshold = computeUpperThresholdCostForCharging(peakTime, cheapestTimeBeforePeak, EFComplete);
+    auto upperThreshold = computeUpperThresholdCostForCharging(peakTime, cheapestTimeBeforePeak, roundtripEfficiency);
     auto cheapEnoughTimeBeforePeak = findCheapEnoughTimeBeforePeak(peakTime, cheapestTimeBeforePeak, upperThreshold);
     if (cheapEnoughTimeBeforePeak <= energyRequiredInterval.start) {
         cheapEnoughTimeBeforePeak = cheapestTimeBeforePeak; // There can't be any more unprocessed peaks between the cheapest time and the peak, so we can safely use the cheapest time
@@ -689,11 +689,11 @@ bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energy
 
     double initialChargeAmount = 0.0; // The amount of charge we are putting in the battery during cheapEnoughTimeBeforePeak
 
-    while (LESSER(initialChargeAmount, Bmax)) {
+    while (LESSER(initialChargeAmount, batteryCapacity)) {
         // Compute how much we need to charge the battery at cheapEnoughTimeBeforePeak to make the current time cheaper
         double currentEnergyRequirement = energyRequirements[currentTime]; // The amount of energy the machine needs at the current time
-        double currentEnergyChargeRequirement = max(0.0, currentEnergyRequirement / EFd); // The amount of energy we need to put in the battery to cover the current energy requirement, considering the discharge efficiency
-        double currentAvailableSpaceInBattery = max(0.0, Bmax - initialChargeAmount); // The available space in the battery considering the charge we are already putting in at cheapEnoughTimeBeforePeak
+        double currentEnergyChargeRequirement = max(0.0, currentEnergyRequirement / dischargingEfficiency); // The amount of energy we need to put in the battery to cover the current energy requirement, considering the discharge efficiency
+        double currentAvailableSpaceInBattery = max(0.0, batteryCapacity - initialChargeAmount); // The available space in the battery considering the charge we are already putting in at cheapEnoughTimeBeforePeak
         double currentChargeAmount = min(currentAvailableSpaceInBattery, currentEnergyChargeRequirement); // Resulting charge amount needed at cheapEnoughTimeBeforePeak to make the current time cheaper
 
         // Update the initial charge amount and the battery levels with the current charge amount
@@ -705,12 +705,12 @@ bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energy
         // Expand the time interval around the peak that we are making cheaper to the left or right (whichever is more expensive thus more beneficial to make cheaper)
 
         double nextLeftCost = (left - 1 >= energyRequiredInterval.start && left - 1 > cheapEnoughTimeBeforePeak &&
-                               !processed[left - 1] && GREATER(ins->costs[left - 1] * EFComplete, cheapEnoughCost))
+                               !processed[left - 1] && GREATER(ins->costs[left - 1] * roundtripEfficiency, cheapEnoughCost))
                                ? ins->costs[left-1]
                                : -BIG_M;
 
         double nextRightCost = (right + 1 <= energyRequiredInterval.end &&
-                                !processed[right + 1] && GREATER(ins->costs[right + 1] * EFComplete, cheapEnoughCost))
+                                !processed[right + 1] && GREATER(ins->costs[right + 1] * roundtripEfficiency, cheapEnoughCost))
                                 ? ins->costs[right+1]
                                 : -BIG_M;
 
@@ -826,8 +826,8 @@ double RCPSPSolverHeuristic1::computeTardinessCost(const vector<int>& startTimes
 }
 
 double RCPSPSolverHeuristic1::computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels) {
-    const double EFc  = ins->Battery.EF_charge;
-    const double EFd  = ins->Battery.EF_discharge;
+    const double chargingEfficiency  = ins->Battery.chargingEfficiency;
+    const double dischargingEfficiency  = ins->Battery.dischargingEfficiency;
 
     double totalEnergyCost = 0.0;
 
@@ -842,12 +842,12 @@ double RCPSPSolverHeuristic1::computeEnergyCost(const vector<double>& energyRequ
 
         // Add the cost of charging the battery
         if (batteryDelta > 0) {
-            totalEnergyCost += currentEnergyCost * (batteryDelta / EFc);
+            totalEnergyCost += currentEnergyCost * (batteryDelta / chargingEfficiency);
         }
 
         // Compute if and how much energy are we taking from the battery
         double batteryDischarge = batteryDelta < 0 ? -batteryDelta : 0.0;
-        double energyFromBattery = batteryDischarge * EFd;
+        double energyFromBattery = batteryDischarge * dischargingEfficiency;
 
         // Compute how much energy we are using directly from the grid
         double directGridUsage = energyRequirements[i] - energyFromBattery;

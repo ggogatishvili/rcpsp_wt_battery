@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
    Config::fromArgs(argc, argv);
 
    try {
-      const Instance instance = Instance::fromFile(Config::inputFile);
+      Instance instance = Instance::from(Config::inputFile, Config::batteryCapacity);
 
       Clock clock;
       clock.start();

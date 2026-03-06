@@ -21,9 +21,9 @@ battery = data["battery_levels"]
 energy = data["instance_summary"]["energy_costs"]
 tasks = data["task_assignments"]
 resource_count = data["instance_summary"]["resource_count"]
-objective_value = data.get("objective_value", None)
-energy_cost = data.get("energy_cost", None)
-tardiness_cost = data.get("tardiness_cost", None)
+objective_value = data["solution_info"]["objective_value"]
+energy_cost = data["solution_info"]["energy_cost"]
+tardiness_cost = data["solution_info"]["tardiness_cost"]
 
 
 # Time formatting

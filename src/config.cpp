@@ -45,6 +45,7 @@ void Config::fromArgs(const int argc, const char* const argv[])
             ("ml", po::value<long>(), fmt::format("Memory limit in Gb (default: {})", memoryLimit).c_str())
             ("alpha", po::value<double>(), fmt::format("⍺ value [0-1](default: {})", alpha).c_str())
             ("method,m", po::value<std::string>(), fmt::format("Resolution method [MILP|HEURISTIC1] (default: {})", method).c_str())
+            ("batteryCapacity,b", po::value<int>(), fmt::format("Battery capacity (default: {})", batteryCapacity).c_str())
             ("verbose,v", fmt::format("Verbose mode (default: {})", verbose).c_str())
             ("withStats,w", fmt::format("When verbose mode is false, print stats (default: {})", withStats).c_str());
 
@@ -98,6 +99,10 @@ void Config::fromArgs(const int argc, const char* const argv[])
         Config::method = parseResolutionMethod(vm["method"].as<std::string>());
     }
 
+    if ( vm.contains("batteryCapacity") ) {
+        Config::batteryCapacity = vm["batteryCapacity"].as<int>();
+    }
+
     if ( vm.contains("verbose") ) {
         Config::verbose = true;
     }
@@ -118,6 +123,7 @@ void Config::showConfig()
     fmt::println("   {:<20}{:<15}", "Memory limit(Go):", memoryLimit);
     fmt::println("   {:<20}{:<15}", "⍺ value:", alpha);
     fmt::println("   {:<20}{:<15}", "Verbose mode:", verbose ? "Yes" : "No");
+    fmt::println("   {:<20}{:<15}", "Battery capacity:", batteryCapacity);
     fmt::println("   {:<20}{:<15}", "Version:", VERSION);
 }
 

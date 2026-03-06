@@ -19,9 +19,12 @@ with open(RESULT_FILE) as f:
 instance_data = {}
 
 for entry in data:
+    if entry["config"]["battery_capacity"] != 16:
+        continue
+
     inst = entry["instance"]
-    method = entry["method"]
-    obj = entry.get("objective_value")
+    method = entry["config"]["method"]
+    obj = entry["solution_info"]["objective_value"]
 
     if inst not in instance_data:
         instance_data[inst] = {}

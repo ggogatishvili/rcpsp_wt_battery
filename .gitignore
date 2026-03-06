@@ -10,3 +10,4 @@ __pycache__
 CMakeUserPresets.json
 .zed
 *result*
+config.json

@@ -113,7 +113,7 @@ class Instance
 {
    public:
       Instance() = default;
-      Instance(const std::string& instancename, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs);
+      Instance(const std::string& instancename, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs, int battery_capacity);
 
       inline auto instName() const & -> std::string { return instancename; }
       inline auto instName() const && -> std::string { return std::move(instancename); }
@@ -128,7 +128,7 @@ class Instance
 
       auto showInstance() const -> void;
 
-      static auto fromFile(const std::string& fileName) -> Instance;
+      static auto from(const std::string& fileName, int battery_capacity) -> Instance;
 
       inline auto cumulative_cost(const int start, const int length) const -> double
       {
@@ -219,10 +219,10 @@ class Instance
          int cost = 2;
       } Idle;
 
-      const struct {
-          double EF_charge = 0.95;
-          double EF_discharge = 0.95;
-          int B_max = 16;
+      struct {
+          double chargingEfficiency = 0.95;
+          double dischargingEfficiency = 0.95;
+          int batteryCapacity = 16;
       } Battery;
 
       std::vector<int> resource_capacities;

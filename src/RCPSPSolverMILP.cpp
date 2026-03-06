@@ -67,7 +67,7 @@ Solution RCPSPSolverMILP::_solve() {
         gMach.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("gMach_{}", i)));
         gBatt.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("gBatt_{}", i)));
         bMach.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("bMach_{}", i)));
-        bLevel.set(i, model.addVar(0.0, ins->Battery.B_max, 0.0, GRB_CONTINUOUS, fmt::format("bLevel_{}", i)));
+        bLevel.set(i, model.addVar(0.0, ins->Battery.batteryCapacity, 0.0, GRB_CONTINUOUS, fmt::format("bLevel_{}", i)));
         eMach.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("eMach_{}", i)));
     }
 
@@ -222,7 +222,7 @@ Solution RCPSPSolverMILP::_solve() {
         model.addConstr(
                 bLevel.get(i) == bLevel.get(i - 1)
                                  - bMach.get(i - 1)
-                                 + ins->Battery.EF_charge * gBatt.get(i - 1),
+                                 + ins->Battery.chargingEfficiency * gBatt.get(i - 1),
                 fmt::format("BatteryBalance_{}", i)
         );
     }
@@ -233,7 +233,7 @@ Solution RCPSPSolverMILP::_solve() {
     // Battery capacity
     Loop(i, H) {
         model.addConstr(bLevel.get(i) >= 0, fmt::format("BatteryNonNeg_{}", i));
-        model.addConstr(bLevel.get(i) <= ins->Battery.B_max, fmt::format("BatteryCap_{}", i));
+        model.addConstr(bLevel.get(i) <= ins->Battery.batteryCapacity, fmt::format("BatteryCap_{}", i));
     }
 
     // Machine energy requirement
@@ -253,7 +253,7 @@ Solution RCPSPSolverMILP::_solve() {
 
     // Energy supply balance
     Loop(i, H) {
-        model.addConstr(eMach.get(i) == gMach.get(i) + ins->Battery.EF_discharge * bMach.get(i),
+        model.addConstr(eMach.get(i) == gMach.get(i) + ins->Battery.dischargingEfficiency * bMach.get(i),
                         fmt::format("EnergyBalance_{}", i));
     }
 
@@ -294,10 +294,13 @@ Solution RCPSPSolverMILP::_solve() {
         fmt::println(stderr, "Gurobi error: {}", err.getMessage());
     }
 
+    int status = model.get(GRB_IntAttr_Status);
+    int solCount = model.get(GRB_IntAttr_SolCount);
 
     // Solution extraction
-    if (model.get(GRB_IntAttr_Status) == GRB_OPTIMAL || model.get(GRB_IntAttr_Status) == GRB_SUBOPTIMAL) {
+    if (solCount > 0) {
         double objVal = model.get(GRB_DoubleAttr_ObjVal);
+        double gap = model.get(GRB_DoubleAttr_MIPGap);
 
         double energyCost = 0.0;
         Loop(i, H) energyCost += (gMach.get(i).get(GRB_DoubleAttr_X) + gBatt.get(i).get(GRB_DoubleAttr_X)) * ins->costs[i];
@@ -358,9 +361,10 @@ Solution RCPSPSolverMILP::_solve() {
                 taskAssignments,
                 batteryLevels,
                 machineBlocks,
-                {model.get(GRB_DoubleAttr_MIPGap)}
+                { gap }
         };
     } else {
+        fmt::println(stderr, "Solver stopped with status {} and no solution found.", status);
         return Solution::infeasibleSolution();
     }
 }

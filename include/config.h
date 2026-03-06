@@ -32,12 +32,24 @@ public:
     // Resolution method class
     enum class ResolutionMethod
     {
-        // Resolution is performed using the ILP
+        // Resolution is performed using the MILP
         MILP,
         HEURISTIC1,
         // No resolution method chosen
         None
     };
+
+    static std::string to_string(ResolutionMethod method)
+    {
+        switch (method) {
+            case ResolutionMethod::MILP:
+                return "MILP";
+            case ResolutionMethod::HEURISTIC1:
+                return "HEURISTIC1";
+            default:
+                return "None";
+        }
+    }
 
     // Displays current configuration
     static void showConfig();
@@ -73,6 +85,9 @@ public:
 
     // Default resolution method
     inline static ResolutionMethod method = ResolutionMethod::MILP;
+
+    // Battery capacity: in MWh
+    inline static int batteryCapacity = 16;
 
 private:
     // Private constructor ("Called once at program startup")

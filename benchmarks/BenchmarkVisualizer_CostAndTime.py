@@ -6,6 +6,7 @@ import sys
 
 # Colors
 MILP_COLOR = "#4C78A8"
+MILP_TIMEOUT_COLOR = "#FF5244"
 H1_COLOR = "#F58518"
 GA_COLOR = "#B279A2"
 
@@ -24,15 +25,19 @@ with open(RESULTS_FILE) as f:
 instance_data = {}
 
 for entry in data:
+    if entry["config"]["battery_capacity"] != 16:
+        continue
+
     inst = entry["instance"]
-    method = entry["method"]
+    method = entry["config"]["method"]
 
     if inst not in instance_data:
         instance_data[inst] = {}
 
     instance_data[inst][method] = {
-        "objective_value": entry["objective_value"],
-        "computation_time": entry["computation_time"]
+        "objective_value": entry["solution_info"]["objective_value"],
+        "computation_time": entry["solution_info"]["computation_time"],
+        "time_limit" : entry["config"]["time_limit"]
     }
 
 def numeric_key(name):
@@ -52,6 +57,7 @@ x_positions = []
 milp_energy = []
 h1_energy = []
 milp_time = []
+milp_time_colors = []
 h1_time = []
 
 for inst in instances:
@@ -65,7 +71,13 @@ for inst in instances:
     h1_energy.append(h1["objective_value"] if h1 and h1["objective_value"] is not None else None)
 
     # Time
-    milp_time.append(milp["computation_time"] if milp else None)
+    if milp and milp["computation_time"] is not None:
+        milp_time.append(milp["computation_time"])
+        milp_time_colors.append(MILP_TIMEOUT_COLOR if milp["computation_time"] >= milp["time_limit"] else MILP_COLOR)
+    else:
+        milp_time.append(None)
+        milp_time_colors.append(MILP_COLOR)
+
     h1_time.append(h1["computation_time"] if h1 else None)
 
 
@@ -97,7 +109,7 @@ fig.add_trace(go.Bar(
     y=milp_time,
     name="MILP (time)",
     legendgroup="MILP",
-    marker=dict(color=MILP_COLOR),
+    marker=dict(color=milp_time_colors),
     yaxis="y",
     showlegend=False,
     hovertemplate="Instance: %{x}<br>MILP Time: %{y:.3f}s<extra></extra>"
