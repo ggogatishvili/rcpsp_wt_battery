@@ -29,26 +29,19 @@ struct Edge {
 struct Interval { int start; int end; }; // inclusive
 
 
-class RCPSPSolverHeuristic1
+class SolverHeuristic1
 {
 public:
-    RCPSPSolverHeuristic1(const Instance* const instance);
+    SolverHeuristic1(const Instance* const instance);
 
     Solution solve()
     {
         return _solve();
     }
 
-
     inline Solution operator()()
     {
         return solve();
-    }
-
-    /* Compute the cost of a job j at time i */
-    inline double cjob(const int j, const int i) const
-    {
-        return ins->cjob(j, i);
     }
 
 private:

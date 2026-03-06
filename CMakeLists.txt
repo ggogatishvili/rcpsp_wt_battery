@@ -16,8 +16,8 @@ add_executable( rcpsp_wt_battery
          src/config.cpp
          src/precedenceGraph.cpp
          src/Solver.cpp
-         src/RCPSPSolverMILP.cpp
-         src/RCPSPSolverHeuristic1.cpp
+        src/SolverMILP.cpp
+        src/SolverHeuristic1.cpp
          src/jsonHandler.cpp
          src/Clock.cpp
          src/solution.cpp

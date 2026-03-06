@@ -1,4 +1,4 @@
-#include "RCPSPSolverHeuristic1.h"
+#include "SolverHeuristic1.h"
 #include <algorithm>
 #include <vector>
 #include <fmt/base.h>
@@ -6,11 +6,11 @@
 
 using namespace std;
 
-RCPSPSolverHeuristic1::RCPSPSolverHeuristic1(const Instance* const instance)
+SolverHeuristic1::SolverHeuristic1(const Instance* const instance)
     : ins(instance), H(instance->maxDuration()), N(instance->nbr_tasks()), R(instance->nbr_resources()) {}
 
 
-Solution RCPSPSolverHeuristic1::_solve() {
+Solution SolverHeuristic1::_solve() {
     try {
         // Phase 1
         vector<int> startTimes = scheduleTasks();
@@ -49,7 +49,7 @@ Solution RCPSPSolverHeuristic1::_solve() {
 
 
 
-vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
+vector<int> SolverHeuristic1::scheduleTasks() {
     vector<int> startTimes(N, -1);
     vector<int> earliestStartTimes(N);
     vector<int> remainingPredecessors(N, 0);
@@ -172,7 +172,7 @@ vector<int> RCPSPSolverHeuristic1::scheduleTasks() {
     return startTimes;
 }
 
-vector<int> RCPSPSolverHeuristic1::getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes) {
+vector<int> SolverHeuristic1::getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes) {
     vector<int> readyTasks;
 
     for (int task : unscheduledPrecedenceFreeTasks) {
@@ -198,7 +198,7 @@ vector<int> RCPSPSolverHeuristic1::getReadyTasks(int currentTime, const vector<i
     return readyTasks;
 }
 
-vector<int> RCPSPSolverHeuristic1::getAvailableTasks(int currentTime, const vector<int>& readyTasks, const vector<vector<int>>& availableResources) {
+vector<int> SolverHeuristic1::getAvailableTasks(int currentTime, const vector<int>& readyTasks, const vector<vector<int>>& availableResources) {
     vector<int> availableTasks;
 
     for (int task : readyTasks) {
@@ -223,7 +223,7 @@ vector<int> RCPSPSolverHeuristic1::getAvailableTasks(int currentTime, const vect
     return availableTasks;
 }
 
-int RCPSPSolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks) {
+int SolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks) {
     const vector<int>* tasksToUse = &availableTasks;
 
     // EI clustering
@@ -259,7 +259,7 @@ int RCPSPSolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskE
 
 
 
-vector<MachineBlock> RCPSPSolverHeuristic1::scheduleMachineUsage(const vector<int>& startTimes) {
+vector<MachineBlock> SolverHeuristic1::scheduleMachineUsage(const vector<int>& startTimes) {
     //Build SPACES graph
     auto spacesGraph = buildSPACESGraph();
 
@@ -353,7 +353,7 @@ vector<MachineBlock> RCPSPSolverHeuristic1::scheduleMachineUsage(const vector<in
     return machineBlocks;
 }
 
-vector<Interval> RCPSPSolverHeuristic1::computeProcRequiredIntervals(const vector<int>& startTimes) {
+vector<Interval> SolverHeuristic1::computeProcRequiredIntervals(const vector<int>& startTimes) {
     // Initialize all time units as not requiring Proc
     vector<bool> requiredTimes(H, false);
 
@@ -386,7 +386,7 @@ vector<Interval> RCPSPSolverHeuristic1::computeProcRequiredIntervals(const vecto
     return requiredIntervals;
 }
 
-vector<vector<vector<Edge>>> RCPSPSolverHeuristic1::buildSPACESGraph() {
+vector<vector<vector<Edge>>> SolverHeuristic1::buildSPACESGraph() {
     // 2D graph: graph[time][state] = list of outgoing edges
     vector<vector<vector<Edge>>> graph(H,vector<vector<Edge>>(S));
 
@@ -464,7 +464,7 @@ vector<vector<vector<Edge>>> RCPSPSolverHeuristic1::buildSPACESGraph() {
     return graph;
 }
 
-vector<MachineBlock> RCPSPSolverHeuristic1::findOptimalPath(
+vector<MachineBlock> SolverHeuristic1::findOptimalPath(
         const vector<vector<vector<Edge>>>& graph,
         int startTime,
         State startState,
@@ -557,7 +557,7 @@ vector<MachineBlock> RCPSPSolverHeuristic1::findOptimalPath(
 
 
 
-vector<double> RCPSPSolverHeuristic1::scheduleBatteryUsage(const vector<double>& energyRequirements) {
+vector<double> SolverHeuristic1::scheduleBatteryUsage(const vector<double>& energyRequirements) {
     vector<double> batteryLevels(H, 0.0);
     vector<bool> processed(H, false);
 
@@ -595,7 +595,7 @@ vector<double> RCPSPSolverHeuristic1::scheduleBatteryUsage(const vector<double>&
     return batteryLevels;
 }
 
-vector<double> RCPSPSolverHeuristic1::getEnergyRequirements(const vector<MachineBlock> &machineBlocks) {
+vector<double> SolverHeuristic1::getEnergyRequirements(const vector<MachineBlock> &machineBlocks) {
     vector<double> energyRequirements(H, 0.0);
 
     for (const auto& block : machineBlocks) {
@@ -609,7 +609,7 @@ vector<double> RCPSPSolverHeuristic1::getEnergyRequirements(const vector<Machine
     return energyRequirements;
 }
 
-Interval RCPSPSolverHeuristic1::findNextEnergyRequiredInterval(int start, const vector<double> &energyRequirements, const vector<bool> &processed) {
+Interval SolverHeuristic1::findNextEnergyRequiredInterval(int start, const vector<double> &energyRequirements, const vector<bool> &processed) {
     // Find the start of the next interval where energy is required and not yet processed
     int i = start;
     while (i < H && (EQUALS(energyRequirements[i], 0.0) || processed[i])) {
@@ -629,7 +629,7 @@ Interval RCPSPSolverHeuristic1::findNextEnergyRequiredInterval(int start, const 
     return {i, j};
 }
 
-priority_queue<pair<double, int>>RCPSPSolverHeuristic1::buildCostMaxHeapForInterval(const Interval &interval) {
+priority_queue<pair<double, int>>SolverHeuristic1::buildCostMaxHeapForInterval(const Interval &interval) {
     priority_queue<pair<double,int>> maxHeap;
 
     for (int i = interval.start; i <= interval.end; i++) {
@@ -639,7 +639,7 @@ priority_queue<pair<double, int>>RCPSPSolverHeuristic1::buildCostMaxHeapForInter
     return maxHeap;
 }
 
-int RCPSPSolverHeuristic1::findUnprocessedPeakTime(priority_queue<pair<double, int>>& costMaxHeap, const vector<bool>& processed) {
+int SolverHeuristic1::findUnprocessedPeakTime(priority_queue<pair<double, int>>& costMaxHeap, const vector<bool>& processed) {
     int peakTime = -1;
 
     while (!costMaxHeap.empty()) {
@@ -654,7 +654,7 @@ int RCPSPSolverHeuristic1::findUnprocessedPeakTime(priority_queue<pair<double, i
     return peakTime;
 }
 
-bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements) {
+bool SolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements) {
     const double batteryCapacity = ins->Battery.batteryCapacity;
     const double chargingEfficiency  = ins->Battery.chargingEfficiency;
     const double dischargingEfficiency  = ins->Battery.dischargingEfficiency;
@@ -737,7 +737,7 @@ bool RCPSPSolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energy
     return true;
 }
 
-int RCPSPSolverHeuristic1::findCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool> &processed) {
+int SolverHeuristic1::findCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool> &processed) {
     int cheapestTime = -1;
     double cheapestCost = BIG_M;
 
@@ -754,7 +754,7 @@ int RCPSPSolverHeuristic1::findCheapestUnprocessedTimeBeforePeak(int peakTime, c
     return cheapestTime;
 }
 
-void RCPSPSolverHeuristic1::markFollowingTimesAsProcessed(int start, vector<bool> &processed) {
+void SolverHeuristic1::markFollowingTimesAsProcessed(int start, vector<bool> &processed) {
     int i = start + 1;
 
     while (i + 1 < H && ins->costs[i - 1] >= ins->costs[i] && ins->costs[i] >= ins->costs[i + 1]) {
@@ -763,7 +763,7 @@ void RCPSPSolverHeuristic1::markFollowingTimesAsProcessed(int start, vector<bool
     }
 }
 
-double RCPSPSolverHeuristic1::computeUpperThresholdCostForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete) {
+double SolverHeuristic1::computeUpperThresholdCostForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete) {
     vector<double> costs;
 
     for (int i = cheapestTimeBeforePeak; i <= peakTime; i++) {
@@ -780,7 +780,7 @@ double RCPSPSolverHeuristic1::computeUpperThresholdCostForCharging(int peakTime,
     return threshold;
 }
 
-int RCPSPSolverHeuristic1::findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost) {
+int SolverHeuristic1::findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost) {
     int cheapEnoughTime = -1;
     double cheapEnoughCost = BIG_M;
 
@@ -809,7 +809,7 @@ int RCPSPSolverHeuristic1::findCheapEnoughTimeBeforePeak(int peakTime, int cheap
 
 
 
-double RCPSPSolverHeuristic1::computeTardinessCost(const vector<int>& startTimes) {
+double SolverHeuristic1::computeTardinessCost(const vector<int>& startTimes) {
     double tardinessCost = 0.0;
 
     // Iterate over tasks and compute their tardiness cost if they are completed after their due date
@@ -825,7 +825,7 @@ double RCPSPSolverHeuristic1::computeTardinessCost(const vector<int>& startTimes
     return tardinessCost;
 }
 
-double RCPSPSolverHeuristic1::computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels) {
+double SolverHeuristic1::computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels) {
     const double chargingEfficiency  = ins->Battery.chargingEfficiency;
     const double dischargingEfficiency  = ins->Battery.dischargingEfficiency;
 

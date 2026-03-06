@@ -1,4 +1,4 @@
-#include "RCPSPSolverMILP.h"
+#include "SolverMILP.h"
 #include <algorithm>
 #include <helpers.h>
 #include <config.h>
@@ -10,7 +10,7 @@
 
 using namespace std;
 
-RCPSPSolverMILP::RCPSPSolverMILP(const Instance * const instance)
+SolverMILP::SolverMILP(const Instance * const instance)
    : ins(instance)
 {
    env = std::make_unique<GRBEnv>(true);
@@ -23,7 +23,7 @@ RCPSPSolverMILP::RCPSPSolverMILP(const Instance * const instance)
    }
 }
 
-Solution RCPSPSolverMILP::_solve() {
+Solution SolverMILP::_solve() {
     GRBModel model{*env};
 
     const int H = ins->maxDuration();

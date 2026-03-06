@@ -19,17 +19,11 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
 #include "Solver.h"
-#include "RCPSPSolverMILP.h"
-#include "RCPSPSolverHeuristic1.h"
+#include "SolverMILP.h"
+#include "SolverHeuristic1.h"
 #include "config.h"
-#include "Clock.h"
-#include <algorithm>
 #include <atomic>
 #include <fmt/base.h>
-#include <helpers.h>
-#include <oneapi/tbb/parallel_for_each.h>
-#include <oneapi/tbb/parallel_invoke.h>
-#include <optional>
 #include <solution.h>
 #include <ranges>
 
@@ -42,9 +36,9 @@ Solution solver::solve(const Instance* ins, const Config::ResolutionMethod metho
     try {
         switch ( method ) {
             case Config::ResolutionMethod::MILP:
-                return RCPSPSolverMILP(ins)();
+                return SolverMILP(ins)();
             case Config::ResolutionMethod::HEURISTIC1:
-                return RCPSPSolverHeuristic1(ins)();
+                return SolverHeuristic1(ins)();
             default:
                 throw std::runtime_error("Unknown resolution method");
         }
