@@ -58,6 +58,7 @@ milp_energy = []
 h1_energy = []
 milp_time = []
 milp_time_colors = []
+milp_time_custom_data = []
 h1_time = []
 
 for inst in instances:
@@ -73,10 +74,17 @@ for inst in instances:
     # Time
     if milp and milp["computation_time"] is not None:
         milp_time.append(milp["computation_time"])
-        milp_time_colors.append(MILP_TIMEOUT_COLOR if milp["computation_time"] >= milp["time_limit"] else MILP_COLOR)
+
+        if milp["computation_time"] >= milp["time_limit"]:
+            milp_time_colors.append(MILP_TIMEOUT_COLOR)
+            milp_time_custom_data.append("<br><b>Time limit reached</b>")
+        else:
+            milp_time_colors.append(MILP_COLOR)
+            milp_time_custom_data.append("")
     else:
         milp_time.append(None)
         milp_time_colors.append(MILP_COLOR)
+        milp_time_custom_data.append("")
 
     h1_time.append(h1["computation_time"] if h1 else None)
 
@@ -112,7 +120,8 @@ fig.add_trace(go.Bar(
     marker=dict(color=milp_time_colors),
     yaxis="y",
     showlegend=False,
-    hovertemplate="Instance: %{x}<br>MILP Time: %{y:.3f}s<extra></extra>"
+    customdata=milp_time_custom_data,
+    hovertemplate="Instance: %{x}<br>MILP Time: %{y:.3f}s%{customdata}<extra></extra>"
 ))
 
 fig.add_trace(go.Bar(
