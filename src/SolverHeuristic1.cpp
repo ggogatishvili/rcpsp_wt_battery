@@ -336,7 +336,7 @@ vector<MachineBlock> SolverHeuristic1::scheduleMachineUsage(const vector<int>& s
 
     // The machine should be in Off state at the end of the horizon, so we can extend the last block if it ends in Off state
     // or add a new Off block if it ends with a transition to Off
-    if (path.back().endState == State::Off) {
+    if (!path.back().isTransition()) {
         path.back().endTime = H - 1;
     } else {
         path.emplace_back(
