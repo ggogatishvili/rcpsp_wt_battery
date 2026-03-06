@@ -1,25 +1,26 @@
 import json
-import pathlib
 import plotly.graph_objects as go
 import sys
 
 
-# Load results
-BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent
-RESULT_FILE = BENCHMARK_DIR / "aggregated_results.json"
+# Parameters
+BATTERY_CAPACITY = 16
 
-if not RESULT_FILE.exists():
-    print("result.json not found. Run benchmark.py first.")
+# Load results
+if len(sys.argv) < 2:
+    print("Usage: python script.py <input_file>")
     sys.exit(1)
 
-with open(RESULT_FILE) as f:
+results_file = sys.argv[1]
+
+with open(results_file) as f:
     data = json.load(f)
 
 # Organize data per instance
 instance_data = {}
 
 for entry in data:
-    if entry["config"]["battery_capacity"] != 16:
+    if entry["config"]["battery_capacity"] != BATTERY_CAPACITY:
         continue
 
     inst = entry["instance"]

@@ -1,25 +1,25 @@
 import json
-import pathlib
 import plotly.graph_objects as go
 import sys
 
-METHOD = "MILP"
-CAPACITY_A = 0
-CAPACITY_B = 16
 
 # Colors
 CAP0_COLOR = "#4C78A8"
 CAP16_COLOR = "#84FF24"
 
-# Load and sort results
-BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent
-RESULTS_FILE = BENCHMARK_DIR / "aggregated_results.json"
+# Parameters
+METHOD = "MILP"
+CAPACITY_A = 0
+CAPACITY_B = 16
 
-if not RESULTS_FILE.exists():
-    print("aggregated_results.json not found. Run benchmark.py first.")
+# Load and sort results
+if len(sys.argv) < 2:
+    print("Usage: python script.py <input_file>")
     sys.exit(1)
 
-with open(RESULTS_FILE) as f:
+results_file = sys.argv[1]
+
+with open(results_file) as f:
     data = json.load(f)
 
 instance_data = {}

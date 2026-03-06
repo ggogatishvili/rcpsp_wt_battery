@@ -1,5 +1,4 @@
 import json
-import pathlib
 import plotly.graph_objects as go
 import sys
 
@@ -10,22 +9,23 @@ MILP_TIMEOUT_COLOR = "#FF5244"
 H1_COLOR = "#F58518"
 GA_COLOR = "#B279A2"
 
+# Parameters
+BATTERY_CAPACITY = 16
 
 # Load and sort results
-BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent
-RESULTS_FILE = BENCHMARK_DIR / "aggregated_results.json"
-
-if not RESULTS_FILE.exists():
-    print("aggregated_results.json not found. Run benchmark.py first.")
+if len(sys.argv) < 2:
+    print("Usage: python script.py <input_file>")
     sys.exit(1)
 
-with open(RESULTS_FILE) as f:
+results_file = sys.argv[1]
+
+with open(results_file) as f:
     data = json.load(f)
 
 instance_data = {}
 
 for entry in data:
-    if entry["config"]["battery_capacity"] != 16:
+    if entry["config"]["battery_capacity"] != BATTERY_CAPACITY:
         continue
 
     inst = entry["instance"]
