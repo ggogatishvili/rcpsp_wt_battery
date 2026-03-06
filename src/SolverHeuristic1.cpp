@@ -698,7 +698,7 @@ bool SolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequi
 
         // Update the initial charge amount and the battery levels with the current charge amount
         initialChargeAmount += currentChargeAmount;
-        for (int i = cheapEnoughTimeBeforePeak; i < currentTime; i++) {
+        for (int i = cheapEnoughTimeBeforePeak + 1; i <= currentTime; i++) {
             batteryLevels[i] += currentChargeAmount;
         }
 
@@ -835,10 +835,10 @@ double SolverHeuristic1::computeEnergyCost(const vector<double>& energyRequireme
     for (int i = 0; i < H; ++i) {
         double currentEnergyCost = ins->costs[i];
 
-        // Compute the change in battery level from the previous time unit during the current time unit
-        double previousBatteryLevel = (i == 0 ? 0.0 : batteryLevels[i - 1]);
+        // Compute the change in battery level during the current time unit
         double currentBatteryLevel = batteryLevels[i];
-        double batteryDelta = currentBatteryLevel - previousBatteryLevel;
+        double nextBatteryLevel = (i == H - 1 ? 0.0 : batteryLevels[i + 1]);
+        double batteryDelta = nextBatteryLevel - currentBatteryLevel;
 
         // Add the cost of charging the battery
         if (batteryDelta > 0) {
