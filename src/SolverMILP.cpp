@@ -138,45 +138,62 @@ Solution SolverMILP::_solve() {
             if (s1 != s2)
                 nextTrans += rx.get(s1, s2, i + 1);
         }
-        model.addConstr(nextTrans >= rs.i(s1, i) - rs.i(s1, i + 1), fmt::format("StateToNextStateOrTrans_{}_{}", s1, i));
+        model.addConstr(nextTrans >= rs.i(s1, i) - rs.i(s1, i + 1), fmt::format("StateToNextStateOrTransition_{}_{}", s1, i));
     }
+
+    auto getDuration = [&](int s1, int s2) {
+        if (s1 == 0 && s2 == 1) return ins->offProc.time;
+        if (s1 == 1 && s2 == 0) return ins->procOff.time;
+        if (s1 == 1 && s2 == 2) return ins->procIdle.time;
+        if (s1 == 2 && s2 == 1) return ins->idleProc.time;
+        return 0;
+    };
 
     // Transition logic
     LoopFrom(i, 1, H - 1) { // We can skip first and last interval for transitions (as they must be OFF state)
         Loop(s1, 3) Loop(s2, 3) {
             if (s1 == s2) continue;
 
-            int dur = 0;
-            if (s1 == 0 && s2 == 1) dur = ins->offProc.time;
-            else if (s1 == 1 && s2 == 0) dur = ins->procOff.time;
-            else if (s1 == 1 && s2 == 2) dur = ins->procIdle.time;
-            else if (s1 == 2 && s2 == 1) dur = ins->idleProc.time;
+            int duration = getDuration(s1, s2);
 
             // Invalid transition
-            if (dur == 0) {
+            if (duration == 0) {
                 model.addConstr(rx.get(s1, s2, i) == 0, fmt::format("InvalidTransitionX_{}_{}_{}", s1, s2, i));
                 model.addConstr(ry.get(s1, s2, i) == 0, fmt::format("InvalidTransitionY_{}_{}_{}", s1, s2, i));
                 continue;
             }
 
             // Transition cannot start if it cannot end within horizon
-            if (i + dur >= H) {
+            if (i + duration >= H) {
                 model.addConstr(rx.get(s1, s2, i) == 0, fmt::format("TransitionOutOfHorizonX_{}_{}_{}", s1, s2, i));
                 model.addConstr(ry.get(s1, s2, i) == 0, fmt::format("TransitionOutOfHorizonY_{}_{}_{}", s1, s2, i));
                 continue;
             }
 
-            // The transition can only start from an appropriate state
-            model.addConstr(rx.get(s1, s2, i) <= rs.i(s1, i - 1), fmt::format("TransFromState_{}_{}_{}", s1, s2, i));
+            // The transition can only start from an appropriate state or an appropriate end of a previous transition
+            GRBLinExpr fromExpr = 0;
+            fromExpr += rs.i(s1, i - 1); // appropriate state at previous interval
+            Loop(prevState, 3) {
+                if (prevState == s1) continue;
+                int prevDuration = getDuration(prevState, s1);
+                if (prevDuration == 0 || i - prevDuration < 0) continue;
+                fromExpr += rx.get(prevState, s1, i - prevDuration); // appropriate transition ending at previous interval
+            }
+            model.addConstr(rx.get(s1, s2, i) <= fromExpr, fmt::format("TransitionFromState_{}_{}_{}", s1, s2, i));
 
-            // The transition can only end in an appropriate state
-            model.addConstr(rx.get(s1, s2, i) <= rs.i(s2, i + dur), fmt::format("TransToState_{}_{}_{}", s1, s2, i));
-
-            // The transition must start if the machine is in the appropriate state after the duration
-            model.addConstr(rx.get(s1, s2, i) >= rs.i(s1, i - 1) + rs.i(s2, i + dur) - 1,fmt::format("ForceStartIfStatesMatch_{}_{}_{}", s1, s2, i));
+            // The transition can only end in an appropriate state or an appropriate start of a following transition
+            GRBLinExpr toExpr = 0;
+            toExpr += rs.i(s2, i + duration); // appropriate state at the following interval
+            Loop(nextState, 3) {
+                if (nextState == s2) continue;
+                int nextDuration = getDuration(s2, nextState);
+                if (nextDuration == 0 || i + duration + nextDuration >= H) continue;
+                toExpr += rx.get(s2, nextState, i + duration); // appropriate transition starting at the following interval
+            }
+            model.addConstr(rx.get(s1, s2, i) <= toExpr, fmt::format("TransitionToState_{}_{}_{}", s1, s2, i));
 
             // Transition lasts for its duration
-            Loop(i2, dur) {
+            Loop(i2, duration) {
                 model.addConstr(rx.get(s1, s2, i) <= ry.get(s1, s2, i + i2), fmt::format("TransDuration_{}_{}_{}_{}", s1, s2, i, i2));
             }
         }
@@ -188,25 +205,13 @@ Solution SolverMILP::_solve() {
         Loop(s1, 3) Loop(s2, 3) {
             transStart += rx.get(s1, s2, i);
         }
-        model.addConstr(transStart <= 1, fmt::format("OneTransStart_{}", i));
+        model.addConstr(transStart <= 1, fmt::format("OneTransitionStart_{}", i));
     }
 
     // Two different states are not next to each other (they have transition in between)
     Loop(i, H-1) Loop(s1, 3) Loop(s2, 3) {
         if (s1 == s2) continue;
         model.addConstr(rs.i(s1, i) + rs.i(s2, i+1) <= 1, fmt::format("NoDirectStateChange_{}_{}_{}", s1, s2, i));
-    }
-
-    // Two different transition are not next to each other (they have states in between)
-    Loop(i, H-1) {
-        Loop(s1, 3) Loop(s2, 3) {
-            if (s1 == s2) continue;
-            Loop(s3, 3) Loop(s4, 3) {
-                if (s3 == s4) continue;
-                if (s1 == s3 && s2 == s4) continue; // skip same transition
-                model.addConstr(ry.get(s1, s2, i) + ry.get(s3, s4, i + 1) <= 1, fmt::format("NoDirectTransChange_{}_{}_{}_{}_{}", s1, s2, s3, s4, i));
-            }
-        }
     }
 
     // Start and end in OFF state
@@ -271,10 +276,10 @@ Solution SolverMILP::_solve() {
     GRBLinExpr obj = 0.0;
 
     // Weighted tardiness
-    Loop(t, N)obj += ins->tasks[t].get_weight() * tard.get(t);
+    Loop(t, N) obj += ins->tasks[t].get_weight() * tard.get(t);
 
     // Energy cost
-    Loop(i, H)obj += (gMach.get(i) + gBatt.get(i)) * ins->costs[i];
+    Loop(i, H) obj += (gMach.get(i) + gBatt.get(i)) * ins->costs[i];
 
     model.setObjective(obj, GRB_MINIMIZE);
 
@@ -315,10 +320,7 @@ Solution SolverMILP::_solve() {
         }
 
         std::vector<double> batteryLevels(H, 0.0);
-        Loop(i, H)
-        {
-            batteryLevels[i] = bLevel.get(i).get(GRB_DoubleAttr_X);
-        }
+        Loop(i, H) batteryLevels[i] = bLevel.get(i).get(GRB_DoubleAttr_X);
 
         std::vector<MachineBlock> machineBlocks;
         // States
