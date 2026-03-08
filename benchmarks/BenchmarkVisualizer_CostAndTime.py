@@ -2,6 +2,7 @@ import json
 import plotly.graph_objects as go
 import sys
 import fnmatch
+import math
 
 
 # Colors
@@ -71,6 +72,7 @@ h1_time = []
 milp_time_colors = []
 milp_hover_text = []
 h1_hover_text = []
+reached_time_limits = set()
 
 for inst in instances:
     x_positions.append(inst)
@@ -100,6 +102,7 @@ for inst in instances:
         if m_time is not None and m_limit is not None and m_time >= m_limit:
             milp_time_colors.append(MILP_TIMEOUT_COLOR)
             hover_str += "<br><br><b>⚠️ Time limit reached</b>"
+            reached_time_limits.add(m_limit)
         else:
             milp_time_colors.append(MILP_COLOR)
 
@@ -177,6 +180,28 @@ fig.add_trace(go.Bar(
     hovertemplate="%{hovertext}<extra></extra>"
 ))
 
+# Add horizontal red dotted lines for time limits
+for limit in reached_time_limits:
+    fig.add_hline(
+        y=limit,
+        line_dash="dot",
+        line_color=MILP_TIMEOUT_COLOR,
+        yref="y"
+    )
+
+    fig.add_annotation(
+        x=0,
+        xref="paper",
+        y=math.log10(limit),
+        yref="y",
+        text=f"Time limit: {int(limit)}s",
+        showarrow=False,
+        xanchor="left",
+        yanchor="bottom",
+        yshift=2,
+        font=dict(color=MILP_TIMEOUT_COLOR, size=12),
+        xshift=2
+    )
 
 # Layout
 fig.update_layout(
