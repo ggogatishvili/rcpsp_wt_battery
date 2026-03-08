@@ -1,6 +1,7 @@
 import json
 import plotly.graph_objects as go
 import sys
+import fnmatch
 
 
 # Colors
@@ -14,10 +15,12 @@ BATTERY_CAPACITY = 16
 
 # Load and sort results
 if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file>")
+    print("Usage: python script.py <input_file> [instance_pattern]")
+    print("Example: python script.py results.json '1_*'")
     sys.exit(1)
 
 results_file = sys.argv[1]
+instance_pattern = sys.argv[2] if len(sys.argv) > 2 else "*"
 
 with open(results_file) as f:
     data = json.load(f)
@@ -29,6 +32,10 @@ for entry in data:
         continue
 
     inst = entry["instance"]
+
+    if not fnmatch.fnmatch(inst, instance_pattern):
+        continue
+
     method = entry["config"]["method"]
 
     if inst not in instance_data:
