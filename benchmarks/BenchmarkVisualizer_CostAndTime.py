@@ -37,7 +37,8 @@ for entry in data:
     instance_data[inst][method] = {
         "objective_value": entry["solution_info"]["objective_value"],
         "computation_time": entry["solution_info"]["computation_time"],
-        "time_limit" : entry["config"]["time_limit"]
+        "time_limit": entry["config"]["time_limit"],
+        "gap": entry["solution_info"]["gap"]
     }
 
 def numeric_key(name):
@@ -57,9 +58,12 @@ x_positions = []
 milp_energy = []
 h1_energy = []
 milp_time = []
-milp_time_colors = []
-milp_time_custom_data = []
 h1_time = []
+
+# Lists to hold dynamic formatting
+milp_time_colors = []
+milp_hover_text = []
+h1_hover_text = []
 
 for inst in instances:
     x_positions.append(inst)
@@ -67,27 +71,55 @@ for inst in instances:
     milp = instance_data[inst].get("MILP")
     h1 = instance_data[inst].get("HEURISTIC1")
 
-    # Cost
-    milp_energy.append(milp["objective_value"] if milp and milp["objective_value"] is not None else None)
-    h1_energy.append(h1["objective_value"] if h1 and h1["objective_value"] is not None else None)
+    if milp:
+        m_cost = milp.get("objective_value")
+        m_time = milp.get("computation_time")
+        m_limit = milp.get("time_limit")
+        m_gap = milp.get("gap")
 
-    # Time
-    if milp and milp["computation_time"] is not None:
-        milp_time.append(milp["computation_time"])
+        milp_energy.append(m_cost)
+        milp_time.append(m_time)
 
-        if milp["computation_time"] >= milp["time_limit"]:
+        # Description
+        cost_str = f"{m_cost:.2f} EUR" if m_cost is not None else "N/A"
+        time_str = f"{m_time:.3f} s" if m_time is not None else "N/A"
+        hover_str = f"<b>Instance: {inst}</b><br>MILP Cost: {cost_str}<br>MILP Time: {time_str}"
+
+        # Add gap
+        if m_gap is not None:
+            hover_str += f"<br>Gap: {m_gap * 100:.2f}%" if isinstance(m_gap, (int, float)) else f"<br>Gap: {m_gap}"
+
+        # Add time limit info
+        if m_time is not None and m_limit is not None and m_time >= m_limit:
             milp_time_colors.append(MILP_TIMEOUT_COLOR)
-            milp_time_custom_data.append("<br><b>Time limit reached</b>")
+            hover_str += "<br><br><b>⚠️ Time limit reached</b>"
         else:
             milp_time_colors.append(MILP_COLOR)
-            milp_time_custom_data.append("")
+
+        milp_hover_text.append(hover_str)
     else:
+        milp_energy.append(None)
         milp_time.append(None)
         milp_time_colors.append(MILP_COLOR)
-        milp_time_custom_data.append("")
+        milp_hover_text.append(f"<b>Instance: {inst}</b><br>No MILP data")
 
-    h1_time.append(h1["computation_time"] if h1 else None)
 
+    # HEURISTIC1
+    if h1:
+        h_cost = h1.get("objective_value")
+        h_time = h1.get("computation_time")
+
+        h1_energy.append(h_cost)
+        h1_time.append(h_time)
+
+        cost_str = f"{h_cost:.2f} EUR" if h_cost is not None else "N/A"
+        time_str = f"{h_time:.5f} s" if h_time is not None else "N/A"
+
+        h1_hover_text.append(f"<b>Instance: {inst}</b><br>H1 Cost: {cost_str}<br>H1 Time: {time_str}")
+    else:
+        h1_energy.append(None)
+        h1_time.append(None)
+        h1_hover_text.append(f"<b>Instance: {inst}</b><br>No H1 data")
 
 # Energy Bars
 fig.add_trace(go.Bar(
@@ -97,7 +129,8 @@ fig.add_trace(go.Bar(
     legendgroup="MILP",
     marker=dict(color=MILP_COLOR),
     yaxis="y2",
-    hovertemplate="Instance: %{x}<br>MILP cost: %{y:.2f}<extra></extra>"
+    hovertext=milp_hover_text,
+    hovertemplate="%{hovertext}<extra></extra>"
 ))
 
 fig.add_trace(go.Bar(
@@ -107,7 +140,8 @@ fig.add_trace(go.Bar(
     legendgroup="HEURISTIC1",
     marker=dict(color=H1_COLOR),
     yaxis="y2",
-    hovertemplate="Instance: %{x}<br>H1 cost: %{y:.2f} EUR<extra></extra>"
+    hovertext=h1_hover_text,
+    hovertemplate="%{hovertext}<extra></extra>"
 ))
 
 
@@ -120,8 +154,8 @@ fig.add_trace(go.Bar(
     marker=dict(color=milp_time_colors),
     yaxis="y",
     showlegend=False,
-    customdata=milp_time_custom_data,
-    hovertemplate="Instance: %{x}<br>MILP Time: %{y:.3f}s%{customdata}<extra></extra>"
+    hovertext=milp_hover_text,
+    hovertemplate="%{hovertext}<extra></extra>"
 ))
 
 fig.add_trace(go.Bar(
@@ -132,7 +166,8 @@ fig.add_trace(go.Bar(
     marker=dict(color=H1_COLOR),
     yaxis="y",
     showlegend=False,
-    hovertemplate="Instance: %{x}<br>H1 Time: %{y:.3f}s<extra></extra>"
+    hovertext=h1_hover_text,
+    hovertemplate="%{hovertext}<extra></extra>"
 ))
 
 
