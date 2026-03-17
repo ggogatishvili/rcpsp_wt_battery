@@ -34,12 +34,16 @@ INDIVIDUAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Run benchmarks
-instances = sorted(INSTANCE_DIR.glob(INSTANCE_PATTERN))
+def numeric_key(path):
+    parts = path.stem.split("_")
+    return tuple(int(p) for p in parts)
+
+instances = sorted(INSTANCE_DIR.glob(INSTANCE_PATTERN), key=numeric_key)
 summary = []
 
-for instance in instances:
-    for method in METHODS:
-        for battery_capacity in BATTERY_CAPACITIES:
+for method in METHODS:
+    for battery_capacity in BATTERY_CAPACITIES:
+        for instance in instances:
 
             output_file = INDIVIDUAL_RESULTS_DIR / f"{instance.stem}_{method}_bc{battery_capacity}.json"
 
@@ -52,7 +56,7 @@ for instance in instances:
                 "-o", str(output_file)
             ]
 
-            print(f"Running {instance.name} with {method} and battery capacity {battery_capacity}...")
+            print(f"Running {method} with battery capacity {battery_capacity} on instance {instance.name}...")
 
             try:
                 subprocess.run(cmd, check=True)
