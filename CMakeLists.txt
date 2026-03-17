@@ -12,16 +12,16 @@ if ( NOT XCODE )
 endif()
 
 add_executable( rcpsp_wt_battery
-         src/main.cpp
-         src/config.cpp
-         src/precedenceGraph.cpp
-         src/Solver.cpp
+        src/main.cpp
+        src/config.cpp
+        src/precedenceGraph.cpp
+        src/Solver.cpp
         src/SolverMILP.cpp
         src/SolverHeuristic1.cpp
-         src/jsonHandler.cpp
-         src/Clock.cpp
-         src/solution.cpp
-         src/instance.cpp )
+        src/jsonHandler.cpp
+        src/Clock.cpp
+        src/solution.cpp
+        src/instance.cpp )
 
 set(WARNING_OPTIONS             -Wall -Wextra -Werror -Wno-vla-cxx-extension)
 set(GCC_WARNING_OPTIONS         -Wduplicated-cond -Wlogical-op -Wuseless-cast -Wrestrict)
@@ -31,7 +31,7 @@ set(DEBUG_OPTIONS               -O0 -g)
 set(GDB_DEBUG_OPTIONS           -ggdb)
 set(LINKER_OPTIONS              -flto)
 
-find_package(Cplex REQUIRED)
+#find_package(Cplex REQUIRED)
 find_package(GUROBI REQUIRED)
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
@@ -43,17 +43,17 @@ find_package(nlohmann_json REQUIRED)
 message(STATUS "GUROBI_INCLUDE_DIRS: ${GUROBI_INCLUDE_DIRS}")
 message(STATUS "GUROBI_LIBRARY: ${GUROBI_LIBRARY}")
 message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
-message(STATUS "Cplex_INCLUDE_LIBRARY: ${Cplex_INCLUDE_DIRS}")
-message(STATUS "Cplex_ConstraintProgramming_INCLUDE_DIRS: ${Cplex_ConstraintProgramming_INCLUDE_DIRS}")
-message(STATUS "Cplex_LIBRARIES: ${Cplex_LIBRARIES}")
-message(STATUS "Cplex_ConstraintProgramming_LIBRARIES: ${Cplex_ConstraintProgramming_LIBRARIES}")
+#message(STATUS "Cplex_INCLUDE_LIBRARY: ${Cplex_INCLUDE_DIRS}")
+#message(STATUS "Cplex_ConstraintProgramming_INCLUDE_DIRS: ${Cplex_ConstraintProgramming_INCLUDE_DIRS}")
+#message(STATUS "Cplex_LIBRARIES: ${Cplex_LIBRARIES}")
+#message(STATUS "Cplex_ConstraintProgramming_LIBRARIES: ${Cplex_ConstraintProgramming_LIBRARIES}")
 
 # Link Conan libraries
 target_link_libraries(rcpsp_wt_battery ${CONAN_LIBS})
 
 # Include directories
-target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Cplex_INCLUDE_DIRS})
-target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Cplex_ConstraintProgramming_INCLUDE_DIRS})
+#target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Cplex_INCLUDE_DIRS})
+#target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Cplex_ConstraintProgramming_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${GUROBI_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Boost_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/eo)
@@ -72,8 +72,8 @@ target_link_directories(rcpsp_wt_battery PRIVATE /usr/local/lib64)
 
 
 # Link solver libraries
-target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_ConstraintProgramming_LIBRARIES})
-target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_LIBRARIES})
+#target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_ConstraintProgramming_LIBRARIES})
+#target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_LIBRARIES})
 target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_CXX_LIBRARY})
 target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_LIBRARY})
 
