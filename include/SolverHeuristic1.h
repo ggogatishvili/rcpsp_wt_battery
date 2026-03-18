@@ -130,6 +130,14 @@ private:
 
 
 
+    /**
+     * Phase 2.5: Optimize Machine Blocks to exploit negative energy prices.
+     * Extends stable Proc states prior to procOff transitions when energy costs are negative.
+     * @param machineBlocks vector of MachineBlocks representing the machine schedule (modified in-place)
+     */
+    void optimizeMachineBlocks(vector<MachineBlock>& machineBlocks);
+
+
 
     /**
      * Phase 3: Given the energy requirements of the machine at each time unit, schedule the usage of the battery to minimize energy costs by reducing the usage of the grid during peak times while ensuring that the battery constraints (capacity, charge/discharge efficiency) are respected.

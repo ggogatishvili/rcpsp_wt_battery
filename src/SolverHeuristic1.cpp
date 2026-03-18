@@ -17,9 +17,12 @@ Solution SolverHeuristic1::_solve() {
 
         // Phase 2
         vector<MachineBlock> machineBlocks = scheduleMachineUsage(startTimes);
-        vector<double> energyRequirements = getEnergyRequirements(machineBlocks);
+
+        // Phase 2.5: Maximize negative energy price usage
+        optimizeMachineBlocks(machineBlocks);
 
         // Phase 3
+        vector<double> energyRequirements = getEnergyRequirements(machineBlocks);
         vector<double> batteryLevels = scheduleBatteryUsage(energyRequirements);
 
 
@@ -552,6 +555,108 @@ vector<MachineBlock> SolverHeuristic1::findOptimalPath(
     reverse(reversedBlocks.begin(), reversedBlocks.end());
 
     return reversedBlocks;
+}
+
+
+
+void SolverHeuristic1::optimizeMachineBlocks(vector<MachineBlock>& machineBlocks) {
+    // Max usable energy from a fully charged battery
+    double maxBatteryEnergy = ins->Battery.batteryCapacity * ins->Battery.dischargingEfficiency;
+
+    // Iterate over machine blocks
+    for (int currentBlockIndex = 0; currentBlockIndex < machineBlocks.size(); currentBlockIndex++) {
+        auto& currentBlock = machineBlocks[currentBlockIndex];
+
+        // We are looking for a transition turning the machine off
+        if (!currentBlock.isTransition() || currentBlock.startState != State::Proc || currentBlock.endState != State::Off) {
+            continue;
+        }
+
+        // Next block should be stable Off
+        if (currentBlockIndex + 1 >= machineBlocks.size()) continue;
+        auto& nextBlock = machineBlocks[currentBlockIndex + 1];
+        if (nextBlock.isTransition() || nextBlock.startState != State::Off) continue;
+
+        // Maximum extension allowed by the following Off block
+        int maxExtension = nextBlock.endTime - nextBlock.startTime + 1;
+
+        // There must be a stable off state at H-1, so procOff can end at most at H-2
+        maxExtension = min(maxExtension, (H - 2) - currentBlock.endTime);
+
+        if (maxExtension <= 0) continue;
+
+        // Precompute original energy requirements
+        vector<double> originalEnergyRequirements(H, 0.0);
+        for (int bi = 0; bi <= currentBlockIndex; bi++) {
+            for(int i = machineBlocks[bi].startTime; i <= machineBlocks[bi].endTime; i++) {
+                originalEnergyRequirements[i] = machineBlocks[bi].getRequiredEnergyPerTimeUnit(ins);
+            }
+        }
+
+        int bestExtension = 0;
+
+        // Iterate over possible extensions
+        for (int extension = 1; extension <= maxExtension; extension++) {
+            // New start and end for the current procOff block
+            int newStartForCurrentBlock = currentBlock.startTime + extension;
+            int newEndForCurrentBlock = currentBlock.endTime + extension;
+
+            // Find the last negative price before the new end time
+            int lastNegativePriceTime = -1;
+            for (int i = newEndForCurrentBlock; i >= 0; i--) {
+                if (ins->costs[i] < 0) {
+                    lastNegativePriceTime = i;
+                    break;
+                }
+            }
+
+            // No negative price found
+            if (lastNegativePriceTime == -1) break;
+
+            // Calculate energy consumed after the last negative price
+            double energySum = 0.0;
+            for (int i = lastNegativePriceTime + 1; i <= newEndForCurrentBlock; ++i) {
+                if (i < currentBlock.startTime) {
+                    energySum += originalEnergyRequirements[i]; // Original blocks before the original procOff transition
+                } else if (i < newStartForCurrentBlock) {
+                    energySum += ins->Proc.cost; // New Proc state during the extension gap
+                } else {
+                    energySum += currentBlock.getRequiredEnergyPerTimeUnit(ins); // The shifted procOff transition
+                }
+            }
+
+            // Check if the battery can supply enough energy
+            if (energySum <= maxBatteryEnergy) {
+                bestExtension = extension;
+            } else {
+                break;
+            }
+        }
+
+        // We can't extend
+        if (bestExtension <= 0) continue;
+
+        // Extend existing Proc state or inject a new one
+        if (currentBlockIndex > 0 && !machineBlocks[currentBlockIndex - 1].isTransition() && machineBlocks[currentBlockIndex - 1].startState == State::Proc) {
+            machineBlocks[currentBlockIndex - 1].endTime += bestExtension;
+        } else {
+            MachineBlock newProc(currentBlock.startTime, State::Proc, currentBlock.startTime + bestExtension - 1, State::Proc);
+            machineBlocks.insert(machineBlocks.begin() + currentBlockIndex, newProc);
+            currentBlockIndex++; // Advance index to point to the shifted procOff block
+        }
+
+        // Shift the current procOff block
+        machineBlocks[currentBlockIndex].startTime += bestExtension;
+        machineBlocks[currentBlockIndex].endTime += bestExtension;
+
+        // Shrink the following stable Off state
+        machineBlocks[currentBlockIndex + 1].startTime += bestExtension;
+
+        // Clean up the Off state if fully used for the extension
+        if (machineBlocks[currentBlockIndex + 1].startTime > machineBlocks[currentBlockIndex + 1].endTime) {
+            machineBlocks.erase(machineBlocks.begin() + currentBlockIndex + 1);
+        }
+    }
 }
 
 
