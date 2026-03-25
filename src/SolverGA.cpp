@@ -23,7 +23,7 @@ SolverGA::SolverGA(const Instance* const instance)
     : ins(instance), H(instance->maxDuration()), N(instance->nbr_tasks()), N_EI(instance->nbr_ei_tasks()), chromosomeSize(instance->nbr_tasks() + instance->nbr_ei_tasks()), solverH1(instance) {
 
     // Calculate min and max delays for each EI task
-    eiDelayBounds = calculateEIDelayBounds();
+    absoluteEIDelayBounds = calculateAbsoluteEIDelayBounds();
 
     // Find cheap time intervals
     cheapIntervals = findCheapIntervals();
@@ -40,7 +40,7 @@ Solution SolverGA::_solve() {
     Evaluator eval(ins, *this, solverH1);
     apply<Chromosome>(eval, pop);
     Crossover xover(N, N_EI);
-    Mutator mut(N, N_EI);
+    Mutator mut(N, N_EI, *this);
     eoDetTournamentSelect<Chromosome> selectOne(2);
     eoSelectNumber<Chromosome> selectMany(selectOne, populationSize);
     eoSGATransform<Chromosome> transform(xover, 1.0, mut, 1.0);
@@ -232,8 +232,8 @@ Chromosome SolverGA::generateInitialChromosome(const PriorityMetricType& type, c
             continue;
         }
 
-        int minDelay = eiDelayBounds[tEI].first;
-        int maxDelay = eiDelayBounds[tEI].second;
+        int minDelay = absoluteEIDelayBounds[tEI].first;
+        int maxDelay = absoluteEIDelayBounds[tEI].second;
 
         int task =ins->ei_tasks[tEI];
         int releaseDate = ins->tasks[task].get_release_date();
@@ -255,12 +255,7 @@ Chromosome SolverGA::generateInitialChromosome(const PriorityMetricType& type, c
             int selectedStart = validCheapIntervals[rng.random(validCheapIntervals.size())];
             int selectedDelay = selectedStart - releaseDate;
 
-            if (maxDelay > minDelay) {
-                // Translate absolute delay back into [0.0, 1.0] gene space
-                chromosome[N + tEI] = (double)(selectedDelay - minDelay) / (maxDelay - minDelay);
-            } else {
-                chromosome[N + tEI] = 0.0;
-            }
+            chromosome[N + tEI] = calculateRelativeDelay(selectedDelay, minDelay, maxDelay);
         } else {
             // Fallback: No cheap times in window, assign random delay
             chromosome[N + tEI] = rng.uniform();
@@ -270,7 +265,15 @@ Chromosome SolverGA::generateInitialChromosome(const PriorityMetricType& type, c
     return chromosome;
 }
 
-vector<pair<int, int>> SolverGA::calculateEIDelayBounds() const {
+double SolverGA::calculateRelativeDelay(int absoluteSelectedDelay, int absoluteMinDelay, int absoluteMaxDelay) const {
+    if (absoluteMaxDelay > absoluteMinDelay) {
+        return  (double)(absoluteSelectedDelay - absoluteMinDelay) / (absoluteMaxDelay - absoluteMinDelay);
+    }
+
+    return 0.0;
+}
+
+vector<pair<int, int>> SolverGA::calculateAbsoluteEIDelayBounds() const {
     // Calculate In-Degrees for Topological Sort
     vector<int> inDegree(N, 0);
     for (int task = 0; task < N; task++) {
@@ -351,8 +354,8 @@ vector<int> SolverGA::decodeDelays(const Chromosome& chrom) const {
     vector<int> eiDelays(N_EI);
 
     for (int tEI = 0; tEI < N_EI; tEI++) {
-        int minDelay = eiDelayBounds[tEI].first;
-        int maxDelay = eiDelayBounds[tEI].second;
+        int minDelay = absoluteEIDelayBounds[tEI].first;
+        int maxDelay = absoluteEIDelayBounds[tEI].second;
 
         eiDelays[tEI] = minDelay + static_cast<int>(chrom[N + tEI] * (maxDelay - minDelay));
     }

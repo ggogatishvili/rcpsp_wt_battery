@@ -31,12 +31,8 @@ public:
         return _solve();
     }
 
-    vector<pair<int, int>> calculateEIDelayBounds() const;
-
-    vector<double> decodePriorities(const Chromosome& chrom) const;
-    vector<int> decodeDelays(const Chromosome& chrom) const;
-
     friend class Evaluator;
+    friend class Mutator;
 
 private:
     const Instance* ins; // Pointer to the instance to solve
@@ -49,7 +45,7 @@ private:
 
     SolverH1 solverH1;
 
-    vector<pair<int, int>> eiDelayBounds;
+    vector<pair<int, int>> absoluteEIDelayBounds;
     vector<int> cheapIntervals;
     vector<vector<vector<Edge>>> cachedSPACESGraph;
 
@@ -58,4 +54,11 @@ private:
     vector<int> findCheapIntervals() const;
     eoPop<Chromosome> generateInitialPopulation() const;
     Chromosome generateInitialChromosome(const PriorityMetricType& type, const double delayRate, const bool useCheapIntervals) const;
+
+
+    vector<pair<int, int>> calculateAbsoluteEIDelayBounds() const;
+    double calculateRelativeDelay(int absoluteSelectedDelay, int absoluteMinDelay, int absoluteMaxDelay) const;
+
+    vector<double> decodePriorities(const Chromosome& chrom) const;
+    vector<int> decodeDelays(const Chromosome& chrom) const;
 };
