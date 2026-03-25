@@ -20,7 +20,8 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include "Solver.h"
 #include "SolverMILP.h"
-#include "SolverHeuristic1.h"
+#include "SolverH1.h"
+#include "SolverGA.h"
 #include "config.h"
 #include <atomic>
 #include <fmt/base.h>
@@ -31,21 +32,20 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 Solution solver::solve(const Instance* ins, const Config::ResolutionMethod method, const double alpha)
 {
-    const long global_timelimit = Config::timeLimit;
-    const unsigned int bounds_timelimit = 300;
     try {
         switch ( method ) {
             case Config::ResolutionMethod::MILP:
                 return SolverMILP(ins)();
-            case Config::ResolutionMethod::HEURISTIC1:
-                return SolverHeuristic1(ins)();
+            case Config::ResolutionMethod::H1:
+                return SolverH1(ins)();
+            case Config::ResolutionMethod::GA:
+                return SolverGA(ins)();
             default:
                 throw std::runtime_error("Unknown resolution method");
         }
     } catch ( const GRBException& err ) {
         fmt::println(stderr, "While solving instance {} with method = {} and ⍺ = {}", ins->instName(), method, alpha);
         fmt::println(stderr, "Error({}): {}", err.getErrorCode(), err.getMessage());
-        Config::timeLimit = global_timelimit;
         return Solution::infeasibleSolution(ins);
     }
 }

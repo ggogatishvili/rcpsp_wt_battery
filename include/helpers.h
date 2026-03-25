@@ -44,6 +44,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #define MIN(a, b)                ((a) < (b) ? (a) : (b))
 
 #define INFINITE                 std::numeric_limits<double>::infinity()
+#define BIG_M                    10e8
 #define MyEPS                    ((double)1e-6)
 
 #define EQUALS(a, b)             (std::abs((a)-(b)) < MyEPS)

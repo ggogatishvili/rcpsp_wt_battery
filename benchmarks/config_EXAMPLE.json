@@ -1,6 +1,6 @@
 {
-  "timeLimitSeconds" : 3600,
-  "methods" : ["MILP", "HEURISTIC1"],
+  "timeLimitSeconds" : 600,
+  "methods" : ["MILP", "H1", "GA"],
   "instancePattern" : "1_*.txt",
   "batteryCapacities" : [0, 16]
 }

@@ -9,5 +9,5 @@ CMakeDeps
 CMakeToolchain
 
 [options]
-boos/*t:shared=True
+boost/*t:shared=True
 fmt/*:shared=False

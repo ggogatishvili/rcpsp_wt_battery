@@ -40,11 +40,11 @@ void Config::fromArgs(const int argc, const char* const argv[])
             ("version", "Print version")
             ("input,i", po::value<std::string>(), "Input file (Mandatory)")
             ("output,o", po::value<std::string>(), "Output file (default: None)")
-            ("tl", po::value<long>(), fmt::format("Time limit in seconds (default: {})", timeLimit).c_str())
+            ("tl, t", po::value<long>(), fmt::format("Time limit in seconds (default: {})", timeLimit).c_str())
             ("thl", po::value<unsigned>(), fmt::format("Thread limit (default: {})", threadLimit).c_str())
             ("ml", po::value<long>(), fmt::format("Memory limit in Gb (default: {})", memoryLimit).c_str())
             ("alpha", po::value<double>(), fmt::format("⍺ value [0-1](default: {})", alpha).c_str())
-            ("method,m", po::value<std::string>(), fmt::format("Resolution method [MILP|HEURISTIC1] (default: {})", method).c_str())
+            ("method,m", po::value<std::string>(), fmt::format("Resolution method [MILP|H1|GA] (default: {})", method).c_str())
             ("batteryCapacity,b", po::value<int>(), fmt::format("Battery capacity (default: {})", batteryCapacity).c_str())
             ("verbose,v", fmt::format("Verbose mode (default: {})", verbose).c_str())
             ("withStats,w", fmt::format("When verbose mode is false, print stats (default: {})", withStats).c_str());
@@ -138,7 +138,9 @@ Config::ResolutionMethod Config::parseResolutionMethod(const std::string& method
     std::ranges::transform(method, std::back_inserter(m), ::tolower);
     if ( m.find("milp") != m.npos )
         return Config::ResolutionMethod::MILP;
-    if ( m.find("heuristic1") != m.npos )
-        return Config::ResolutionMethod::HEURISTIC1;
+    if ( m.find("h1") != m.npos )
+        return Config::ResolutionMethod::H1;
+    if ( m.find("ga") != m.npos )
+        return Config::ResolutionMethod::GA;
     return Config::ResolutionMethod::None;
 }

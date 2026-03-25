@@ -7,7 +7,8 @@
 #include <gurobi_c.h>
 #include <memory>
 #include <solution.h>
-#include "SolverHeuristic1.h"
+#include "SolverH1.h"
+#include "SolverGA.h"
 
 using namespace std;
 
@@ -293,15 +294,16 @@ Solution SolverMILP::_solve() {
     model.set(GRB_IntParam_OutputFlag, Config::verbose);
 
 
-    // Warm start - doesn't actually help, but it is a good way to check if the heuristic solution is correct
+    // Warm start - doesn't actually help, but it is a good way to check if other solutions are correct
     bool useWarmStart = false;
     if (useWarmStart) {
-        auto heuristicSolution = SolverHeuristic1(ins).solve();
+        auto approximateSolution = SolverH1(ins).solve();
+        // auto approximateSolution = SolverGA(ins).solve();
 
         // Task Assignments
         Loop(t, N) {
             Loop(i, H) x.i(t, i).set(GRB_DoubleAttr_Start, 0.0);
-            x.i(t, heuristicSolution.getTaskAssignments()[t]).set(GRB_DoubleAttr_Start, 1.0);
+            x.i(t, approximateSolution.getTaskAssignments()[t]).set(GRB_DoubleAttr_Start, 1.0);
         }
 
         // Machine States and Transitions
@@ -310,7 +312,7 @@ Solution SolverMILP::_solve() {
             rx.get(s1, s2, i).set(GRB_DoubleAttr_Start, 0.0);
             ry.get(s1, s2, i).set(GRB_DoubleAttr_Start, 0.0);
         }
-        for (const auto& block : heuristicSolution.getMachineBlocks()) {
+        for (const auto& block : approximateSolution.getMachineBlocks()) {
             if (block.isTransition()) {
                 rx.get((int)block.startState, (int)block.endState, block.startTime).set(GRB_DoubleAttr_Start, 1.0);
                 for (int i = block.startTime; i <= block.endTime; ++i) {
@@ -325,7 +327,7 @@ Solution SolverMILP::_solve() {
 
         // Battery Levels
         Loop(i, H) {
-            bLevel.get(i).set(GRB_DoubleAttr_Start, heuristicSolution.getBatteryLevels()[i]);
+            bLevel.get(i).set(GRB_DoubleAttr_Start, approximateSolution.getBatteryLevels()[i]);
         }
 
         model.update();

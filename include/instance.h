@@ -29,8 +29,6 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <numeric>
 #include <gurobi_c++.h>
 
-#define BIG_M 10e8
-
 enum class State : int {
     Off  = 0,
     Proc = 1,
@@ -117,14 +115,14 @@ class Instance
 
       inline auto instName() const & -> std::string { return instancename; }
       inline auto instName() const && -> std::string { return std::move(instancename); }
-      inline auto nbr_tasks() const -> size_t { return tasks.size(); }
-      inline auto nbr_ei_tasks() const -> size_t { return ei_tasks.size(); }
-      inline auto nbr_resources() const -> size_t { return resource_capacities.size(); }
+      inline auto nbr_tasks() const -> int { return static_cast<int>(tasks.size()); }
+      inline auto nbr_ei_tasks() const -> int { return static_cast<int>(ei_tasks.size()); }
+      inline auto nbr_resources() const -> int { return static_cast<int>(resource_capacities.size()); }
       inline auto firstOn() const -> int { return offProc.time + 1; }
       inline auto lastOn() const -> int { return lastOn(maxDuration()); }
       inline auto lastOn(const int makespan) const -> int { return makespan - procOff.time - 1; }
 
-      inline auto maxDuration() const -> unsigned int { return costs.size(); }
+      inline auto maxDuration() const -> int { return static_cast<int>(costs.size()); }
 
       auto showInstance() const -> void;
 
@@ -158,32 +156,26 @@ class Instance
             return i + getProcessingTime(j) - 1 <= maxDuration();
       }
 
-      inline auto minimal_distance(const int i, const int j) const -> long
-      {
-         return -precedence_graph[i][j];
-      }
+      // inline auto minimal_distance(const int i, const int j) const -> long
+      // {
+      //    return -precedence_graph[i][j];
+      // }
 
       // Return true if j is a successor of i
-      inline auto is_successor(const int j, const int i) const -> bool
-      {
-         return i != j && minimal_distance(i, j) >= 1;
-      }
+      // inline auto is_successor(const int j, const int i) const -> bool
+      // {
+      //    return i != j && minimal_distance(i, j) >= 1;
+      // }
 
       // Return true if j is a predecessor of i
-      inline auto is_antecedent(const int j, const int i) const -> bool
-      {
-         return is_successor(i, j);
-      }
+      // inline auto is_antecedent(const int j, const int i) const -> bool
+      // {
+      //    return is_successor(i, j);
+      // }
 
       inline auto is_ei_task(const int j) const -> bool
       {
          return tasks[j].is_ei_task();
-      }
-
-      inline double cjob(const int j, const int i) const
-      {
-         return i + getProcessingTime(j) - 1 > maxDuration() ? BIG_M : Proc.cost * std::accumulate(costs.cbegin() + i, costs.cbegin() + i +
-                                                                                                                       getProcessingTime(j), 0.0);
       }
 
       // Transition costs & durations
@@ -228,8 +220,8 @@ class Instance
       std::vector<int> resource_capacities;
       std::vector<Task> tasks;
       std::vector<double> costs;
-      std::vector<std::vector<long>> precedence_graph;
-      std::list<int> ei_tasks;
+      // std::vector<std::vector<long>> precedence_graph;
+      std::vector<int> ei_tasks;
       std::string instancename;
 };
 

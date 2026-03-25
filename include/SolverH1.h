@@ -1,11 +1,7 @@
 #pragma once
 
-#include <optional>
 #include "instance.h"
 #include "solution.h"
-#include "Map1.h"
-#include "Map2.h"
-#include "Map3.h"
 #include "queue"
 
 using namespace std;
@@ -29,10 +25,10 @@ struct Edge {
 struct Interval { int start; int end; }; // inclusive
 
 
-class SolverHeuristic1
+class SolverH1
 {
 public:
-    SolverHeuristic1(const Instance* const instance);
+    SolverH1(const Instance* const instance);
 
     Solution solve()
     {
@@ -43,6 +39,9 @@ public:
     {
         return solve();
     }
+
+    friend class SolverGA;
+    friend class Evaluator;
 
 private:
     const Instance* ins; // Pointer to the instance to solve
@@ -62,6 +61,14 @@ private:
      * @return vector of start times for each task, indexed by task ID
      */
     vector<int> scheduleTasks();
+
+    /**
+     *
+     * @param priorities vector of task priorities, indexed by task ID, which can be used to guide the scheduling decisions (e.g., by preferring tasks with higher priority values when selecting among candidate tasks to schedule)
+     * @param eiDelays vector of delays for EI tasks, indexed by EI task ID (0 to N_EI-1), which indicate how much to delay the earliest start time of each EI task beyond its release date
+     * @return vector of start times for each task, indexed by task ID
+     */
+    vector<int> scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays);
 
     /**
      * Get the list of ready tasks at the current time, which are the tasks that are precedence-free (all predecessors have been scheduled) and can start at the current time based on their earliest start times.
@@ -88,9 +95,10 @@ private:
      * @param currentTime the current time unit for which to select a task to schedule
      * @param lastEiTaskEnd the end time of the last scheduled EI task, which can be used to determine if we are just after an EI task (e.g., if currentTime is equal to lastEiTaskEnd + 1)
      * @param availableTasks vector of task IDs that are available to be scheduled at the current time based on release date, precedence and resource constraints
+     * @param priorities vector of priority values for each task, indexed by task ID, which can be used to break ties when selecting among candidate tasks (e.g., by preferring tasks with higher priority values)
      * @return the ID of the selected task
      */
-    int selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks);
+    int selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks, const vector<double>& priorities);
 
 
 
@@ -101,6 +109,14 @@ private:
      * @return vector of MachineBlocks representing the machine state schedule, where each block indicates a contiguous time interval during which the machine is in a specific state (Proc, Idle, Off) or transitioning between states
      */
     vector<MachineBlock> scheduleMachineUsage(const vector<int>& startTimes);
+
+    /**
+     * Phase 2: Given the scheduled tasks and their start times, determine the optimal machine state schedule (Proc, Idle, Off) over time to minimize energy costs while ensuring that the machine is in Proc state whenever an EI task is being processed.
+     * @param startTimes vector of start times for each task, indexed by task ID
+     * @param spacesGraph cached spacesGraph for repeated usage
+     * @return vector of MachineBlocks representing the machine state schedule, where each block indicates a contiguous time interval during which the machine is in a specific state (Proc, Idle, Off) or transitioning between states
+     */
+    vector<MachineBlock> scheduleMachineUsage(const vector<int>& startTimes, const vector<vector<vector<Edge>>>& spacesGraph);
 
     /**
      * Build the SPACES graph representing all possible state transitions of the machine over time, along with their associated costs.

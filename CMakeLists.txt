@@ -17,7 +17,8 @@ add_executable( rcpsp_wt_battery
         src/precedenceGraph.cpp
         src/Solver.cpp
         src/SolverMILP.cpp
-        src/SolverHeuristic1.cpp
+        src/SolverH1.cpp
+        src/SolverGA.cpp
         src/jsonHandler.cpp
         src/Clock.cpp
         src/solution.cpp
@@ -37,6 +38,8 @@ find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(TBB REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(ParadisEO REQUIRED)
+find_package(OpenMP REQUIRED)
 
 
 # Debug: Print what was found
@@ -56,9 +59,7 @@ target_link_libraries(rcpsp_wt_battery ${CONAN_LIBS})
 #target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Cplex_ConstraintProgramming_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${GUROBI_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Boost_INCLUDE_DIRS})
-target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/eo)
-target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/mo)
-target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/smp)
+target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${PARADISEO_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Link modern CMake targets
@@ -66,10 +67,7 @@ target_link_libraries(rcpsp_wt_battery PRIVATE fmt::fmt)
 target_link_libraries(rcpsp_wt_battery PRIVATE onetbb::onetbb)
 target_link_libraries(rcpsp_wt_battery PRIVATE boost::boost)
 target_link_libraries(rcpsp_wt_battery PRIVATE nlohmann_json::nlohmann_json)
-
-# Add library search directories first
-target_link_directories(rcpsp_wt_battery PRIVATE /usr/local/lib64)
-
+target_link_libraries(rcpsp_wt_battery PRIVATE OpenMP::OpenMP_CXX)
 
 # Link solver libraries
 #target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_ConstraintProgramming_LIBRARIES})
@@ -78,7 +76,7 @@ target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_CXX_LIBRARY})
 target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_LIBRARY})
 
 # Link additional libraries (ParadisEO and system libraries)
-#target_link_libraries(rcpsp_wt_battery PRIVATE boost_program_options eo eoutils es ga dl)
+target_link_libraries(rcpsp_wt_battery PRIVATE ${PARADISEO_LIBRARIES})
 target_link_libraries(rcpsp_wt_battery PRIVATE dl)
 
 # Apply linker options

@@ -65,20 +65,25 @@ cost_domain = [0.55, 0.98]
 x_positions = []
 milp_energy = []
 h1_energy = []
+ga_energy = []
+
 milp_time = []
 h1_time = []
+ga_time = []
 
 # Lists to hold dynamic formatting
 milp_time_colors = []
 milp_hover_text = []
 h1_hover_text = []
+ga_hover_text = []
 reached_time_limits = set()
 
 for inst in instances:
     x_positions.append(inst)
 
     milp = instance_data[inst].get("MILP")
-    h1 = instance_data[inst].get("HEURISTIC1")
+    h1 = instance_data[inst].get("H1")
+    ga = instance_data[inst].get("GA")
 
     if milp:
         m_cost = milp.get("objective_value")
@@ -114,7 +119,6 @@ for inst in instances:
         milp_hover_text.append(f"<b>Instance: {inst}</b><br>No MILP data")
 
 
-    # HEURISTIC1
     if h1:
         h_cost = h1.get("objective_value")
         h_time = h1.get("computation_time")
@@ -131,7 +135,23 @@ for inst in instances:
         h1_time.append(None)
         h1_hover_text.append(f"<b>Instance: {inst}</b><br>No H1 data")
 
-# Energy Bars
+    if ga:
+        g_cost = ga.get("objective_value")
+        g_time = ga.get("computation_time")
+
+        ga_energy.append(g_cost)
+        ga_time.append(g_time)
+
+        cost_str = f"{g_cost:.2f} EUR" if g_cost is not None else "N/A"
+        time_str = f"{g_time:.5f} s" if g_time is not None else "N/A"
+
+        ga_hover_text.append(f"<b>Instance: {inst}</b><br>GA Cost: {cost_str}<br>GA Time: {time_str}")
+    else:
+        ga_energy.append(None)
+        ga_time.append(None)
+        ga_hover_text.append(f"<b>Instance: {inst}</b><br>No GA data")
+
+# Energy Bars (Top Axis)
 fig.add_trace(go.Bar(
     x=x_positions,
     y=milp_energy,
@@ -146,16 +166,27 @@ fig.add_trace(go.Bar(
 fig.add_trace(go.Bar(
     x=x_positions,
     y=h1_energy,
-    name="HEURISTIC1",
-    legendgroup="HEURISTIC1",
+    name="H1",
+    legendgroup="H1",
     marker=dict(color=H1_COLOR),
     yaxis="y2",
     hovertext=h1_hover_text,
     hovertemplate="%{hovertext}<extra></extra>"
 ))
 
+fig.add_trace(go.Bar(
+    x=x_positions,
+    y=ga_energy,
+    name="GA",
+    legendgroup="GA",
+    marker=dict(color=GA_COLOR),
+    yaxis="y2",
+    hovertext=ga_hover_text,
+    hovertemplate="%{hovertext}<extra></extra>"
+))
 
-# Time Bars
+
+# Time Bars (Bottom Axis)
 fig.add_trace(go.Bar(
     x=x_positions,
     y=milp_time,
@@ -171,12 +202,24 @@ fig.add_trace(go.Bar(
 fig.add_trace(go.Bar(
     x=x_positions,
     y=h1_time,
-    name="HEURISTIC1 (time)",
-    legendgroup="HEURISTIC1",
+    name="H1 (time)",
+    legendgroup="H1",
     marker=dict(color=H1_COLOR),
     yaxis="y",
     showlegend=False,
     hovertext=h1_hover_text,
+    hovertemplate="%{hovertext}<extra></extra>"
+))
+
+fig.add_trace(go.Bar(
+    x=x_positions,
+    y=ga_time,
+    name="GA (time)",
+    legendgroup="GA",
+    marker=dict(color=GA_COLOR),
+    yaxis="y",
+    showlegend=False,
+    hovertext=ga_hover_text,
     hovertemplate="%{hovertext}<extra></extra>"
 ))
 
@@ -206,7 +249,7 @@ for limit in reached_time_limits:
 # Layout
 fig.update_layout(
 
-    title="Benchmark Comparison: MILP vs HEURISTIC1",
+    title="Benchmark Comparison: MILP vs H1 vs GA",
 
     barmode="group",
 

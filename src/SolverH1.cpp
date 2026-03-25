@@ -1,4 +1,4 @@
-#include "SolverHeuristic1.h"
+#include "SolverH1.h"
 #include <algorithm>
 #include <vector>
 #include <fmt/base.h>
@@ -6,11 +6,11 @@
 
 using namespace std;
 
-SolverHeuristic1::SolverHeuristic1(const Instance* const instance)
+SolverH1::SolverH1(const Instance* const instance)
     : ins(instance), H(instance->maxDuration()), N(instance->nbr_tasks()), R(instance->nbr_resources()) {}
 
 
-Solution SolverHeuristic1::_solve() {
+Solution SolverH1::_solve() {
     try {
         // Phase 1
         vector<int> startTimes = scheduleTasks();
@@ -52,7 +52,29 @@ Solution SolverHeuristic1::_solve() {
 
 
 
-vector<int> SolverHeuristic1::scheduleTasks() {
+vector<int> SolverH1::scheduleTasks() {
+    // Set earliest due dates as highest priorities
+    vector<pair<double, int>> metrics;
+
+    for (int task = 0; task < N; task++) {
+        metrics.emplace_back(ins->tasks[task].get_due_date(), task);
+    }
+
+    sort(metrics.begin(), metrics.end());
+
+    vector<double> priorities(N);
+    for (int t = 0; t < N; t++) {
+        int task = metrics[t].second;
+        priorities[task] = 1.0 - ((double)t / (N - 1));
+    }
+
+    // Set 0 delays
+    vector<int> eiDelays(ins->nbr_ei_tasks(), 0);
+
+    return scheduleTasks(priorities, eiDelays);
+}
+
+vector<int> SolverH1::scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays) {
     vector<int> startTimes(N, -1);
     vector<int> earliestStartTimes(N);
     vector<int> remainingPredecessors(N, 0);
@@ -60,12 +82,16 @@ vector<int> SolverHeuristic1::scheduleTasks() {
     vector<vector<int>> availableResources(H, vector<int>(R));
 
     // Initialize the earliest start times with release dates
+    int tEI = 0;
     for (int task = 0; task < N; task++) {
         earliestStartTimes[task] = ins->tasks[task].get_release_date();
 
-        // EI tasks cannot start before offOn.time + 1
+        // EI tasks cannot start before offProc.time + 1
+        // 0 is stable off state, then offProc can start at 1 and lasts until (1 + offProc.time - 1),
+        // then machine can be in proc state earliest (1 + offProc.time - 1 + 1) = offProc.time + 1
         if (ins->is_ei_task(task)) {
-            earliestStartTimes[task] = max(earliestStartTimes[task], ins->offProc.time + 1);
+            earliestStartTimes[task] = max(earliestStartTimes[task] + eiDelays[tEI], ins->offProc.time + 1);
+            tEI++;
         }
     }
 
@@ -99,7 +125,7 @@ vector<int> SolverHeuristic1::scheduleTasks() {
             // Error: No unscheduled precedence-free tasks, but not all tasks scheduled
             throw runtime_error(
                     fmt::format(
-                            "Heuristic SSGS error: no unscheduled precedence-free tasks at time {} "
+                            "Heuristic error: no unscheduled precedence-free tasks at time {} "
                             "but only {}/{} tasks scheduled. Possible cycle or precedence inconsistency.",
                             currentTime, scheduledCount, N
                     )
@@ -119,7 +145,7 @@ vector<int> SolverHeuristic1::scheduleTasks() {
         // Try to schedule as many tasks as possible
         while (!availableTasks.empty()) {
             // Select a task to schedule
-            auto selectedTask = selectTaskToSchedule(currentTime, lastEiTaskEnd, availableTasks);
+            auto selectedTask = selectTaskToSchedule(currentTime, lastEiTaskEnd, availableTasks, priorities);
 
             // Schedule the selected task
             startTimes[selectedTask] = currentTime;
@@ -175,7 +201,7 @@ vector<int> SolverHeuristic1::scheduleTasks() {
     return startTimes;
 }
 
-vector<int> SolverHeuristic1::getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes) {
+vector<int> SolverH1::getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes) {
     vector<int> readyTasks;
 
     for (int task : unscheduledPrecedenceFreeTasks) {
@@ -185,7 +211,7 @@ vector<int> SolverHeuristic1::getReadyTasks(int currentTime, const vector<int>& 
 
         int processingTime = ins->getProcessingTime(task);
 
-        if (currentTime + processingTime - 1 > H - 1 - ins->procOff.time) { // H - 1 must be Off and there must be time for procOff transition if we start the task at currentTime
+        if (currentTime + processingTime - 1 > H - 1 - ins->procOff.time - 1) { // H - 1 must be Off and there must be time for procOff transition if we start the task at currentTime
             // Error: Task cannot be scheduled within horizon
             throw runtime_error(
                     fmt::format(
@@ -201,7 +227,7 @@ vector<int> SolverHeuristic1::getReadyTasks(int currentTime, const vector<int>& 
     return readyTasks;
 }
 
-vector<int> SolverHeuristic1::getAvailableTasks(int currentTime, const vector<int>& readyTasks, const vector<vector<int>>& availableResources) {
+vector<int> SolverH1::getAvailableTasks(int currentTime, const vector<int>& readyTasks, const vector<vector<int>>& availableResources) {
     vector<int> availableTasks;
 
     for (int task : readyTasks) {
@@ -226,8 +252,8 @@ vector<int> SolverHeuristic1::getAvailableTasks(int currentTime, const vector<in
     return availableTasks;
 }
 
-int SolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks) {
-    const vector<int>* tasksToUse = &availableTasks;
+int SolverH1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, const vector<int>& availableTasks, const vector<double>& priorities) {
+    const vector<int>* candidateTasks = &availableTasks;
 
     // EI clustering
     // If we are just after an EI task, we prefer to schedule another EI task if available to keep the machine in Proc state and avoid unnecessary transitions.
@@ -243,29 +269,31 @@ int SolverHeuristic1::selectTaskToSchedule(int currentTime, int lastEiTaskEnd, c
         }
 
         if (!availableEiTasks.empty()) {
-            tasksToUse = &availableEiTasks;
+            candidateTasks = &availableEiTasks;
         }
     }
 
-    // Select earliest due date
-    int selectedTask = *min_element(
-            tasksToUse->begin(),
-            tasksToUse->end(),
+    // Select highest priority
+    int selectedTask = *max_element(
+            candidateTasks->begin(),
+            candidateTasks->end(),
             [&](int a, int b) {
-                return ins->tasks[a].get_due_date() < ins->tasks[b].get_due_date();
+                return priorities[a] < priorities[b];
             }
     );
 
     return selectedTask;
 }
 
-
-
-
-vector<MachineBlock> SolverHeuristic1::scheduleMachineUsage(const vector<int>& startTimes) {
+vector<MachineBlock> SolverH1::scheduleMachineUsage(const vector<int>& startTimes) {
     //Build SPACES graph
     auto spacesGraph = buildSPACESGraph();
 
+    return scheduleMachineUsage(startTimes, spacesGraph);
+}
+
+
+vector<MachineBlock> SolverH1::scheduleMachineUsage(const vector<int>& startTimes, const vector<vector<vector<Edge>>>& spacesGraph) {
     // Compute when Proc is required
     auto procRequiredIntervals = computeProcRequiredIntervals(startTimes);
 
@@ -356,7 +384,7 @@ vector<MachineBlock> SolverHeuristic1::scheduleMachineUsage(const vector<int>& s
     return machineBlocks;
 }
 
-vector<Interval> SolverHeuristic1::computeProcRequiredIntervals(const vector<int>& startTimes) {
+vector<Interval> SolverH1::computeProcRequiredIntervals(const vector<int>& startTimes) {
     // Initialize all time units as not requiring Proc
     vector<bool> requiredTimes(H, false);
 
@@ -389,7 +417,7 @@ vector<Interval> SolverHeuristic1::computeProcRequiredIntervals(const vector<int
     return requiredIntervals;
 }
 
-vector<vector<vector<Edge>>> SolverHeuristic1::buildSPACESGraph() {
+vector<vector<vector<Edge>>> SolverH1::buildSPACESGraph() {
     // 2D graph: graph[time][state] = list of outgoing edges
     vector<vector<vector<Edge>>> graph(H,vector<vector<Edge>>(S));
 
@@ -467,7 +495,7 @@ vector<vector<vector<Edge>>> SolverHeuristic1::buildSPACESGraph() {
     return graph;
 }
 
-vector<MachineBlock> SolverHeuristic1::findOptimalPath(
+vector<MachineBlock> SolverH1::findOptimalPath(
         const vector<vector<vector<Edge>>>& graph,
         int startTime,
         State startState,
@@ -559,7 +587,7 @@ vector<MachineBlock> SolverHeuristic1::findOptimalPath(
 
 
 
-void SolverHeuristic1::optimizeMachineBlocks(vector<MachineBlock>& machineBlocks) {
+void SolverH1::optimizeMachineBlocks(vector<MachineBlock>& machineBlocks) {
     // Max usable energy from a fully charged battery
     double maxBatteryEnergy = ins->Battery.batteryCapacity * ins->Battery.dischargingEfficiency;
 
@@ -662,7 +690,7 @@ void SolverHeuristic1::optimizeMachineBlocks(vector<MachineBlock>& machineBlocks
 
 
 
-vector<double> SolverHeuristic1::scheduleBatteryUsage(const vector<double>& energyRequirements) {
+vector<double> SolverH1::scheduleBatteryUsage(const vector<double>& energyRequirements) {
     vector<double> batteryLevels(H, 0.0);
     vector<bool> processed(H, false);
 
@@ -700,7 +728,7 @@ vector<double> SolverHeuristic1::scheduleBatteryUsage(const vector<double>& ener
     return batteryLevels;
 }
 
-vector<double> SolverHeuristic1::getEnergyRequirements(const vector<MachineBlock> &machineBlocks) {
+vector<double> SolverH1::getEnergyRequirements(const vector<MachineBlock> &machineBlocks) {
     vector<double> energyRequirements(H, 0.0);
 
     for (const auto& block : machineBlocks) {
@@ -714,7 +742,7 @@ vector<double> SolverHeuristic1::getEnergyRequirements(const vector<MachineBlock
     return energyRequirements;
 }
 
-Interval SolverHeuristic1::findNextEnergyRequiredInterval(int start, const vector<double> &energyRequirements, const vector<bool> &processed) {
+Interval SolverH1::findNextEnergyRequiredInterval(int start, const vector<double> &energyRequirements, const vector<bool> &processed) {
     // Find the start of the next interval where energy is required and not yet processed
     int i = start;
     while (i < H && (EQUALS(energyRequirements[i], 0.0) || processed[i])) {
@@ -734,7 +762,7 @@ Interval SolverHeuristic1::findNextEnergyRequiredInterval(int start, const vecto
     return {i, j};
 }
 
-priority_queue<pair<double, int>>SolverHeuristic1::buildCostMaxHeapForInterval(const Interval &interval) {
+priority_queue<pair<double, int>>SolverH1::buildCostMaxHeapForInterval(const Interval &interval) {
     priority_queue<pair<double,int>> maxHeap;
 
     for (int i = interval.start; i <= interval.end; i++) {
@@ -744,7 +772,7 @@ priority_queue<pair<double, int>>SolverHeuristic1::buildCostMaxHeapForInterval(c
     return maxHeap;
 }
 
-int SolverHeuristic1::findUnprocessedPeakTime(priority_queue<pair<double, int>>& costMaxHeap, const vector<bool>& processed) {
+int SolverH1::findUnprocessedPeakTime(priority_queue<pair<double, int>>& costMaxHeap, const vector<bool>& processed) {
     int peakTime = -1;
 
     while (!costMaxHeap.empty()) {
@@ -759,7 +787,7 @@ int SolverHeuristic1::findUnprocessedPeakTime(priority_queue<pair<double, int>>&
     return peakTime;
 }
 
-bool SolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements) {
+bool SolverH1::makePeakCheaper(int peakTime, const Interval& energyRequiredInterval, vector<double>& batteryLevels, vector<bool>& processed, const vector<double>& energyRequirements) {
     const double batteryCapacity = ins->Battery.batteryCapacity;
     const double chargingEfficiency  = ins->Battery.chargingEfficiency;
     const double dischargingEfficiency  = ins->Battery.dischargingEfficiency;
@@ -842,7 +870,7 @@ bool SolverHeuristic1::makePeakCheaper(int peakTime, const Interval& energyRequi
     return true;
 }
 
-int SolverHeuristic1::findCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool> &processed) {
+int SolverH1::findCheapestUnprocessedTimeBeforePeak(int peakTime, const vector<bool> &processed) {
     int cheapestTime = -1;
     double cheapestCost = BIG_M;
 
@@ -859,7 +887,7 @@ int SolverHeuristic1::findCheapestUnprocessedTimeBeforePeak(int peakTime, const 
     return cheapestTime;
 }
 
-void SolverHeuristic1::markFollowingTimesAsProcessed(int start, vector<bool> &processed) {
+void SolverH1::markFollowingTimesAsProcessed(int start, vector<bool> &processed) {
     int i = start + 1;
 
     while (i + 1 < H && ins->costs[i - 1] >= ins->costs[i] && ins->costs[i] >= ins->costs[i + 1]) {
@@ -868,7 +896,7 @@ void SolverHeuristic1::markFollowingTimesAsProcessed(int start, vector<bool> &pr
     }
 }
 
-double SolverHeuristic1::computeUpperThresholdCostForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete) {
+double SolverH1::computeUpperThresholdCostForCharging(int peakTime, int cheapestTimeBeforePeak, double EFComplete) {
     vector<double> costs;
 
     for (int i = cheapestTimeBeforePeak; i <= peakTime; i++) {
@@ -885,7 +913,7 @@ double SolverHeuristic1::computeUpperThresholdCostForCharging(int peakTime, int 
     return threshold;
 }
 
-int SolverHeuristic1::findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost) {
+int SolverH1::findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost) {
     int cheapEnoughTime = -1;
     double cheapEnoughCost = BIG_M;
 
@@ -914,7 +942,7 @@ int SolverHeuristic1::findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTi
 
 
 
-double SolverHeuristic1::computeTardinessCost(const vector<int>& startTimes) {
+double SolverH1::computeTardinessCost(const vector<int>& startTimes) {
     double tardinessCost = 0.0;
 
     // Iterate over tasks and compute their tardiness cost if they are completed after their due date
@@ -930,7 +958,7 @@ double SolverHeuristic1::computeTardinessCost(const vector<int>& startTimes) {
     return tardinessCost;
 }
 
-double SolverHeuristic1::computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels) {
+double SolverH1::computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels) {
     const double chargingEfficiency  = ins->Battery.chargingEfficiency;
     const double dischargingEfficiency  = ins->Battery.dischargingEfficiency;
 

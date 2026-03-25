@@ -32,10 +32,9 @@ public:
     // Resolution method class
     enum class ResolutionMethod
     {
-        // Resolution is performed using the MILP
         MILP,
-        HEURISTIC1,
-        // No resolution method chosen
+        H1,
+        GA,
         None
     };
 
@@ -44,8 +43,10 @@ public:
         switch (method) {
             case ResolutionMethod::MILP:
                 return "MILP";
-            case ResolutionMethod::HEURISTIC1:
-                return "HEURISTIC1";
+            case ResolutionMethod::H1:
+                return "H1";
+            case ResolutionMethod::GA:
+                return "GA";
             default:
                 return "None";
         }
@@ -81,7 +82,7 @@ public:
     inline static long memoryLimit = 25;
 
     // ⍺ in [0, 1]: ⍺ value of objective function
-    inline static double alpha = 1.0;
+    inline static double alpha = 0.5;
 
     // Default resolution method
     inline static ResolutionMethod method = ResolutionMethod::MILP;
@@ -108,8 +109,11 @@ struct fmt::formatter<Config::ResolutionMethod> : formatter<string_view>
             case Config::ResolutionMethod::MILP:
                 name = "MILP";
                 break;
-            case Config::ResolutionMethod::HEURISTIC1:
-                name = "HEURISTIC1";
+            case Config::ResolutionMethod::H1:
+                name = "H1";
+                break;
+            case Config::ResolutionMethod::GA:
+                name = "GA";
                 break;
             default:
                 break;

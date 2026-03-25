@@ -1,26 +1,22 @@
 import json
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import sys
 import fnmatch
-
+import plotly.graph_objects as go
 
 # Colors
-CAP0_COLOR = "#4C78A8"
-CAP16_COLOR = "#84FF24"
-
-# Parameters
-CAPACITY_A = 0
-CAPACITY_B = 16
+MILP_COLOR = "#4C78A8"
+H1_COLOR = "#F58518"
+GA_COLOR = "#B279A2"
 
 # Load and sort results
-if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file> [instance_pattern]")
-    print("Example: python script.py results.json '1_*'")
+if len(sys.argv) < 3:
+    print("Usage: python script.py <input_file> <method> [instance_pattern]")
+    print("Example: python script.py results.json MILP '1_*'")
     sys.exit(1)
 
 results_file = sys.argv[1]
-instance_pattern = sys.argv[2] if len(sys.argv) > 2 else "*"
+target_method = sys.argv[2]
+instance_pattern = sys.argv[3] if len(sys.argv) > 3 else "*"
 
 with open(results_file) as f:
     data = json.load(f)
@@ -28,119 +24,88 @@ with open(results_file) as f:
 instance_data = {}
 
 for entry in data:
-    inst = entry["instance"]
+    inst = entry.get("instance")
 
     if not fnmatch.fnmatch(inst, instance_pattern):
         continue
 
-    method = entry["config"]["method"]
-    cap = entry["config"]["battery_capacity"]
+    config = entry.get("config", {})
+    method = config.get("method")
+
+    if method != target_method:
+        continue
+
+    cap = config.get("battery_capacity")
+    val = entry.get("solution_info", {}).get("objective_value")
 
     if inst not in instance_data:
-        instance_data[inst] = {"MILP": {}, "HEURISTIC1": {}}
+        instance_data[inst] = {}
 
-    if method in ["MILP", "HEURISTIC1"]:
-        instance_data[inst][method][cap] = entry["solution_info"]["objective_value"]
+    instance_data[inst][cap] = val
 
-def numeric_key(name):
-    parts = name.split("_")
-    return tuple(int(p) for p in parts)
+all_capacities = set()
+for caps_dict in instance_data.values():
+    all_capacities.update(caps_dict.keys())
 
-instances = sorted(instance_data.keys(), key=numeric_key)
+if 0 not in all_capacities and len(all_capacities) > 0:
+    print(f"Error: Capacity 0 is missing in the data for method '{target_method}'. Cannot calculate savings.")
+    sys.exit(1)
 
-def process_method_data(method_name):
-    cap0_energy = []
-    cap16_energy = []
-    all_savings = []
-    hover_savings = []
+caps_to_plot = sorted([c for c in all_capacities if c != 0])
 
-    for inst in instances:
-        val0 = instance_data[inst][method_name][CAPACITY_A]
-        val16 = instance_data[inst][method_name][CAPACITY_B]
+avg_savings = []
 
-        cap0_energy.append(val0)
-        cap16_energy.append(val16)
+# Calculate average savings for each capacity
+for cap in caps_to_plot:
+    savings_list = []
+    for inst, caps_dict in instance_data.items():
+        if 0 in caps_dict and cap in caps_dict:
+            val0 = caps_dict[0]
+            val_cap = caps_dict[cap]
 
-        if val0 is not None and val16 is not None and val0 > 0:
-            current_savings = ((val0 - val16) / val0) * 100
-            all_savings.append(current_savings)
-            hover_savings.append(f"{current_savings:.2f}%")
-        else:
-            hover_savings.append("N/A")
+            if val0 is not None and val_cap is not None and val0 > 0:
+                saving = ((val0 - val_cap) / val0) * 100
+                savings_list.append(saving)
 
-    avg_savings = sum(all_savings) / len(all_savings) if all_savings else 0
-    return cap0_energy, cap16_energy, hover_savings, avg_savings
+    if savings_list:
+        avg_savings.append(sum(savings_list) / len(savings_list))
+    else:
+        avg_savings.append(0.0)
 
-milp_0, milp_16, milp_hover, milp_avg = process_method_data("MILP")
-h1_0, h1_16, h1_hover, h1_avg = process_method_data("HEURISTIC1")
+# Prepare figure
+fig = go.Figure()
 
-fig = make_subplots(
-    rows=2, cols=1,
-    shared_xaxes=True,
-    vertical_spacing=0.1,
-    subplot_titles=(
-        f"MILP (Average savings: {milp_avg:.2f}%)",
-        f"HEURISTIC1 (Average savings: {h1_avg:.2f}%)"
-    )
-)
+fig = go.Figure()
 
-# Add MILP traces
-fig.add_trace(go.Bar(
-    x=instances, y=milp_0,
-    name=f"Battery capacity {CAPACITY_A} MWh",
-    marker=dict(color=CAP0_COLOR),
-    legendgroup="cap0",
-    hovertemplate=f"Instance: %{{x}}<br>Method: MILP<br>Capacity: {CAPACITY_A} MWh<br>Cost: %{{y:.2f}} EUR<extra></extra>"
-), row=1, col=1)
+method_color = {
+    "MILP": MILP_COLOR,
+    "H1": H1_COLOR,
+    "GA": GA_COLOR,
+}.get(target_method, MILP_COLOR)
 
 fig.add_trace(go.Bar(
-    x=instances, y=milp_16,
-    name=f"Battery capacity {CAPACITY_B} MWh",
-    marker=dict(color=CAP16_COLOR),
-    legendgroup="cap16",
-    customdata=milp_hover,
-    hovertemplate=f"Instance: %{{x}}<br>Method: MILP<br>Capacity: {CAPACITY_B} MWh<br>Cost: %{{y:.2f}} EUR<br>Saving: %{{customdata}}<extra></extra>"
-), row=1, col=1)
-
-
-# Add HEURISTIC1 traces
-fig.add_trace(go.Bar(
-    x=instances, y=h1_0,
-    name=f"Battery capacity {CAPACITY_A} MWh",
-    marker=dict(color=CAP0_COLOR),
-    legendgroup="cap0",
-    showlegend=False, # Hide from legend to prevent duplicates
-    hovertemplate=f"Instance: %{{x}}<br>Method: HEURISTIC1<br>Capacity: {CAPACITY_A} MWh<br>Cost: %{{y:.2f}} EUR<extra></extra>"
-), row=2, col=1)
-
-fig.add_trace(go.Bar(
-    x=instances, y=h1_16,
-    name=f"Battery capacity {CAPACITY_B} MWh",
-    marker=dict(color=CAP16_COLOR),
-    legendgroup="cap16",
-    showlegend=False, # Hide from legend to prevent duplicates
-    customdata=h1_hover,
-    hovertemplate=f"Instance: %{{x}}<br>Method: HEURISTIC1<br>Capacity: {CAPACITY_B} MWh<br>Cost: %{{y:.2f}} EUR<br>Saving: %{{customdata}}<extra></extra>"
-), row=2, col=1)
-
+    x=caps_to_plot,
+    y=avg_savings,
+    marker_color=method_color,
+    width=0.4,
+    text=[f"{val:.2f}%" for val in avg_savings],
+    textposition="outside",
+    hovertemplate="Capacity: %{x} MWh<br>Avg Savings: %{y:.2f}%<extra></extra>"
+))
 
 # Layout
 fig.update_layout(
-    title=f"Cost Comparison: Capacity {CAPACITY_A} vs {CAPACITY_B} MWh",
-    barmode="group",
-    height=750,
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.05,
-        xanchor="right",
-        x=1
-    )
+    title=f"Average Cost Savings by Battery Capacity<br><sup>Method: {target_method} | Instances: {instance_pattern}</sup>",
+    xaxis_title="Battery Capacity [MWh]",
+    yaxis_title="Average Savings [%]",
+    template="plotly_white",
+    height=600,
+    margin=dict(t=80)
 )
 
-# Axis titles
-fig.update_yaxes(title_text="Total Cost [EUR]", row=1, col=1)
-fig.update_yaxes(title_text="Total Cost [EUR]", row=2, col=1)
-fig.update_xaxes(title_text="Instance", row=2, col=1)
+fig.update_xaxes(type='category')
+
+if avg_savings:
+    fig.update_yaxes(range=[0, max(avg_savings) * 1.15])
 
 fig.show()
