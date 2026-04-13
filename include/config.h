@@ -23,6 +23,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <fmt/base.h>
 #include <optional>
 #include <string>
+#include <cstdint>
 
 #define VERSION "0.3.0"
 
@@ -89,6 +90,43 @@ public:
 
     // Battery capacity: in MWh
     inline static int batteryCapacity = 16;
+
+
+
+    // GA Parameters
+    inline static std::optional<uint32_t> seed = std::nullopt;
+    inline static int populationSize = 1500;
+    inline static int stagnationLimit = 25;
+
+    // Crossover High-Level Strategy Weights
+    inline static int weightCrossSkip = 2;
+    inline static int weightCrossPriorityOnly = 7;
+    inline static int weightCrossDelayOnly = 2;
+    inline static int weightCrossBoth = 6;
+
+    // Mutation High-Level Strategy Weights
+    inline static int weightMutSkip = 3;
+    inline static int weightMutPriorityOnly = 9;
+    inline static int weightMutDelayOnly = 7;
+    inline static int weightMutBoth = 3;
+
+    // Priority Mutation Weights
+    inline static int weightMutPrioKeep = 9;
+    inline static int weightMutPrioNew = 1;
+    inline static int weightMutPrioShift = 8;
+
+    // Priority Shift Magnitude
+    inline static double mutPrioShiftMag = 0.02;
+
+    // Delay Mutation Weights
+    inline static int weightMutDelayKeep = 3;
+    inline static int weightMutDelayZero = 1;
+    inline static int weightMutDelayNewRandom = 6;
+    inline static int weightMutDelayNewCheap = 4;
+    inline static int weightMutDelayShift = 9;
+
+    // Delay Shift Magnitude
+    inline static double mutDelayShiftMag = 0.01;
 
 private:
     // Private constructor ("Called once at program startup")

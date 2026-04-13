@@ -18,6 +18,8 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 */
 
+#include <eoRNG.h>
+#include <random>
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include "config.h"
@@ -30,6 +32,15 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 int main(int argc, char* argv[])
 {
    Config::fromArgs(argc, argv);
+
+   uint32_t activeSeed;
+   if (Config::seed.has_value()) {
+      activeSeed = Config::seed.value();
+   } else {
+      std::random_device rd;
+      activeSeed = rd();
+   }
+   rng.reseed(activeSeed);
 
    try {
       Instance instance = Instance::from(Config::inputFile, Config::batteryCapacity);

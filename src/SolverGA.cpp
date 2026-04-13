@@ -42,19 +42,18 @@ Solution SolverGA::_solve() {
     Crossover xover(N, N_EI);
     Mutator mut(N, N_EI, *this);
     eoDetTournamentSelect<Chromosome> selectOne(2);
-    eoSelectNumber<Chromosome> selectMany(selectOne, populationSize);
+    eoSelectNumber<Chromosome> selectMany(selectOne, Config::populationSize);
     eoSGATransform<Chromosome> transform(xover, 1.0, mut, 1.0);
     eoPlusReplacement<Chromosome> replace;
-    Terminator terminator(static_cast<int>(Config::timeLimit), stagnationLimit);
+    Terminator terminator(static_cast<int>(Config::timeLimit), Config::stagnationLimit);
 
     if (Config::verbose) {
         fmt::println("\n=================================================");
         fmt::println("GA PARAMETERS:");
         fmt::println("  Chromosome Size : {} ({} Priorities, {} Delays)", chromosomeSize, N, N_EI);
-        fmt::println("  Population Size : {}", populationSize);
-        fmt::println("  Stagnation Limit  : {} generations", stagnationLimit);
+        fmt::println("  Population Size : {}", Config::populationSize);
+        fmt::println("  Stagnation Limit  : {} generations", Config::stagnationLimit);
         fmt::println("  Max Time Limit  : {}s", Config::timeLimit);
-        fmt::println("  Max Stagnation  : 50 gens");
         fmt::println("=================================================");
         fmt::println("Starting GA Optimization...\n");
     }
@@ -128,8 +127,8 @@ vector<int> SolverGA::findCheapIntervals() const {
 }
 
 eoPop<Chromosome> SolverGA::generateInitialPopulation() const {
-    if (populationSize < 100) {
-        throw runtime_error(fmt::format("GA error: Population size must be at least 100 to ensure proper injection of heuristics and randomness. Current population size: {}", populationSize));
+    if (Config::populationSize < 100) {
+        throw runtime_error(fmt::format("GA error: Population size must be at least 100 to ensure proper injection of heuristics and randomness. Current population size: {}", Config::populationSize));
     }
 
     eoPop<Chromosome> population;
@@ -144,11 +143,11 @@ eoPop<Chromosome> SolverGA::generateInitialPopulation() const {
 
     // Inject random priorities with 0 delays
     // 10% of population
-    for (int i = 0; i < 0.1 * populationSize; i++) population.push_back(generateInitialChromosome(PriorityMetricType::RANDOM, 0.0, false));
+    for (int i = 0; i < 0.1 * Config::populationSize; i++) population.push_back(generateInitialChromosome(PriorityMetricType::RANDOM, 0.0, false));
 
     // Inject priorities with delays to cheap times
     // 7 * 5% = 35% of population
-    for (int i = 0; i < 0.05 * populationSize; i++) {
+    for (int i = 0; i < 0.05 * Config::populationSize; i++) {
         population.push_back(generateInitialChromosome(PriorityMetricType::ERD, 0.2, true));
         population.push_back(generateInitialChromosome(PriorityMetricType::EDD, 0.2, true));
         population.push_back(generateInitialChromosome(PriorityMetricType::SPT, 0.2, true));
@@ -160,7 +159,7 @@ eoPop<Chromosome> SolverGA::generateInitialPopulation() const {
 
     // Inject priorities with delays to cheap times
     // 7 * 5% = 35% of population
-    for (int i = 0; i < 0.05 * populationSize; i++) {
+    for (int i = 0; i < 0.05 * Config::populationSize; i++) {
         population.push_back(generateInitialChromosome(PriorityMetricType::ERD, 0.5, true));
         population.push_back(generateInitialChromosome(PriorityMetricType::EDD, 0.5, true));
         population.push_back(generateInitialChromosome(PriorityMetricType::SPT, 0.5, true));
@@ -172,7 +171,7 @@ eoPop<Chromosome> SolverGA::generateInitialPopulation() const {
 
     // Inject random priorities with completely random delays
     // Rest of the population
-    while (population.size() < populationSize) {
+    while (population.size() < Config::populationSize) {
         population.push_back(generateInitialChromosome(PriorityMetricType::RANDOM, 0.5, false));
     }
 

@@ -3,17 +3,13 @@
 #include <eo>
 #include <eoOp.h>
 
+#include "config.h"
+
 typedef eoReal<double> Chromosome;
 
 class Crossover : public eoQuadOp<Chromosome> {
     const int N;
     const int N_EI;
-
-    // Segment Probabilities (Must sum to 1.0)
-    const double PROB_STRATEGY_SKIP          = 0.20;
-    const double PROB_STRATEGY_PRIORITY_ONLY = 0.20;
-    const double PROB_STRATEGY_DELAY_ONLY    = 0.20;
-    const double PROB_STRATEGY_BOTH          = 0.40;
 
 public:
     Crossover(int N, int N_EI)
@@ -22,19 +18,25 @@ public:
     bool operator()(Chromosome& chrom1, Chromosome& chrom2) override {
         bool modified = false;
 
+        // Calculate relative probabilities from Config weights
+        double totalWeight = Config::weightCrossSkip + Config::weightCrossPriorityOnly + Config::weightCrossDelayOnly + Config::weightCrossBoth;
+        double probSkip = Config::weightCrossSkip / totalWeight;
+        double probPrioOnly = Config::weightCrossPriorityOnly / totalWeight;
+        double probDelayOnly = Config::weightCrossDelayOnly / totalWeight;
+
         const double highLevelStrategyRoll = rng.uniform();
         bool crossoverPriorities = false;
         bool crossoverDelays = false;
 
         // Skip crossover entirely
-        if (highLevelStrategyRoll < PROB_STRATEGY_SKIP) {
+        if (highLevelStrategyRoll < probSkip) {
         }
         // Crossover only priorities
-        else if (highLevelStrategyRoll < PROB_STRATEGY_SKIP + PROB_STRATEGY_PRIORITY_ONLY) {
+        else if (highLevelStrategyRoll < probSkip + probPrioOnly) {
             crossoverPriorities = true;
         }
         // Crossover only delays
-        else if (highLevelStrategyRoll < PROB_STRATEGY_SKIP + PROB_STRATEGY_PRIORITY_ONLY + PROB_STRATEGY_DELAY_ONLY) {
+        else if (highLevelStrategyRoll < probSkip + probPrioOnly + probDelayOnly) {
             crossoverDelays = true;
         }
         // Crossover both

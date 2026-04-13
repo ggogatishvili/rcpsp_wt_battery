@@ -40,8 +40,6 @@ private:
     const int N; // Number of tasks
     const int N_EI; // Number of energy intensive tasks
     const int chromosomeSize;
-    const int populationSize = 1000;
-    const int stagnationLimit = 50;
 
     SolverH1 solverH1;
 

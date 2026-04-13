@@ -40,14 +40,46 @@ void Config::fromArgs(const int argc, const char* const argv[])
             ("version", "Print version")
             ("input,i", po::value<std::string>(), "Input file (Mandatory)")
             ("output,o", po::value<std::string>(), "Output file (default: None)")
-            ("tl, t", po::value<long>(), fmt::format("Time limit in seconds (default: {})", timeLimit).c_str())
+            ("tl", po::value<long>(), fmt::format("Time limit in seconds (default: {})", timeLimit).c_str())
             ("thl", po::value<unsigned>(), fmt::format("Thread limit (default: {})", threadLimit).c_str())
             ("ml", po::value<long>(), fmt::format("Memory limit in Gb (default: {})", memoryLimit).c_str())
             ("alpha", po::value<double>(), fmt::format("⍺ value [0-1](default: {})", alpha).c_str())
             ("method,m", po::value<std::string>(), fmt::format("Resolution method [MILP|H1|GA] (default: {})", method).c_str())
             ("batteryCapacity,b", po::value<int>(), fmt::format("Battery capacity (default: {})", batteryCapacity).c_str())
             ("verbose,v", fmt::format("Verbose mode (default: {})", verbose).c_str())
-            ("withStats,w", fmt::format("When verbose mode is false, print stats (default: {})", withStats).c_str());
+            ("withStats,w", fmt::format("When verbose mode is false, print stats (default: {})", withStats).c_str())
+
+            // GA params
+            ("seed,s", po::value<uint32_t>(), "RNG Seed (default: Random)")
+            ("popSize", po::value<int>(), fmt::format("GA Population Size (default: {})", populationSize).c_str())
+            ("stagLimit", po::value<int>(), fmt::format("GA Stagnation Limit (default: {})", stagnationLimit).c_str())
+
+            // Crossover Weights
+            ("wcSkip", po::value<int>(), "Crossover Weight: Skip")
+            ("wcPrio", po::value<int>(), "Crossover Weight: Priority Only")
+            ("wcDelay", po::value<int>(), "Crossover Weight: Delay Only")
+            ("wcBoth", po::value<int>(), "Crossover Weight: Both")
+
+            // Mutator Strategy Weights
+            ("wmSkip", po::value<int>(), "Mutator Weight: Skip")
+            ("wmPrio", po::value<int>(), "Mutator Weight: Priority Only")
+            ("wmDelay", po::value<int>(), "Mutator Weight: Delay Only")
+            ("wmBoth", po::value<int>(), "Mutator Weight: Both")
+
+            // Mutator Priority Weights & Shift
+            ("wmPrioKeep", po::value<int>(), "Mutator Prio Weight: Keep")
+            ("wmPrioNew", po::value<int>(), "Mutator Prio Weight: New")
+            ("wmPrioShift", po::value<int>(), "Mutator Prio Weight: Shift")
+            ("mPrioMag", po::value<double>(), "Mutator Prio Shift Magnitude")
+
+            // Mutator Delay Weights & Shift
+            ("wmDelayKeep", po::value<int>(), "Mutator Delay Weight: Keep")
+            ("wmDelayZero", po::value<int>(), "Mutator Delay Weight: Zero")
+            ("wmDelayNewRnd", po::value<int>(), "Mutator Delay Weight: New Random")
+            ("wmDelayNewChp", po::value<int>(), "Mutator Delay Weight: New Cheap")
+            ("wmDelayShift", po::value<int>(), "Mutator Delay Weight: Shift")
+            ("mDelayMag", po::value<double>(), "Mutator Delay Shift Magnitude")
+    ;
 
     po::positional_options_description pod;
     pod.add("input", -1);
@@ -110,6 +142,35 @@ void Config::fromArgs(const int argc, const char* const argv[])
     if ( vm.contains("withStats") ) {
         Config::withStats = true;
     }
+
+    // GA params
+
+    if ( vm.contains("seed") ) Config::seed = vm["seed"].as<uint32_t>();
+
+    if ( vm.contains("popSize") ) Config::populationSize = vm["popSize"].as<int>();
+    if ( vm.contains("stagLimit") ) Config::stagnationLimit = vm["stagLimit"].as<int>();
+
+    if (vm.contains("wcSkip")) Config::weightCrossSkip = vm["wcSkip"].as<int>();
+    if (vm.contains("wcPrio")) Config::weightCrossPriorityOnly = vm["wcPrio"].as<int>();
+    if (vm.contains("wcDelay")) Config::weightCrossDelayOnly = vm["wcDelay"].as<int>();
+    if (vm.contains("wcBoth")) Config::weightCrossBoth = vm["wcBoth"].as<int>();
+
+    if (vm.contains("wmSkip")) Config::weightMutSkip = vm["wmSkip"].as<int>();
+    if (vm.contains("wmPrio")) Config::weightMutPriorityOnly = vm["wmPrio"].as<int>();
+    if (vm.contains("wmDelay")) Config::weightMutDelayOnly = vm["wmDelay"].as<int>();
+    if (vm.contains("wmBoth")) Config::weightMutBoth = vm["wmBoth"].as<int>();
+
+    if (vm.contains("wmPrioKeep")) Config::weightMutPrioKeep = vm["wmPrioKeep"].as<int>();
+    if (vm.contains("wmPrioNew")) Config::weightMutPrioNew = vm["wmPrioNew"].as<int>();
+    if (vm.contains("wmPrioShift")) Config::weightMutPrioShift = vm["wmPrioShift"].as<int>();
+    if (vm.contains("mPrioMag")) Config::mutPrioShiftMag = vm["mPrioMag"].as<double>();
+
+    if (vm.contains("wmDelayKeep")) Config::weightMutDelayKeep = vm["wmDelayKeep"].as<int>();
+    if (vm.contains("wmDelayZero")) Config::weightMutDelayZero = vm["wmDelayZero"].as<int>();
+    if (vm.contains("wmDelayNewRnd")) Config::weightMutDelayNewRandom = vm["wmDelayNewRnd"].as<int>();
+    if (vm.contains("wmDelayNewChp")) Config::weightMutDelayNewCheap = vm["wmDelayNewChp"].as<int>();
+    if (vm.contains("wmDelayShift")) Config::weightMutDelayShift = vm["wmDelayShift"].as<int>();
+    if (vm.contains("mDelayMag")) Config::mutDelayShiftMag = vm["mDelayMag"].as<double>();
 }
 
 void Config::showConfig()

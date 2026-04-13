@@ -1,0 +1,29 @@
+# Basic GA Parameters
+popSize                "--popSize "           o     (500, 1000, 1500, 2000)
+stagLimit              "--stagLimit "         o     (25, 50, 75)
+
+# Crossover High-Level Weights
+wcSkip                 "--wcSkip "            i     (1, 10)
+wcPrio                 "--wcPrio "            i     (1, 10)
+wcDelay                "--wcDelay "           i     (1, 10)
+wcBoth                 "--wcBoth "            i     (1, 10)
+
+# Mutator High-Level Weights
+wmSkip                 "--wmSkip "            i     (1, 10)
+wmPrio                 "--wmPrio "            i     (1, 10)
+wmDelay                "--wmDelay "           i     (1, 10)
+wmBoth                 "--wmBoth "            i     (1, 10)
+
+# Mutator Priority Sub-Weights & Shift
+wmPrioKeep             "--wmPrioKeep "        i     (1, 10)
+wmPrioNew              "--wmPrioNew "         i     (1, 10)
+wmPrioShift            "--wmPrioShift "       i     (1, 10)
+mPrioMag               "--mPrioMag "          o     (0.01, 0.02, 0.05, 0.1, 0.2)
+
+# Mutator Delay Sub-Weights & Shift
+wmDelayKeep            "--wmDelayKeep "       i     (1, 10)
+wmDelayZero            "--wmDelayZero "       i     (1, 10)
+wmDelayNewRnd          "--wmDelayNewRnd "     i     (1, 10)
+wmDelayNewChp          "--wmDelayNewChp "     i     (1, 10)
+wmDelayShift           "--wmDelayShift "      i     (1, 10)
+mDelayMag              "--mDelayMag "         o     (0.01, 0.02, 0.05, 0.1, 0.2)

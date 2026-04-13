@@ -1,0 +1,24 @@
+#!/bin/bash
+
+CONFIG_ID=$1
+INSTANCE_ID=$2
+SEED=$3
+INSTANCE=$4
+shift 4
+
+PARAMS=$@
+
+OUTPUT=$(OMP_NUM_THREADS=1 ../build/rcpsp_wt_battery --tl 600 -m GA -i "$INSTANCE" --seed $SEED $PARAMS 2>/dev/null)
+
+FINAL_SCORE=$(echo "$OUTPUT" | awk '{
+    cost = $1
+    time = $2
+
+    rounded_cost = sprintf("%.2f", cost)
+
+    time_penalty = time * 0.000001
+
+    printf "%.8f\n", rounded_cost + time_penalty
+}')
+
+echo "$FINAL_SCORE"

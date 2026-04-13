@@ -1,0 +1,12 @@
+execDir = "./"
+targetRunner = "./target-runner"
+parameterFile = "./parameters.txt"
+trainInstancesFile = "instances-list.txt"
+sampleInstances = 0
+firstTest = 10
+eachTest = 10
+elitistNewInstances = 10
+maxExperiments = 24000
+deterministic = 0
+testType = "F-test"
+parallel = 8
