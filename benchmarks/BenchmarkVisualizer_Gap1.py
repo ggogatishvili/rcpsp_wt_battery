@@ -10,12 +10,23 @@ GA_COLOR = "#B279A2"
 # Parameters
 BATTERY_CAPACITY = 16
 
+# Parse arguments, extracting optional flags
+args = sys.argv[1:]
+
+show_actual_sizes = "--actual-sizes" in args
+if show_actual_sizes:
+    args.remove("--actual-sizes")
+
+show_percentage = "--percentage" in args
+if show_percentage:
+    args.remove("--percentage")
+
 # Load results
-if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file>")
+if len(args) < 1:
+    print("Usage: python script.py <input_file> [--actual-sizes] [--percentage]")
     sys.exit(1)
 
-results_file = sys.argv[1]
+results_file = args[0]
 
 with open(results_file) as f:
     data = json.load(f)
@@ -56,25 +67,47 @@ for inst, values in instance_data.items():
     if obj_milp is None or obj_milp == 0:
         continue
 
-    size = inst.split("_")[0]
-    unique_sizes.add(size)
+    size_cat = inst.split("_")[0]
+    unique_sizes.add(size_cat)
+
+    size_disp = str(int(size_cat) * 32) if show_actual_sizes else size_cat
 
     # Calculate H1 gap
     if obj_h1 is not None:
-        ratio_h1 = (obj_milp - obj_h1) / (abs(obj_milp) + epsilon)
-        x_h1.append(size)
+        ratio_h1 = (obj_h1 - obj_milp) / (abs(obj_milp) + epsilon)
+        if show_percentage:
+            ratio_h1 *= 100
+        x_h1.append(size_disp)
         y_h1.append(ratio_h1)
 
     # Calculate GA gap
     if obj_ga is not None:
-        ratio_ga = (obj_milp - obj_ga) / (abs(obj_milp) + epsilon)
-        x_ga.append(size)
+        ratio_ga = (obj_ga - obj_milp) / (abs(obj_milp) + epsilon)
+        if show_percentage:
+            ratio_ga *= 100
+        x_ga.append(size_disp)
         y_ga.append(ratio_ga)
 
 
 # Sort sizes
-sizes_sorted = sorted(list(unique_sizes), key=lambda x: int(x))
+sizes_sorted_cat = sorted(list(unique_sizes), key=lambda x: int(x))
+sizes_sorted_disp = [str(int(s) * 32) if show_actual_sizes else s for s in sizes_sorted_cat]
 
+# Formatting variables
+yaxis_title = "Relative Gap [%]" if show_percentage else "Relative Gap"
+xaxis_title = "Instance Size [Number of Tasks]" if show_actual_sizes else "Instance Size"
+
+if show_percentage:
+    annotation_text = r"$\text{Relative Gap [%] = } \frac{\text{Method} - \text{MILP}}{|\text{MILP}| + \epsilon} \times 100$"
+    y_hover_format = ".2f"
+    y_tick_suffix = "%"
+else:
+    annotation_text = r"$\text{Relative Gap = } \frac{\text{Method} - \text{MILP}}{|\text{MILP}| + \epsilon}$"
+    y_hover_format = ".4f"
+    y_tick_suffix = ""
+
+hover_format_h1 = "Size %{x} - H1 Gap: %{y}<extra></extra>"
+hover_format_ga = "Size %{x} - GA Gap: %{y}<extra></extra>"
 
 # Create Grouped Boxplot
 fig = go.Figure()
@@ -83,30 +116,30 @@ fig = go.Figure()
 fig.add_trace(go.Box(
     x=x_h1,
     y=y_h1,
-    name="MILP vs H1",
+    name="H1 vs MILP",
     boxmean=True,
     marker_color=H1_COLOR,
-    hovertemplate="Size %{x} - H1 Gap: %{y:.4f}<extra></extra>"
+    hovertemplate=hover_format_h1
 ))
 
 # Add trace for GA
 fig.add_trace(go.Box(
     x=x_ga,
     y=y_ga,
-    name="MILP vs GA",
+    name="GA vs MILP",
     boxmean=True,
     marker_color=GA_COLOR,
-    hovertemplate="Size %{x} - GA Gap: %{y:.4f}<extra></extra>"
+    hovertemplate=hover_format_ga
 ))
 
 fig.update_layout(
     title={
-        'text': "Relative Gap Comparison: MILP vs H1 and MILP vs GA",
+        'text': "Relative Gap Comparison: H1 vs MILP and GA vs MILP",
         'y': 0.95
     },
     annotations=[
         dict(
-            text=r"$\text{Relative Gap = } \frac{MILP - \text{Method}}{|MILP| + \epsilon}$",
+            text=annotation_text,
             showarrow=False,
             xref="paper", yref="paper",
             x=-0.008, y=1.05,
@@ -116,12 +149,17 @@ fig.update_layout(
     ],
     margin=dict(t=120),
 
-    yaxis_title="Relative Gap",
-    xaxis_title="Instance Size",
+    yaxis=dict(
+        title=yaxis_title,
+        hoverformat=y_hover_format,
+        ticksuffix=y_tick_suffix
+    ),
+
+    xaxis_title=xaxis_title,
     boxmode='group',
     xaxis=dict(
         categoryorder='array',
-        categoryarray=sizes_sorted
+        categoryarray=sizes_sorted_disp
     ),
     height=750
 )

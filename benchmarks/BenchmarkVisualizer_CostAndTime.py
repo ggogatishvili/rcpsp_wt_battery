@@ -4,7 +4,6 @@ import sys
 import fnmatch
 import math
 
-
 # Colors
 MILP_COLOR = "#4C78A8"
 MILP_TIMEOUT_COLOR = "#FF5244"
@@ -14,14 +13,20 @@ GA_COLOR = "#B279A2"
 # Parameters
 BATTERY_CAPACITY = 16
 
+# Parse arguments, extracting the optional flag
+args = sys.argv[1:]
+show_actual_sizes = "--actual-sizes" in args
+if show_actual_sizes:
+    args.remove("--actual-sizes")
+
 # Load and sort results
-if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file> [instance_pattern]")
-    print("Example: python script.py results.json '1_*'")
+if len(args) < 1:
+    print("Usage: python script.py <input_file> [instance_pattern] [--actual-sizes]")
+    print("Example: python script.py results.json '1_*' --actual-sizes")
     sys.exit(1)
 
-results_file = sys.argv[1]
-instance_pattern = sys.argv[2] if len(sys.argv) > 2 else "*"
+results_file = args[0]
+instance_pattern = args[1] if len(args) > 1 else "*"
 
 with open(results_file) as f:
     data = json.load(f)
@@ -55,6 +60,9 @@ def numeric_key(name):
 
 instances = sorted(instance_data.keys(), key=numeric_key)
 
+if not instances:
+    print(f"No valid data found matching pattern '{instance_pattern}'.")
+    sys.exit(1)
 
 # Prepare figure
 fig = go.Figure()
@@ -79,7 +87,14 @@ ga_hover_text = []
 reached_time_limits = set()
 
 for inst in instances:
-    x_positions.append(inst)
+    # Determine the instance name to display based on the switch
+    parts = inst.split("_")
+    if show_actual_sizes and len(parts) >= 2:
+        display_inst = f"{int(parts[0]) * 32}_{parts[1]}"
+    else:
+        display_inst = inst
+
+    x_positions.append(display_inst)
 
     milp = instance_data[inst].get("MILP")
     h1 = instance_data[inst].get("H1")
@@ -97,7 +112,7 @@ for inst in instances:
         # Description
         cost_str = f"{m_cost:.2f} EUR" if m_cost is not None else "N/A"
         time_str = f"{m_time:.3f} s" if m_time is not None else "N/A"
-        hover_str = f"<b>Instance: {inst}</b><br>MILP Cost: {cost_str}<br>MILP Time: {time_str}"
+        hover_str = f"<b>Instance: {display_inst}</b><br>MILP Cost: {cost_str}<br>MILP Time: {time_str}"
 
         # Add gap
         if m_gap is not None:
@@ -116,7 +131,7 @@ for inst in instances:
         milp_energy.append(None)
         milp_time.append(None)
         milp_time_colors.append(MILP_COLOR)
-        milp_hover_text.append(f"<b>Instance: {inst}</b><br>No MILP data")
+        milp_hover_text.append(f"<b>Instance: {display_inst}</b><br>No MILP data")
 
 
     if h1:
@@ -129,11 +144,11 @@ for inst in instances:
         cost_str = f"{h_cost:.2f} EUR" if h_cost is not None else "N/A"
         time_str = f"{h_time:.5f} s" if h_time is not None else "N/A"
 
-        h1_hover_text.append(f"<b>Instance: {inst}</b><br>H1 Cost: {cost_str}<br>H1 Time: {time_str}")
+        h1_hover_text.append(f"<b>Instance: {display_inst}</b><br>H1 Cost: {cost_str}<br>H1 Time: {time_str}")
     else:
         h1_energy.append(None)
         h1_time.append(None)
-        h1_hover_text.append(f"<b>Instance: {inst}</b><br>No H1 data")
+        h1_hover_text.append(f"<b>Instance: {display_inst}</b><br>No H1 data")
 
     if ga:
         g_cost = ga.get("objective_value")
@@ -145,11 +160,11 @@ for inst in instances:
         cost_str = f"{g_cost:.2f} EUR" if g_cost is not None else "N/A"
         time_str = f"{g_time:.5f} s" if g_time is not None else "N/A"
 
-        ga_hover_text.append(f"<b>Instance: {inst}</b><br>GA Cost: {cost_str}<br>GA Time: {time_str}")
+        ga_hover_text.append(f"<b>Instance: {display_inst}</b><br>GA Cost: {cost_str}<br>GA Time: {time_str}")
     else:
         ga_energy.append(None)
         ga_time.append(None)
-        ga_hover_text.append(f"<b>Instance: {inst}</b><br>No GA data")
+        ga_hover_text.append(f"<b>Instance: {display_inst}</b><br>No GA data")
 
 # Energy Bars (Top Axis)
 fig.add_trace(go.Bar(
@@ -282,7 +297,7 @@ fig.update_layout(
         x=1
     ),
 
-    height=800
+    height=750
 )
 
 fig.show()

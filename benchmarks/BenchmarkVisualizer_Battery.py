@@ -8,15 +8,21 @@ MILP_COLOR = "#4C78A8"
 H1_COLOR = "#F58518"
 GA_COLOR = "#B279A2"
 
+# Parse arguments, extracting the optional flag
+args = sys.argv[1:]
+show_actual_sizes = "--actual-sizes" in args
+if show_actual_sizes:
+    args.remove("--actual-sizes")
+
 # Load and sort results
-if len(sys.argv) < 3:
-    print("Usage: python script.py <input_file> <method> [instance_pattern]")
-    print("Example: python script.py results.json MILP '1_*'")
+if len(args) < 2:
+    print("Usage: python script.py <input_file> <method> [instance_pattern] [--actual-sizes]")
+    print("Example: python script.py results.json MILP '1_*' --actual-sizes")
     sys.exit(1)
 
-results_file = sys.argv[1]
-target_method = sys.argv[2]
-instance_pattern = sys.argv[3] if len(sys.argv) > 3 else "*"
+results_file = args[0]
+target_method = args[1]
+instance_pattern = args[2] if len(args) > 2 else "*"
 
 with open(results_file) as f:
     data = json.load(f)
@@ -42,6 +48,28 @@ for entry in data:
         instance_data[inst] = {}
 
     instance_data[inst][cap] = val
+
+if not instance_data:
+    print(f"No valid data found for method '{target_method}' matching pattern '{instance_pattern}'.")
+    sys.exit(1)
+
+# Extract categorical sizes from matched instances (format: size_index.txt)
+matched_categorical_sizes = [int(inst.split("_")[0]) for inst in instance_data.keys()]
+min_cat_size = min(matched_categorical_sizes)
+max_cat_size = max(matched_categorical_sizes)
+
+# Determine the subtitle string based on the switch
+if min_cat_size == max_cat_size:
+    cat_range = f"{min_cat_size}"
+    actual_range = f"{min_cat_size * 32}"
+else:
+    cat_range = f"{min_cat_size}-{max_cat_size}"
+    actual_range = f"{min_cat_size * 32}-{max_cat_size * 32}"
+
+if show_actual_sizes:
+    instances_subtitle = f"Instance sizes: {actual_range} [Number of Tasks]"
+else:
+    instances_subtitle = f"Instance sizes: {cat_range}"
 
 all_capacities = set()
 for caps_dict in instance_data.values():
@@ -75,8 +103,6 @@ for cap in caps_to_plot:
 # Prepare figure
 fig = go.Figure()
 
-fig = go.Figure()
-
 method_color = {
     "MILP": MILP_COLOR,
     "H1": H1_COLOR,
@@ -95,7 +121,7 @@ fig.add_trace(go.Bar(
 
 # Layout
 fig.update_layout(
-    title=f"Average Cost Savings by Battery Capacity<br><sup>Method: {target_method} | Instances: {instance_pattern}</sup>",
+    title=f"Average Cost Savings by Battery Capacity<br><sup>Method: {target_method} | {instances_subtitle}</sup>",
     xaxis_title="Battery Capacity [MWh]",
     yaxis_title="Average Savings [%]",
     template="plotly_white",

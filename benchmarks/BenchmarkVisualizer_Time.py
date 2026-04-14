@@ -13,14 +13,21 @@ GA_COLOR = "#B279A2"
 # Parameters
 BATTERY_CAPACITY = 16
 
+# Parse arguments, extracting the optional flag
+args = sys.argv[1:]
+
+show_actual_sizes = "--actual-sizes" in args
+if show_actual_sizes:
+    args.remove("--actual-sizes")
+
 # Load and sort results
-if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file> [instance_pattern]")
-    print("Example: python script.py results.json '1_*'")
+if len(args) < 1:
+    print("Usage: python script.py <input_file> [instance_pattern] [--actual-sizes]")
+    print("Example: python script.py results.json '1_*' --actual-sizes")
     sys.exit(1)
 
-results_file = sys.argv[1]
-instance_pattern = sys.argv[2] if len(sys.argv) > 2 else "*"
+results_file = args[0]
+instance_pattern = args[1] if len(args) > 1 else "*"
 
 with open(results_file) as f:
     data = json.load(f)
@@ -69,7 +76,13 @@ ga_hover_text = []
 reached_time_limits = set()
 
 for inst in instances:
-    x_positions.append(inst)
+    parts = inst.split("_")
+    if show_actual_sizes and len(parts) >= 2:
+        display_inst = f"{int(parts[0]) * 32}_{parts[1]}"
+    else:
+        display_inst = inst
+
+    x_positions.append(display_inst)
 
     milp = instance_data[inst].get("MILP")
     h1 = instance_data[inst].get("H1")
@@ -84,7 +97,7 @@ for inst in instances:
 
         # Description
         time_str = f"{m_time:.3f} s" if m_time is not None else "N/A"
-        hover_str = f"<b>Instance: {inst}</b><br>MILP Time: {time_str}"
+        hover_str = f"<b>Instance: {display_inst}</b><br>MILP Time: {time_str}"
 
         # Add gap
         if m_gap is not None:
@@ -102,27 +115,27 @@ for inst in instances:
     else:
         milp_time.append(None)
         milp_time_colors.append(MILP_COLOR)
-        milp_hover_text.append(f"<b>Instance: {inst}</b><br>No MILP data")
+        milp_hover_text.append(f"<b>Instance: {display_inst}</b><br>No MILP data")
 
     if h1:
         h_time = h1.get("computation_time")
         h1_time.append(h_time)
 
         time_str = f"{h_time:.5f} s" if h_time is not None else "N/A"
-        h1_hover_text.append(f"<b>Instance: {inst}</b><br>H1 Time: {time_str}")
+        h1_hover_text.append(f"<b>Instance: {display_inst}</b><br>H1 Time: {time_str}")
     else:
         h1_time.append(None)
-        h1_hover_text.append(f"<b>Instance: {inst}</b><br>No H1 data")
+        h1_hover_text.append(f"<b>Instance: {display_inst}</b><br>No H1 data")
 
     if ga:
         g_time = ga.get("computation_time")
         ga_time.append(g_time)
 
         time_str = f"{g_time:.5f} s" if g_time is not None else "N/A"
-        ga_hover_text.append(f"<b>Instance: {inst}</b><br>GA Time: {time_str}")
+        ga_hover_text.append(f"<b>Instance: {display_inst}</b><br>GA Time: {time_str}")
     else:
         ga_time.append(None)
-        ga_hover_text.append(f"<b>Instance: {inst}</b><br>No GA data")
+        ga_hover_text.append(f"<b>Instance: {display_inst}</b><br>No GA data")
 
 # Calculate averages
 valid_milp_times = [t for t in milp_time if t is not None]

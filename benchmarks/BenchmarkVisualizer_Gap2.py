@@ -8,12 +8,23 @@ GA_COLOR = "#B279A2"
 # Parameters
 BATTERY_CAPACITY = 16
 
+# Parse arguments, extracting optional flags
+args = sys.argv[1:]
+
+show_actual_sizes = "--actual-sizes" in args
+if show_actual_sizes:
+    args.remove("--actual-sizes")
+
+show_percentage = "--percentage" in args
+if show_percentage:
+    args.remove("--percentage")
+
 # Load results
-if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file>")
+if len(args) < 1:
+    print("Usage: python script.py <input_file> [--actual-sizes] [--percentage]")
     sys.exit(1)
 
-results_file = sys.argv[1]
+results_file = args[0]
 
 with open(results_file) as f:
     data = json.load(f)
@@ -55,40 +66,60 @@ for inst, values in instance_data.items():
     if obj_h1 == 0:
         continue
 
-    size = inst.split("_")[0]
-    unique_sizes.add(size)
+    size_cat = inst.split("_")[0]
+    unique_sizes.add(size_cat)
 
-    # Calculate H1 vs GA gap
-    ratio_ga_h1 = (obj_h1 - obj_ga) / (abs(obj_h1) + epsilon)
-    x_gap.append(size)
+    size_disp = str(int(size_cat) * 32) if show_actual_sizes else size_cat
+
+    # Calculate GA vs H1 gap (Method - Baseline)
+    ratio_ga_h1 = (obj_ga - obj_h1) / (abs(obj_h1) + epsilon)
+    if show_percentage:
+        ratio_ga_h1 *= 100
+
+    x_gap.append(size_disp)
     y_gap.append(ratio_ga_h1)
 
 
-# Sort sizes
-sizes_sorted = sorted(list(unique_sizes), key=lambda x: int(x))
+# Sort sizes dynamically
+sizes_sorted_cat = sorted(list(unique_sizes), key=lambda x: int(x))
+sizes_sorted_disp = [str(int(s) * 32) if show_actual_sizes else s for s in sizes_sorted_cat]
 
+# Formatting variables
+yaxis_title = "Relative Gap [%]" if show_percentage else "Relative Gap"
+xaxis_title = "Instance Size [Number of Tasks]" if show_actual_sizes else "Instance Size"
+
+if show_percentage:
+    annotation_text = r"$\text{Relative Gap [%] = } \frac{\text{GA} - \text{H1}}{|\text{H1}| + \epsilon} \times 100$"
+    y_hover_format = ".2f"
+    y_tick_suffix = "%"
+else:
+    annotation_text = r"$\text{Relative Gap = } \frac{\text{GA} - \text{H1}}{|\text{H1}| + \epsilon}$"
+    y_hover_format = ".4f"
+    y_tick_suffix = ""
+
+hover_format_gap = "Size %{x} - Gap: %{y}<extra></extra>"
 
 # Create Boxplot
 fig = go.Figure()
 
-# Add trace for H1 vs GA
+# Add trace for GA vs H1
 fig.add_trace(go.Box(
     x=x_gap,
     y=y_gap,
-    name="H1 vs GA",
+    name="GA vs H1",
     boxmean=True,
     marker_color=GA_COLOR,
-    hovertemplate="Size %{x} - Gap: %{y:.4f}<extra></extra>"
+    hovertemplate=hover_format_gap
 ))
 
 fig.update_layout(
     title={
-        'text': "Relative Gap Comparison: H1 vs GA",
+        'text': "Relative Gap Comparison: GA vs H1",
         'y': 0.95
     },
     annotations=[
         dict(
-            text=r"$\text{Relative Gap = } \frac{H1 - GA}{|H1| + \epsilon}$",
+            text=annotation_text,
             showarrow=False,
             xref="paper", yref="paper",
             x=-0.008, y=1.05,
@@ -98,11 +129,15 @@ fig.update_layout(
     ],
     margin=dict(t=120),
 
-    yaxis_title="Relative Gap",
-    xaxis_title="Instance Size",
+    yaxis=dict(
+        title=yaxis_title,
+        hoverformat=y_hover_format,
+        ticksuffix=y_tick_suffix
+    ),
+    xaxis_title=xaxis_title,
     xaxis=dict(
         categoryorder='array',
-        categoryarray=sizes_sorted
+        categoryarray=sizes_sorted_disp
     ),
     height=750
 )

@@ -4,13 +4,28 @@ import plotly.graph_objects as go
 import os
 
 
-# --- Parse command line arguments ---
-if len(sys.argv) < 2:
-    print("Usage: python script.py <input_file>")
+# Parse command line arguments
+args = sys.argv[1:]
+
+show_actual_sizes = "--actual-sizes" in args
+if show_actual_sizes:
+    args.remove("--actual-sizes")
+
+show_actual_time = "--actual-time" in args
+if show_actual_time:
+    args.remove("--actual-time")
+
+if len(args) < 1:
+    print("Usage: python script.py <input_file> [--actual-sizes] [--actual-time]")
     sys.exit(1)
 
-file = sys.argv[1]
+file = args[0]
 filename = os.path.basename(file)
+
+if show_actual_sizes:
+    parts = filename.split("_", 1)
+    if len(parts) == 2 and parts[0].isdigit():
+        filename = f"{int(parts[0]) * 32}_{parts[1]}"
 
 
 # Load JSON data
@@ -30,6 +45,9 @@ tardiness_cost = data["solution_info"]["tardiness_cost"]
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 def hour_to_full_str(hour_index):
+    if not show_actual_time:
+        return str(hour_index)
+
     week = hour_index // 168
     hour_in_week = hour_index % 168
     day = hour_in_week // 24
@@ -37,6 +55,9 @@ def hour_to_full_str(hour_index):
     return f"Week {week+1} - {DAYS[day]} {hour:02d}:00"
 
 def hour_to_short_str(hour_index):
+    if not show_actual_time:
+        return str(hour_index)
+
     hour = hour_index % 24
     return f"{hour:02d}"
 
@@ -95,6 +116,8 @@ for block in data["machine_blocks"]:
     start, end = block["start_time"], block["end_time"]
     color = STATE_COLORS.get(state, STATE_COLORS.get("Transition"))
 
+    display_end = end + 1 if show_actual_time else end
+
     fig.add_trace(go.Scatter(
         x=[start, end + 1, end + 1, start], # The end is inclusive, so we add 1 to extend it to the end of current time interval
         y=[0, 0, 1, 1],  # fill a single line from 0 to 1 in yaxis2
@@ -107,7 +130,7 @@ for block in data["machine_blocks"]:
         text=(
             f"State: {state}<br>"
             f"Start: {hour_to_full_str(start)}<br>"
-            f"End: {hour_to_full_str(end + 1)}"
+            f"End: {hour_to_full_str(display_end)}"
         )
     ))
 
@@ -145,16 +168,20 @@ for t in tasks:
 
     task_name = f"T{t['task_id']+1}" # Task IDs are 0-based in data, so we add 1 for display
     start, end = t["start_time"], t["end_time"]
+
+    display_end = end + 1 if show_actual_time else end
+    display_due = t['due_date'] + 1 if show_actual_time else t['due_date']
+
     resources_desc = ", ".join([f"R{i}={r}" for i, r in enumerate(t["resource_requests"])])
     successors = [f"T{int(s) + 1}" for s in t["successors"]] # Convert to 1-based IDs
     successors_str = ", ".join(successors) if successors else "None"
     hover_text = (
         f"<b>{task_name}</b><br>"
         f"Start: {hour_to_full_str(start)}<br>"
-        f"End: {hour_to_full_str(end + 1)}<br>"
+        f"End: {hour_to_full_str(display_end)}<br>"
         f"Duration: {t['duration']} [h]<br>"
         f"Release: {hour_to_full_str(t['release_date'])}<br>"
-        f"Due: {hour_to_full_str(t['due_date'] + 1)}<br>"
+        f"Due: {hour_to_full_str(display_due)}<br>"
         f"Tardiness cost: {t['weight']} [EUR/h]<br>"
         f"Resources: {resources_desc}<br>"
         f"Successors: {successors_str}"
@@ -207,11 +234,11 @@ for color, desc in legend_items1:
     ))
 
 legend_items2 = [
-        (TASK_COLORS["regular"], "Regular task"),
-        (TASK_COLORS["energy_intensive"], "Energy-intensive task"),
-        (TASK_COLORS["tardy_regular"], "Tardy regular task"),
-        (TASK_COLORS["tardy_energy_intensive"], "Tardy energy-intensive task"),
-    ]
+    (TASK_COLORS["regular"], "Regular task"),
+    (TASK_COLORS["energy_intensive"], "Energy-intensive task"),
+    (TASK_COLORS["tardy_regular"], "Tardy regular task"),
+    (TASK_COLORS["tardy_energy_intensive"], "Tardy energy-intensive task"),
+]
 
 for color, desc in legend_items2:
     fig.add_trace(go.Scatter(
@@ -225,40 +252,40 @@ for color, desc in legend_items2:
 
 # --- LAYOUT ---
 
-# Day labels
-total_days = (time_horizon - 1) // 24 + 1
-for d in range(total_days):
-    day_start = d * 24
-    day_name = DAYS[d % 7]
-
-    fig.add_annotation(
-        x=day_start,
-        y=-0.10,
-        xref="x",
-        yref="paper",
-        text=day_name,
-        showarrow=False,
-        xanchor="left",
-        font=dict(size=11)
-    )
-
-
-# Week labels
-total_weeks = (time_horizon - 1) // 168 + 1
-if total_weeks > 1:
-    for w in range(total_weeks):
-        week_start = w * 168
+if show_actual_time:
+    # Day labels
+    total_days = (time_horizon - 1) // 24 + 1
+    for d in range(total_days):
+        day_start = d * 24
+        day_name = DAYS[d % 7]
 
         fig.add_annotation(
-            x=week_start,
-            y=-0.15,
+            x=day_start,
+            y=-0.10,
             xref="x",
             yref="paper",
-            text=f"Week {w+1}",
+            text=day_name,
             showarrow=False,
             xanchor="left",
-            font=dict(size=12)
+            font=dict(size=11)
         )
+
+    # Week labels
+    total_weeks = (time_horizon - 1) // 168 + 1
+    if total_weeks > 1:
+        for w in range(total_weeks):
+            week_start = w * 168
+
+            fig.add_annotation(
+                x=week_start,
+                y=-0.15,
+                xref="x",
+                yref="paper",
+                text=f"Week {w+1}",
+                showarrow=False,
+                xanchor="left",
+                font=dict(size=12)
+            )
 
 # Toggle buttons for task annotations
 all_annotations = list(fig.layout.annotations)
