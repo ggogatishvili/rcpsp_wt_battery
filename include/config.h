@@ -99,31 +99,31 @@ public:
     inline static int stagnationLimit = 25;
 
     // Crossover High-Level Strategy Weights
-    inline static int weightCrossSkip = 2;
-    inline static int weightCrossPriorityOnly = 7;
-    inline static int weightCrossDelayOnly = 2;
+    inline static int weightCrossSkip = 1;
+    inline static int weightCrossPriorityOnly = 8;
+    inline static int weightCrossDelayOnly = 1;
     inline static int weightCrossBoth = 6;
 
     // Mutation High-Level Strategy Weights
-    inline static int weightMutSkip = 3;
+    inline static int weightMutSkip = 2;
     inline static int weightMutPriorityOnly = 9;
-    inline static int weightMutDelayOnly = 7;
+    inline static int weightMutDelayOnly = 5;
     inline static int weightMutBoth = 3;
 
     // Priority Mutation Weights
-    inline static int weightMutPrioKeep = 9;
+    inline static int weightMutPrioKeep = 10;
     inline static int weightMutPrioNew = 1;
-    inline static int weightMutPrioShift = 8;
+    inline static int weightMutPrioShift = 7;
 
     // Priority Shift Magnitude
-    inline static double mutPrioShiftMag = 0.02;
+    inline static double mutPrioShiftMag = 0.01;
 
     // Delay Mutation Weights
     inline static int weightMutDelayKeep = 3;
     inline static int weightMutDelayZero = 1;
     inline static int weightMutDelayNewRandom = 6;
-    inline static int weightMutDelayNewCheap = 4;
-    inline static int weightMutDelayShift = 9;
+    inline static int weightMutDelayNewCheap = 5;
+    inline static int weightMutDelayShift = 8;
 
     // Delay Shift Magnitude
     inline static double mutDelayShiftMag = 0.01;
