@@ -75,14 +75,16 @@ for size in sizes_sorted:
 # Prepare figure
 fig = go.Figure()
 
-# Add bar trace for the requested method
+# Add line chart trace for the requested method
 color = COLORS.get(target_method.upper(), DEFAULT_COLOR)
 
-fig.add_trace(go.Bar(
+fig.add_trace(go.Scatter(
     x=display_sizes,
     y=plot_data,
     name=target_method,
-    marker=dict(color=color),
+    mode='lines+markers',
+    line=dict(color=color, width=3),
+    marker=dict(color=color, size=10),
     hovertext=hover_data,
     hovertemplate="%{hovertext}<extra></extra>"
 ))
@@ -93,7 +95,6 @@ xaxis_title = "Instance Size [Number of Tasks]" if show_actual_sizes else "Insta
 # Layout configuration
 fig.update_layout(
     title=f"Average Computation Time by Instance Size<br><sup>Method: {target_method}</sup>",
-    barmode="group",
     xaxis=dict(
         title=xaxis_title,
         categoryorder='array',
@@ -110,7 +111,8 @@ fig.update_layout(
         x=1
     ),
     height=600,
-    margin=dict(t=80)
+    margin=dict(t=80),
+    template="plotly_white"
 )
 
 fig.show()

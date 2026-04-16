@@ -60,94 +60,55 @@ def numeric_key(name):
 
 instances = sorted(instance_data.keys(), key=numeric_key)
 
-# Prepare figure
-fig = go.Figure()
-
 x_positions = []
-milp_time = []
-h1_time = []
-ga_time = []
-
-# Lists to hold dynamic formatting
-milp_time_colors = []
-milp_hover_text = []
-h1_hover_text = []
-ga_hover_text = []
+milp_time, h1_time, ga_time = [], [], []
+milp_hover_text, h1_hover_text, ga_hover_text = [], [], []
+milp_marker_colors = []
 reached_time_limits = set()
 
 for inst in instances:
     parts = inst.split("_")
-    if show_actual_sizes and len(parts) >= 2:
-        display_inst = f"{int(parts[0]) * 32}_{parts[1]}"
-    else:
-        display_inst = inst
-
+    display_inst = f"{int(parts[0]) * 32}_{parts[1]}" if show_actual_sizes and len(parts) >= 2 else inst
     x_positions.append(display_inst)
 
-    milp = instance_data[inst].get("MILP")
-    h1 = instance_data[inst].get("H1")
-    ga = instance_data[inst].get("GA")
+    methods = ["MILP", "H1", "GA"]
+    for m in methods:
+        data_entry = instance_data[inst].get(m)
+        time_val = data_entry.get("computation_time") if data_entry else None
 
-    if milp:
-        m_time = milp.get("computation_time")
-        m_limit = milp.get("time_limit")
-        m_gap = milp.get("gap")
+        t_str = f"{time_val:.5f} s" if time_val is not None else "N/A"
+        h_str = f"<b>Instance: {display_inst}</b><br>{m} Time: {t_str}"
 
-        milp_time.append(m_time)
-
-        # Description
-        time_str = f"{m_time:.3f} s" if m_time is not None else "N/A"
-        hover_str = f"<b>Instance: {display_inst}</b><br>MILP Time: {time_str}"
-
-        # Add gap
-        if m_gap is not None:
-            hover_str += f"<br>Gap: {m_gap * 100:.2f}%" if isinstance(m_gap, (int, float)) else f"<br>Gap: {m_gap}"
-
-        # Add time limit info
-        if m_time is not None and m_limit is not None and m_time >= m_limit:
-            milp_time_colors.append(MILP_TIMEOUT_COLOR)
-            hover_str += "<br><br><b>⚠️ Time limit reached</b>"
-            reached_time_limits.add(m_limit)
+        if m == "MILP":
+            milp_time.append(time_val)
+            if data_entry:
+                m_gap = data_entry.get("gap")
+                m_limit = data_entry.get("time_limit")
+                if m_gap is not None:
+                    h_str += f"<br>Gap: {m_gap * 100:.2f}%" if isinstance(m_gap, (int, float)) else f"<br>Gap: {m_gap}"
+                if time_val and m_limit and time_val >= m_limit:
+                    milp_marker_colors.append(MILP_TIMEOUT_COLOR)
+                    h_str += "<br><br><b>⚠️ Time limit reached</b>"
+                    reached_time_limits.add(m_limit)
+                else:
+                    milp_marker_colors.append(MILP_COLOR)
+            else:
+                milp_marker_colors.append(MILP_COLOR)
+            milp_hover_text.append(h_str)
+        elif m == "H1":
+            h1_time.append(time_val)
+            h1_hover_text.append(h_str)
         else:
-            milp_time_colors.append(MILP_COLOR)
+            ga_time.append(time_val)
+            ga_hover_text.append(h_str)
 
-        milp_hover_text.append(hover_str)
-    else:
-        milp_time.append(None)
-        milp_time_colors.append(MILP_COLOR)
-        milp_hover_text.append(f"<b>Instance: {display_inst}</b><br>No MILP data")
+def get_avg(lst):
+    v = [t for t in lst if t is not None]
+    return sum(v) / len(v) if v else 0
 
-    if h1:
-        h_time = h1.get("computation_time")
-        h1_time.append(h_time)
+avg_milp, avg_h1, avg_ga = get_avg(milp_time), get_avg(h1_time), get_avg(ga_time)
 
-        time_str = f"{h_time:.5f} s" if h_time is not None else "N/A"
-        h1_hover_text.append(f"<b>Instance: {display_inst}</b><br>H1 Time: {time_str}")
-    else:
-        h1_time.append(None)
-        h1_hover_text.append(f"<b>Instance: {display_inst}</b><br>No H1 data")
 
-    if ga:
-        g_time = ga.get("computation_time")
-        ga_time.append(g_time)
-
-        time_str = f"{g_time:.5f} s" if g_time is not None else "N/A"
-        ga_hover_text.append(f"<b>Instance: {display_inst}</b><br>GA Time: {time_str}")
-    else:
-        ga_time.append(None)
-        ga_hover_text.append(f"<b>Instance: {display_inst}</b><br>No GA data")
-
-# Calculate averages
-valid_milp_times = [t for t in milp_time if t is not None]
-avg_milp = sum(valid_milp_times) / len(valid_milp_times) if valid_milp_times else 0
-
-valid_h1_times = [t for t in h1_time if t is not None]
-avg_h1 = sum(valid_h1_times) / len(valid_h1_times) if valid_h1_times else 0
-
-valid_ga_times = [t for t in ga_time if t is not None]
-avg_ga = sum(valid_ga_times) / len(valid_ga_times) if valid_ga_times else 0
-
-# Construct multi-line title
 plot_title = (
     "Computation Time Comparison: MILP vs H1 vs GA<br>"
     f"<span style='font-size:13px; font-weight:normal;'>Average MILP Time: {avg_milp:.3f} s</span><br>"
@@ -155,33 +116,39 @@ plot_title = (
     f"<span style='font-size:13px; font-weight:normal;'>Average GA Time: {avg_ga:.5f} s</span>"
 )
 
+fig = go.Figure()
 
-# Time Bars
-fig.add_trace(go.Bar(
-    x=x_positions,
-    y=milp_time,
-    name="MILP",
-    marker=dict(color=milp_time_colors),
-    hovertext=milp_hover_text,
-    hovertemplate="%{hovertext}<extra></extra>"
+# Dummy trace to force the MILP legend color to remain blue
+fig.add_trace(go.Scatter(
+    x=[None], y=[None], name="MILP",
+    mode='lines+markers', line=dict(color=MILP_COLOR, width=3),
+    marker=dict(color=MILP_COLOR, size=10),
+    legendgroup="milp_group",
+    showlegend=True
 ))
 
-fig.add_trace(go.Bar(
-    x=x_positions,
-    y=h1_time,
-    name="H1",
-    marker=dict(color=H1_COLOR),
-    hovertext=h1_hover_text,
-    hovertemplate="%{hovertext}<extra></extra>"
+# Actual MILP data trace
+fig.add_trace(go.Scatter(
+    x=x_positions, y=milp_time, name="MILP",
+    mode='lines+markers', line=dict(color=MILP_COLOR, width=3),
+    marker=dict(color=milp_marker_colors, size=10),
+    hovertext=milp_hover_text, hovertemplate="%{hovertext}<extra></extra>",
+    legendgroup="milp_group",
+    showlegend=False
 ))
 
-fig.add_trace(go.Bar(
-    x=x_positions,
-    y=ga_time,
-    name="GA",
-    marker=dict(color=GA_COLOR),
-    hovertext=ga_hover_text,
-    hovertemplate="%{hovertext}<extra></extra>"
+fig.add_trace(go.Scatter(
+    x=x_positions, y=h1_time, name="H1",
+    mode='lines+markers', line=dict(color=H1_COLOR, width=3),
+    marker=dict(size=10),
+    hovertext=h1_hover_text, hovertemplate="%{hovertext}<extra></extra>"
+))
+
+fig.add_trace(go.Scatter(
+    x=x_positions, y=ga_time, name="GA",
+    mode='lines+markers', line=dict(color=GA_COLOR, width=3),
+    marker=dict(size=10),
+    hovertext=ga_hover_text, hovertemplate="%{hovertext}<extra></extra>"
 ))
 
 # Add horizontal red dotted lines for time limits
@@ -193,38 +160,29 @@ for limit in reached_time_limits:
     )
 
     fig.add_annotation(
-        x=0,
+        x=0.5,
         xref="paper",
         y=math.log10(limit),
         text=f"Time limit: {int(limit)}s",
         showarrow=False,
-        xanchor="left",
+        xanchor="center",
         yanchor="bottom",
-        yshift=2,
-        font=dict(color=MILP_TIMEOUT_COLOR, size=12),
-        xshift=2
+        yshift=10,
+        font=dict(color=MILP_TIMEOUT_COLOR, size=12)
     )
 
 # Layout
 fig.update_layout(
     title=plot_title,
-    barmode="group",
     xaxis=dict(
         title="Instance",
+        type='category'
     ),
-    yaxis=dict(
-        title="Computation Time [s]",
-        type="log",
-    ),
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    ),
+    yaxis=dict(title="Computation Time [s]", type="log"),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     height=750,
-    margin=dict(t=200)
+    margin=dict(t=200),
+    template="plotly_white"
 )
 
 fig.show()

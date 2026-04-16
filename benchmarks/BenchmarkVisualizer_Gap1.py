@@ -2,8 +2,8 @@ import json
 import plotly.graph_objects as go
 import sys
 
-
 # Colors
+MILP_COLOR = "#4C78A8"
 H1_COLOR = "#F58518"
 GA_COLOR = "#B279A2"
 
@@ -116,7 +116,7 @@ fig = go.Figure()
 fig.add_trace(go.Box(
     x=x_h1,
     y=y_h1,
-    name="H1 vs MILP",
+    name="H1 (Baseline: MILP)",
     boxmean=True,
     marker_color=H1_COLOR,
     hovertemplate=hover_format_h1
@@ -126,35 +126,45 @@ fig.add_trace(go.Box(
 fig.add_trace(go.Box(
     x=x_ga,
     y=y_ga,
-    name="GA vs MILP",
+    name="GA (Baseline: MILP)",
     boxmean=True,
     marker_color=GA_COLOR,
     hovertemplate=hover_format_ga
 ))
 
+# Add MILP baseline indicator
+fig.add_hline(
+    y=0,
+    line_dash="solid",
+    line_color=MILP_COLOR,
+    annotation_text="MILP baseline",
+    annotation_position="bottom left",
+    annotation_xshift=10,
+    annotation_font_color=MILP_COLOR,
+    annotation_font_size=12
+)
+
+# Add formula annotation safely so it does not overwrite the line text
+fig.add_annotation(
+    text=annotation_text,
+    showarrow=False,
+    xref="paper", yref="paper",
+    x=-0.008, y=1.05,
+    xanchor="left", yanchor="bottom",
+    font=dict(size=20)
+)
+
 fig.update_layout(
     title={
-        'text': "Relative Gap Comparison: H1 vs MILP and GA vs MILP",
+        'text': "Relative Gap of H1 and GA Compared to MILP Baseline",
         'y': 0.95
     },
-    annotations=[
-        dict(
-            text=annotation_text,
-            showarrow=False,
-            xref="paper", yref="paper",
-            x=-0.008, y=1.05,
-            xanchor="left", yanchor="bottom",
-            font=dict(size=20)
-        )
-    ],
     margin=dict(t=120),
-
     yaxis=dict(
         title=yaxis_title,
         hoverformat=y_hover_format,
         ticksuffix=y_tick_suffix
     ),
-
     xaxis_title=xaxis_title,
     boxmode='group',
     xaxis=dict(

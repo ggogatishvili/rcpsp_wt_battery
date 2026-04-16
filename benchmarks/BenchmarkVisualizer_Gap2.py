@@ -4,6 +4,7 @@ import sys
 
 # Colors
 GA_COLOR = "#B279A2"
+H1_COLOR = "#F58518"
 
 # Parameters
 BATTERY_CAPACITY = 16
@@ -112,23 +113,33 @@ fig.add_trace(go.Box(
     hovertemplate=hover_format_gap
 ))
 
+# Add H1 baseline indicator
+fig.add_hline(
+    y=0,
+    line_color=H1_COLOR,
+    annotation_text="H1 baseline",
+    annotation_position="top left",
+    annotation_xshift=10,
+    annotation_font_color=H1_COLOR,
+    annotation_font_size=12
+)
+
+# Add formula annotation safely so it does not overwrite the line text
+fig.add_annotation(
+    text=annotation_text,
+    showarrow=False,
+    xref="paper", yref="paper",
+    x=-0.008, y=1.05,
+    xanchor="left", yanchor="bottom",
+    font=dict(size=20)
+)
+
 fig.update_layout(
     title={
-        'text': "Relative Gap Comparison: GA vs H1",
+        'text': "Relative Gap of GA Compared to H1 Baseline",
         'y': 0.95
     },
-    annotations=[
-        dict(
-            text=annotation_text,
-            showarrow=False,
-            xref="paper", yref="paper",
-            x=-0.008, y=1.05,
-            xanchor="left", yanchor="bottom",
-            font=dict(size=20)
-        )
-    ],
     margin=dict(t=120),
-
     yaxis=dict(
         title=yaxis_title,
         hoverformat=y_hover_format,
