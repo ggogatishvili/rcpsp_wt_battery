@@ -11,4 +11,4 @@ CMakeUserPresets.json
 .zed
 *result*
 config.json
-irace.Rdata
+*.Rdata
