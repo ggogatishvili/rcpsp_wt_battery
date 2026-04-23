@@ -89,6 +89,14 @@ Solution SolverMILP::_solve() {
         model.addConstr(expr == 1, fmt::format("TaskOnce_{}", t));
     }
 
+    // Release date constraints
+    Loop(t, N) {
+        int releaseDate = ins->tasks[t].get_release_date();
+        for (int i = 0; i < releaseDate && i < H; ++i) {
+            model.addConstr(x.i(t, i) == 0, fmt::format("ReleaseDate_{}_{}", t, i));
+        }
+    }
+
     // Running indicator definition y_{j,i}
     Loop(t, N) Loop(i, H) {
         GRBLinExpr expr = 0;
