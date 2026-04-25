@@ -217,10 +217,10 @@ for t in tasks:
 
 # --- LEGEND ITEMS ---
 legend_items1 = [
-    (STATE_COLORS["Off"], "Machine Off"),
-    (STATE_COLORS["Transition"], "Machine Transitioning"),
-    (STATE_COLORS["Idle"], "Machine Idle"),
-    (STATE_COLORS["Proc"], "Machine Processing"),
+    (STATE_COLORS["Off"], "Machine off"),
+    (STATE_COLORS["Transition"], "Machine transitioning"),
+    (STATE_COLORS["Idle"], "Machine idle"),
+    (STATE_COLORS["Proc"], "Machine processing"),
 ]
 
 for color, desc in legend_items1:
