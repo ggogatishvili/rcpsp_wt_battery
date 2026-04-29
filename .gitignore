@@ -12,3 +12,4 @@ CMakeUserPresets.json
 *result*
 config.json
 *.Rdata
+*.bkp

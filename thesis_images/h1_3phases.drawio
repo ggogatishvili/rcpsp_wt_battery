@@ -1,0 +1,25 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.6 Chrome/144.0.7559.236 Electron/40.8.4 Safari/537.36" version="29.6.6">
+  <diagram id="C5RBs43oDa-KdzZeNtuy" name="Page-1">
+    <mxGraphModel dx="946" dy="662" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="WIyWlLk6GJQsqaUBKTNV-0" />
+        <mxCell id="WIyWlLk6GJQsqaUBKTNV-1" parent="WIyWlLk6GJQsqaUBKTNV-0" />
+        <mxCell id="tboxQAP6NYJrW09XMlFU-6" edge="1" parent="WIyWlLk6GJQsqaUBKTNV-1" source="tboxQAP6NYJrW09XMlFU-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="tboxQAP6NYJrW09XMlFU-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tboxQAP6NYJrW09XMlFU-3" parent="WIyWlLk6GJQsqaUBKTNV-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;div&gt;&lt;b&gt;Phase 1:&lt;/b&gt;&lt;/div&gt;Task Scheduling" vertex="1">
+          <mxGeometry height="60" width="160" x="340" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="tboxQAP6NYJrW09XMlFU-7" edge="1" parent="WIyWlLk6GJQsqaUBKTNV-1" source="tboxQAP6NYJrW09XMlFU-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="tboxQAP6NYJrW09XMlFU-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tboxQAP6NYJrW09XMlFU-4" parent="WIyWlLk6GJQsqaUBKTNV-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;div&gt;&lt;b&gt;Phase 2:&lt;/b&gt;&lt;/div&gt;Machine State Scheduling" vertex="1">
+          <mxGeometry height="60" width="160" x="340" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="tboxQAP6NYJrW09XMlFU-5" parent="WIyWlLk6GJQsqaUBKTNV-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;div&gt;&lt;b&gt;Phase 3:&lt;/b&gt;&lt;/div&gt;Ba&lt;span style=&quot;background-color: initial;&quot;&gt;ttery Usage Scheduling&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="340" y="320" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

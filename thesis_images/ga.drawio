@@ -1,0 +1,37 @@
+<mxfile host="Electron">
+  <diagram name="Page-1" id="ipcOMrPIi7mrdvmXVQhU">
+    <mxGraphModel dx="2054" dy="1201" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;verticalAlign=top;" value="" vertex="1">
+          <mxGeometry height="130" width="640" x="440" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-1" edge="1" parent="1" source="3oEg4XvbMU09_EyTfn-X-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="3oEg4XvbMU09_EyTfn-X-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#9673A6;strokeWidth=3;" value="&lt;div&gt;&lt;b&gt;Phase 1:&lt;/b&gt;&lt;/div&gt;Task Scheduling" vertex="1">
+          <mxGeometry height="70" width="160" x="480" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-3" edge="1" parent="1" source="3oEg4XvbMU09_EyTfn-X-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="3oEg4XvbMU09_EyTfn-X-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;div&gt;&lt;b&gt;Phase 2:&lt;/b&gt;&lt;/div&gt;Machine State Scheduling" vertex="1">
+          <mxGeometry height="70" width="160" x="680" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;div&gt;&lt;b&gt;Phase 3:&lt;/b&gt;&lt;/div&gt;Ba&lt;span style=&quot;background-color: initial;&quot;&gt;ttery Usage Scheduling&lt;/span&gt;" vertex="1">
+          <mxGeometry height="70" width="160" x="880" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-11" edge="1" parent="1" source="3oEg4XvbMU09_EyTfn-X-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=3;exitX=0.992;exitY=0.604;exitDx=0;exitDy=0;exitPerimeter=0;" target="3oEg4XvbMU09_EyTfn-X-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="3oEg4XvbMU09_EyTfn-X-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 18px;&quot;&gt;GA&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="140" width="200" x="160" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="y84sQP88FLewsRZNGlG0-1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontSize=18;fontStyle=1" value="H1" vertex="1">
+          <mxGeometry height="40" width="40" x="740" y="170" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
