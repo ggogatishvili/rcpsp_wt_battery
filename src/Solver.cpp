@@ -23,11 +23,8 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "SolverH1.h"
 #include "SolverGA.h"
 #include "config.h"
-#include <atomic>
 #include <fmt/base.h>
 #include <solution.h>
-#include <ranges>
-
 
 
 Solution solver::solve(const Instance* ins, const Config::ResolutionMethod method, const double alpha)

@@ -4,8 +4,12 @@ find_path(GUROBI_INCLUDE_DIRS
     PATH_SUFFIXES include)
 
 find_library(GUROBI_LIBRARY
-    NAMES gurobi gurobi100 gurobi110 gurobi120 libgurobi120
+    NAMES gurobi130 gurobi120 gurobi110 gurobi100 gurobi libgurobi120
     HINTS ${GUROBI_DIR} $ENV{GUROBI_HOME}
+          /Library/gurobi1301/macos_universal2
+          /Library/gurobi1300/macos_universal2
+          /Library/gurobi1202/macos_universal2
+          /Library/gurobi1201/macos_universal2
     PATH_SUFFIXES lib)
 
 find_library(GUROBI_CXX_LIBRARY

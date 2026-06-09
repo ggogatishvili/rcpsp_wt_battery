@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 project(rcpsp_wt_battery)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(${CMAKE_BINARY_DIR}/conan_toolchain.cmake)
@@ -39,13 +39,17 @@ find_package(fmt REQUIRED)
 find_package(TBB REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(ParadisEO REQUIRED)
-find_package(OpenMP REQUIRED)
+#find_package(OpenMP REQUIRED)
+find_library(EO_LIB      eo      PATHS /usr/local/lib64 REQUIRED)
+find_library(EOUTILS_LIB eoutils PATHS /usr/local/lib64 REQUIRED)
 
 
 # Debug: Print what was found
 message(STATUS "GUROBI_INCLUDE_DIRS: ${GUROBI_INCLUDE_DIRS}")
 message(STATUS "GUROBI_LIBRARY: ${GUROBI_LIBRARY}")
 message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
+message(STATUS "EO_LIB: ${EO_LIB}")
+message(STATUS "EOUTILS_LIB: ${EOUTILS_LIB}")
 #message(STATUS "Cplex_INCLUDE_LIBRARY: ${Cplex_INCLUDE_DIRS}")
 #message(STATUS "Cplex_ConstraintProgramming_INCLUDE_DIRS: ${Cplex_ConstraintProgramming_INCLUDE_DIRS}")
 #message(STATUS "Cplex_LIBRARIES: ${Cplex_LIBRARIES}")
@@ -60,6 +64,9 @@ target_link_libraries(rcpsp_wt_battery ${CONAN_LIBS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${GUROBI_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${Boost_INCLUDE_DIRS})
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${PARADISEO_INCLUDE_DIRS})
+target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/eo)
+target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/mo)
+target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE /usr/local/include/paradiseo/smp)
 target_include_directories(rcpsp_wt_battery SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Link modern CMake targets
@@ -67,7 +74,7 @@ target_link_libraries(rcpsp_wt_battery PRIVATE fmt::fmt)
 target_link_libraries(rcpsp_wt_battery PRIVATE onetbb::onetbb)
 target_link_libraries(rcpsp_wt_battery PRIVATE boost::boost)
 target_link_libraries(rcpsp_wt_battery PRIVATE nlohmann_json::nlohmann_json)
-target_link_libraries(rcpsp_wt_battery PRIVATE OpenMP::OpenMP_CXX)
+#target_link_libraries(rcpsp_wt_battery PRIVATE OpenMP::OpenMP_CXX)
 
 # Link solver libraries
 #target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_ConstraintProgramming_LIBRARIES})
@@ -76,8 +83,8 @@ target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_CXX_LIBRARY})
 target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_LIBRARY})
 
 # Link additional libraries (ParadisEO and system libraries)
-target_link_libraries(rcpsp_wt_battery PRIVATE ${PARADISEO_LIBRARIES})
-target_link_libraries(rcpsp_wt_battery PRIVATE dl)
+#target_link_libraries(rcpsp_wt_battery PRIVATE ${PARADISEO_LIBRARIES})
+target_link_libraries(rcpsp_wt_battery PRIVATE ${EO_LIB} ${EOUTILS_LIB} dl)
 
 # Apply linker options
 target_link_options(rcpsp_wt_battery PRIVATE ${LINKER_OPTIONS})

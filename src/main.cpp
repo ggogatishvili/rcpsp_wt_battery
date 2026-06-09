@@ -18,7 +18,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 */
 
-#include <eoRNG.h>
+#include <utils/eoRNG.h>
 #include <random>
 #include <fmt/base.h>
 #include <fmt/format.h>

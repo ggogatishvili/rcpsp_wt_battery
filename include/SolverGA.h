@@ -2,6 +2,7 @@
 
 #include "SolverH1.h"
 #include <eo>
+#include <es/eoReal.h>
 #include <vector>
 
 using namespace std;
