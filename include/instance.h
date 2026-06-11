@@ -24,8 +24,6 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <fmt/format.h>
 #include <optional>
 #include <vector>
-#include <map>
-#include <list>
 #include <numeric>
 #include <gurobi_c++.h>
 

@@ -8,7 +8,6 @@
 #include <memory>
 #include <solution.h>
 #include "SolverH1.h"
-#include "SolverGA.h"
 
 using namespace std;
 
@@ -404,6 +403,8 @@ Solution SolverMILP::_solve() {
                 }
             }
         }
+
+        std::ranges::sort(machineBlocks, {}, &MachineBlock::startTime);
 
         return {
                 ins,

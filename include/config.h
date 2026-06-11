@@ -36,20 +36,18 @@ public:
         MILP,
         H1,
         GA,
+        MatH,
         None
     };
 
-    static std::string to_string(ResolutionMethod method)
+    static std::string to_string(const ResolutionMethod method)
     {
-        switch (method) {
-            case ResolutionMethod::MILP:
-                return "MILP";
-            case ResolutionMethod::H1:
-                return "H1";
-            case ResolutionMethod::GA:
-                return "GA";
-            default:
-                return "None";
+        switch ( method ) {
+            case ResolutionMethod::MILP: return "MILP";
+            case ResolutionMethod::H1:   return "H1";
+            case ResolutionMethod::GA:   return "GA";
+            case ResolutionMethod::MatH: return "MatH";
+            default:                     return "None";
         }
     }
 
@@ -128,6 +126,14 @@ public:
     // Delay Shift Magnitude
     inline static double mutDelayShiftMag = 0.01;
 
+    // MatH Parameters
+    // Fraction of population re-evaluated with MILP per generation (0 = all H1, 1 = all MILP).
+    // Recommended: 0.05–0.10; the MILP is far slower than H1.
+    inline static double mathEliteRatio = 0.05;
+    // Per-evaluation MILP time limit in seconds. A capped solve still returns the best
+    // incumbent found, so the GA degrades gracefully when the limit is tight.
+    inline static double mathMilpTimeLimit = 10.0;
+
 private:
     // Private constructor ("Called once at program startup")
     [[gnu::constructor]] static void init_config();
@@ -152,6 +158,9 @@ struct fmt::formatter<Config::ResolutionMethod> : formatter<string_view>
                 break;
             case Config::ResolutionMethod::GA:
                 name = "GA";
+                break;
+            case Config::ResolutionMethod::MatH:
+                name = "MatH";
                 break;
             default:
                 break;

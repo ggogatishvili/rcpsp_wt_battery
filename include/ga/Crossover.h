@@ -2,6 +2,7 @@
 
 #include <eo>
 #include <eoOp.h>
+#include <es/eoReal.h>
 
 #include "config.h"
 

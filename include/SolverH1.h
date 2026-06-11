@@ -42,6 +42,9 @@ public:
 
     friend class SolverGA;
     friend class Evaluator;
+    friend class SolverMatH;
+    friend class MatHH1Evaluator;
+    friend class MatHMilpEvaluator;
 
 private:
     const Instance* ins; // Pointer to the instance to solve

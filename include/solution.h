@@ -26,7 +26,6 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <sstream>
 #include "instance.h"
 #include <helpers.h>
-#include <memory>
 
 struct MachineBlock {
     int startTime;

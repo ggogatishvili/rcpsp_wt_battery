@@ -20,7 +20,8 @@ using namespace std;
 
 
 SolverGA::SolverGA(const Instance* const instance)
-    : ins(instance), H(instance->maxDuration()), N(instance->nbr_tasks()), N_EI(instance->nbr_ei_tasks()), chromosomeSize(instance->nbr_tasks() + instance->nbr_ei_tasks()), solverH1(instance) {
+    : ins(instance), H(instance->maxDuration()), N(instance->nbr_tasks()), N_EI(instance->nbr_ei_tasks()), chromosomeSize(instance->nbr_tasks() + instance->nbr_ei_tasks()), solverH1(instance)
+{
 
     // Calculate min and max delays for each EI task
     absoluteEIDelayBounds = calculateAbsoluteEIDelayBounds();
@@ -32,7 +33,8 @@ SolverGA::SolverGA(const Instance* const instance)
     cachedSPACESGraph = solverH1.buildSPACESGraph();
 }
 
-Solution SolverGA::_solve() {
+Solution SolverGA::_solve()
+{
     // Generate initial population
     eoPop<Chromosome> pop = generateInitialPopulation();
 
@@ -50,10 +52,10 @@ Solution SolverGA::_solve() {
     if (Config::verbose) {
         fmt::println("\n=================================================");
         fmt::println("GA PARAMETERS:");
-        fmt::println("  Chromosome Size : {} ({} Priorities, {} Delays)", chromosomeSize, N, N_EI);
-        fmt::println("  Population Size : {}", Config::populationSize);
-        fmt::println("  Stagnation Limit  : {} generations", Config::stagnationLimit);
-        fmt::println("  Max Time Limit  : {}s", Config::timeLimit);
+        fmt::println("  Chromosome Size  : {} ({} Priorities, {} Delays)", chromosomeSize, N, N_EI);
+        fmt::println("  Population Size  : {}", Config::populationSize);
+        fmt::println("  Stagnation Limit : {} generations", Config::stagnationLimit);
+        fmt::println("  Max Time Limit   : {}s", Config::timeLimit);
         fmt::println("=================================================");
         fmt::println("Starting GA Optimization...\n");
     }
@@ -109,7 +111,8 @@ Solution SolverGA::_solve() {
     }
 }
 
-vector<int> SolverGA::findCheapIntervals() const {
+vector<int> SolverGA::findCheapIntervals() const
+{
     double percentile = 0.30;
 
     vector<double> sortedCosts = ins->costs;
@@ -126,7 +129,8 @@ vector<int> SolverGA::findCheapIntervals() const {
     return intervals;
 }
 
-eoPop<Chromosome> SolverGA::generateInitialPopulation() const {
+eoPop<Chromosome> SolverGA::generateInitialPopulation() const
+{
     if (Config::populationSize < 100) {
         throw runtime_error(fmt::format("GA error: Population size must be at least 100 to ensure proper injection of heuristics and randomness. Current population size: {}", Config::populationSize));
     }
@@ -178,7 +182,8 @@ eoPop<Chromosome> SolverGA::generateInitialPopulation() const {
     return population;
 }
 
-Chromosome SolverGA::generateInitialChromosome(const PriorityMetricType& type, const double delayRate, const bool useCheapIntervals) const {
+Chromosome SolverGA::generateInitialChromosome(const PriorityMetricType& type, const double delayRate, const bool useCheapIntervals) const
+{
     Chromosome chromosome;
     chromosome.resize(chromosomeSize);
     for(int i = 0; i < chromosomeSize; i++) chromosome[i] = 0.0;
@@ -264,7 +269,8 @@ Chromosome SolverGA::generateInitialChromosome(const PriorityMetricType& type, c
     return chromosome;
 }
 
-double SolverGA::calculateRelativeDelay(int absoluteSelectedDelay, int absoluteMinDelay, int absoluteMaxDelay) const {
+double SolverGA::calculateRelativeDelay(int absoluteSelectedDelay, int absoluteMinDelay, int absoluteMaxDelay) const
+{
     if (absoluteMaxDelay > absoluteMinDelay) {
         return  (double)(absoluteSelectedDelay - absoluteMinDelay) / (absoluteMaxDelay - absoluteMinDelay);
     }
@@ -272,7 +278,8 @@ double SolverGA::calculateRelativeDelay(int absoluteSelectedDelay, int absoluteM
     return 0.0;
 }
 
-vector<pair<int, int>> SolverGA::calculateAbsoluteEIDelayBounds() const {
+vector<pair<int, int>> SolverGA::calculateAbsoluteEIDelayBounds() const
+{
     // Calculate In-Degrees for Topological Sort
     vector<int> inDegree(N, 0);
     for (int task = 0; task < N; task++) {
@@ -339,7 +346,8 @@ vector<pair<int, int>> SolverGA::calculateAbsoluteEIDelayBounds() const {
     return bounds;
 }
 
-vector<double> SolverGA::decodePriorities(const Chromosome& chrom) const {
+vector<double> SolverGA::decodePriorities(const Chromosome& chrom) const
+{
     vector<double> priorities(N);
 
     for (int task = 0; task < N; task++) {
@@ -349,7 +357,8 @@ vector<double> SolverGA::decodePriorities(const Chromosome& chrom) const {
     return priorities;
 }
 
-vector<int> SolverGA::decodeDelays(const Chromosome& chrom) const {
+vector<int> SolverGA::decodeDelays(const Chromosome& chrom) const
+{
     vector<int> eiDelays(N_EI);
 
     for (int tEI = 0; tEI < N_EI; tEI++) {

@@ -2,10 +2,12 @@
 
 #include <eo>
 #include <eoOp.h>
+#include <es/eoReal.h>
 #include <algorithm>
 #include <utility>
 
 #include "config.h"
+#include "SolverGA.h"
 
 typedef eoReal<double> Chromosome;
 

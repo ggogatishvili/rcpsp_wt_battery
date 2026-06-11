@@ -2,16 +2,17 @@
 
 #include <eo>
 #include <eoContinue.h>
+#include <es/eoReal.h>
 #include <chrono>
 #include <string>
 #include <fmt/base.h>
 #include "../config.h"
+#include "../helpers.h"
 
 using namespace std;
 
-typedef eoReal<double> Chromosome;
-
-class Terminator : public eoContinue<Chromosome> {
+template <typename EOT>
+class TerminatorT : public eoContinue<EOT> {
     chrono::steady_clock::time_point startTime;
     const int maxSeconds;
     const int maxStagnationGens;
@@ -20,13 +21,13 @@ class Terminator : public eoContinue<Chromosome> {
     double bestFitness;
 
 public:
-    inline Terminator(const int timeLimit, const int stagnationLimit)
+    inline TerminatorT(const int timeLimit, const int stagnationLimit)
         : maxSeconds(timeLimit), maxStagnationGens(stagnationLimit),
           currentGen(0), lastImprovementGen(0), bestFitness(-BIG_M) {
         startTime = chrono::steady_clock::now();
     }
 
-    inline bool operator()(const eoPop<Chromosome>& pop) override {
+    inline bool operator()(const eoPop<EOT>& pop) override {
         currentGen++;
         const auto now = chrono::steady_clock::now();
         auto elapsed = chrono::duration_cast<chrono::seconds>(now - startTime).count();
@@ -62,3 +63,6 @@ public:
         return "CustomTerminator";
     }
 };
+
+// Convenience alias for the classic GA chromosome type.
+using Terminator = TerminatorT<eoReal<double>>;

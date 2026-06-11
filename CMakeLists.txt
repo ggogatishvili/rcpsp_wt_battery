@@ -22,7 +22,10 @@ add_executable( rcpsp_wt_battery
         src/jsonHandler.cpp
         src/Clock.cpp
         src/solution.cpp
-        src/instance.cpp )
+        src/instance.cpp
+        src/ResourceFlow.cpp
+        src/SpacesMilpDecoder.cpp
+        src/SolverMatH.cpp )
 
 set(WARNING_OPTIONS             -Wall -Wextra -Werror -Wno-vla-cxx-extension)
 set(GCC_WARNING_OPTIONS         -Wduplicated-cond -Wlogical-op -Wuseless-cast -Wrestrict)
