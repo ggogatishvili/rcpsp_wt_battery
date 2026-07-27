@@ -13,3 +13,4 @@ CMakeUserPresets.json
 config.json
 *.Rdata
 *.bkp
+paper/paper_tex
