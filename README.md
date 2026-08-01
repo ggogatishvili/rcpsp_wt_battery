@@ -30,7 +30,7 @@ The solver is built in a separate build directory. The following commands are ex
 
 ```bash
 mkdir build
-conan install . --output-folder=build --build=* -o "hwloc/*:shared=True" -s compiler.cppstd=23
+conan install . --output-folder=build --build=missing -o "hwloc/*:shared=True" -s compiler.cppstd=23
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
