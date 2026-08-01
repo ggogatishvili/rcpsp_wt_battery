@@ -35,12 +35,13 @@ import math
 import os
 import sys
 from collections import defaultdict
+from itertools import pairwise
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from lib.rcpsp_io import read_extended        # noqa: E402
+from lib.rcpsp_io import read_extended
 
 DATA = Path(os.environ.get("RCPSP_EXP_DATA", ROOT / "data"))
 RESULTS = DATA / "results"
@@ -59,15 +60,15 @@ def battery_stats(levels: list[float], capacity: float) -> dict:
     here, because eta_c is a solver constant and belongs in one place.
     """
     if not levels:
-        return dict(batt_charge=0.0, batt_discharge=0.0, batt_efc=0.0,
-                    batt_peak=0.0, batt_used=0)
-    chg = sum(max(0.0, b - a) for a, b in zip(levels, levels[1:]))
-    dis = sum(max(0.0, a - b) for a, b in zip(levels, levels[1:]))
+        return {"batt_charge": 0.0, "batt_discharge": 0.0, "batt_efc": 0.0,
+                "batt_peak": 0.0, "batt_used": 0}
+    chg = sum(max(0.0, b - a) for a, b in pairwise(levels))
+    dis = sum(max(0.0, a - b) for a, b in pairwise(levels))
     peak = max(levels)
     efc = (dis / capacity) if capacity > 0 else 0.0
-    return dict(batt_charge=round(chg, 6), batt_discharge=round(dis, 6),
-                batt_efc=round(efc, 6), batt_peak=round(peak, 6),
-                batt_used=int(dis > TOL_ABS))
+    return {"batt_charge": round(chg, 6), "batt_discharge": round(dis, 6),
+            "batt_efc": round(efc, 6), "batt_peak": round(peak, 6),
+            "batt_used": int(dis > TOL_ABS)}
 
 
 def main() -> int:
@@ -119,9 +120,9 @@ def main() -> int:
         cap = float(run["battery_arg"])
 
         # ---- C1 objective decomposition ---------------------------------
-        if math.isfinite(obj) and math.isfinite(ec) and math.isfinite(tc):
-            if abs(obj - (ec + tc)) > max(TOL_ABS, TOL_REL * abs(obj)):
-                fails["C1_objective_decomposition"].append(rid)
+        if (math.isfinite(obj) and math.isfinite(ec) and math.isfinite(tc)
+                and abs(obj - (ec + tc)) > max(TOL_ABS, TOL_REL * abs(obj))):
+            fails["C1_objective_decomposition"].append(rid)
         # ---- C2 battery bounds -------------------------------------------
         if levels and (min(levels) < -TOL_ABS or max(levels) > cap + TOL_ABS):
             fails["C2_battery_bounds"].append(rid)
@@ -220,8 +221,8 @@ def main() -> int:
     lines += [
         "",
         f"  C5 flat-tariff falsification: {n_flat} comparable groups",
-        f"     max relative energy-cost difference across battery levels "
-        f"under a constant price: {resolution:.3e}",
+        (f"     max relative energy-cost difference across battery levels "
+         f"under a constant price: {resolution:.3e}"),
         "     -> this is the RESOLUTION FLOOR of the study. Any effect in E1-E4",
         "        smaller than this is indistinguishable from solver noise and",
         "        must not be reported as a finding.",

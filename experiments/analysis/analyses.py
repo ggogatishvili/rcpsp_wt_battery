@@ -541,6 +541,193 @@ def e5(rows: list[dict], out: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# E6 — machine profile (C2), battery efficiency (C3), C-rate (C4)
+# ---------------------------------------------------------------------------
+
+# Named archetypes matching EXPERIMENTAL_PLAN.md table 3.3, for the grid
+# cells that land on one (see design.py §7). Unlabelled cells are just
+# unnamed points in the (rho, restart) plane.
+_E6_ARCHETYPES = {
+    (0.0, "low"):   "A5 ideal (approx -- restart cost/duration still > 0, see design.py)",
+    (0.25, "low"):  "A1 fast electric",
+    (0.5, "med"):   "A2 default (grid reference cell)",
+    (0.5, "high"):  "A3 industrial oven",
+    (0.75, "high"): "A4 continuous process (approx)",
+}
+
+
+def _e6_paired_pct(cells: dict, group_keys, key_hi, key_lo) -> np.ndarray:
+    """Paired %% change (hi vs lo) over every group key present at both."""
+    out = []
+    for gk in group_keys:
+        lo = cells.get(gk + key_lo)
+        hi = cells.get(gk + key_hi)
+        if lo and hi is not None:
+            out.append(100 * (hi - lo) / lo)
+    return np.array(out)
+
+
+def e6(rows: list[dict], out: Path) -> str:
+    """Machine substitution surface (C2) and battery efficiency/C-rate
+    retention (C3/C4).
+
+    CALIBRATION WARNING: the rho/restart/efficiency/C-rate levels driving
+    this report are the same placeholders EXPERIMENTAL_PLAN.md §3.3/§3.4 and
+    design.py §7 flag as "invented, needs a citable source" -- every number
+    below illustrates the METHOD, not a result to publish before recalibrating
+    design.RHO_LEVELS / RESTART_LEVELS / ROUNDTRIP_EFFICIENCY_LEVELS /
+    C_RATE_LEVELS against real machine and storage data.
+
+    BASELINE WARNING: E6 has no zero-battery counterpart for its grid cells
+    (crossing it would have pushed the run count well past the plan's
+    ~10 800 budget -- see design.py §7), so every percentage below is
+    relative to the A2 grid cell (rho=0.5/restart=med) or to C-rate=infinity,
+    NOT relative to no storage. This is a narrower claim than E1/E2's
+    vs-no-storage savings figures and must not be conflated with them.
+    """
+    rows = [r for r in rows if r["experiment"] == "E6"]
+    lines = ["E6 - machine profile (C2) and battery efficiency / C-rate (C3/C4)",
+             "=" * 62]
+    if not rows:
+        return "E6: no data\n"
+
+    lines += [
+        "  CALIBRATION WARNING: rho/restart/efficiency/C-rate levels are",
+        "  placeholders (EXPERIMENTAL_PLAN.md §3.3/§3.4, design.py §7), not",
+        "  measured machine or storage data -- recalibrate before quoting.",
+        "  BASELINE WARNING: figures below are relative to the A2 grid cell",
+        "  or to C-rate=infinity, NOT relative to no storage (E6 has no",
+        "  zero-battery counterpart) -- do not conflate with E1/E2 savings.",
+    ]
+
+    a = [r for r in rows if r.get("e6_subdesign") == "machine"]
+    b = [r for r in rows if r.get("e6_subdesign") == "battery"]
+    cells_a = collapse_seeds(a, ("instance", "price_regime", "policy", "rho", "restart_level"),
+                             value="energy_cost", how="mean") if a else {}
+    cells_b = collapse_seeds(b, ("instance", "price_regime", "roundtrip_eff", "c_rate"),
+                             value="energy_cost", how="mean") if b else {}
+
+    # ---- E6a: machine substitution surface --------------------------------
+    if a:
+        policies = sorted({r["policy"] for r in a})
+        rhos = sorted({r["rho"] for r in a}, key=float)
+        restarts = [x for x in ("low", "med", "high") if x in {r["restart_level"] for r in a}]
+        groups_by_pol = defaultdict(set)
+        for r in a:
+            groups_by_pol[r["policy"]].add((r["instance"], r["price_regime"]))
+
+        n_inst = len({r["instance"] for r in a})
+        n_reg = len({r["price_regime"] for r in a})
+        lines.append(f"\n--- E6a: machine substitution surface "
+                     f"({n_inst} instances x {n_reg} regimes) ---")
+        lines.append("  cell = mean % energy-cost change vs the A2 archetype "
+                     "(rho=0.5, restart=med), paired by instance x regime")
+
+        for policy in policies:
+            base = {gk: cells_a.get(gk + (policy, "0.5", "med")) for gk in groups_by_pol[policy]}
+            lines.append(f"\n  heat map -- policy = {policy}  "
+                         "(rows = restart penalty, cols = rho = e_idle/e_proc)")
+            lines.append("    restart " + "".join(f"{'rho='+rs:>10s}" for rs in rhos))
+            for restart in restarts:
+                rowvals = []
+                for rs in rhos:
+                    vals = [100 * (base[gk] - cells_a[gk + (policy, rs, restart)]) / base[gk]
+                           for gk in groups_by_pol[policy]
+                           if base.get(gk) and gk + (policy, rs, restart) in cells_a]
+                    rowvals.append(float(np.mean(vals)) if vals else float("nan"))
+                cell_txt = "".join(f"{v:10.2f}" if math.isfinite(v) else f"{'.':>10s}"
+                                   for v in rowvals)
+                lines.append(f"    {restart:7s}{cell_txt}")
+        lines.append("  positive = cheaper than A2 at that policy; negative = more expensive.")
+
+        lines.append("\n  substitution map with archetypes (grid cell -> nearest named archetype):")
+        for rs in rhos:
+            for restart in restarts:
+                lab = _E6_ARCHETYPES.get((float(rs), restart))
+                if lab:
+                    lines.append(f"    rho={rs:<5s} restart={restart:<5s} -> {lab}")
+    else:
+        lines.append("\n--- E6a: no machine-grid data ---")
+
+    # ---- E6b: C-rate retention --------------------------------------------
+    if b:
+        groups_b = {(r["instance"], r["price_regime"]) for r in b}
+        effs = sorted({r["roundtrip_eff"] for r in b}, key=float)
+        crates = sorted((c for c in {r["c_rate"] for r in b} if c != "inf"), key=float)
+        if any(r["c_rate"] == "inf" for r in b):
+            crates.append("inf")
+
+        lines.append(f"\n--- E6b: C-rate retention "
+                     f"({len({g[0] for g in groups_b})} instances x "
+                     f"{len({g[1] for g in groups_b})} regimes, policy=price_aware) ---")
+        lines.append("  cell = % of the C-rate=infinity energy cost retained at that C-rate")
+        lines.append("  (100% = capping the rate changed nothing; <100% = the cap cost money)")
+        lines.append("    eta_rt   " + "".join(f"{('C='+c):>10s}" for c in crates))
+        for eff in effs:
+            base = {gk: cells_b.get(gk + (eff, "inf")) for gk in groups_b}
+            rowvals = []
+            for c in crates:
+                vals = [100 * cells_b[gk + (eff, c)] / base[gk]
+                       for gk in groups_b
+                       if base.get(gk) and gk + (eff, c) in cells_b]
+                rowvals.append(float(np.mean(vals)) if vals else float("nan"))
+            row_txt = "".join(f"{v:10.2f}" if math.isfinite(v) else f"{'.':>10s}"
+                              for v in rowvals)
+            lines.append(f"    {eff:<9s}{row_txt}")
+        lines.append("  eta_rt = round-trip efficiency (eta_c x eta_d); "
+                     "C = C-rate (max charge/discharge power / capacity).")
+    else:
+        lines.append("\n--- E6b: no battery-grid data ---")
+
+    # ---- tornado: which factor moves energy cost most ---------------------
+    lines.append("\n--- tornado: energy-cost effect of moving one factor from its "
+                 "lowest to its highest level, holding the rest at the A2 / "
+                 "uncapped reference (paired by instance x regime) ---")
+    tornado: list[dict] = []
+    if a:
+        rho_lo, rho_hi = min(rhos, key=float), max(rhos, key=float)
+        gk_edd = sorted(groups_by_pol.get("edd", set()))
+        tornado.append(paired_summary(
+            _e6_paired_pct(cells_a, gk_edd, ("edd", rho_hi, "med"), ("edd", "0.5", "med")),
+            f"rho: {rho_lo}->{rho_hi} (restart=med, policy=edd)"))
+        if "low" in restarts and "high" in restarts:
+            tornado.append(paired_summary(
+                _e6_paired_pct(cells_a, gk_edd, ("edd", "0.5", "high"), ("edd", "0.5", "low")),
+                "restart: low->high (rho=0.5, policy=edd)"))
+        if "price_aware" in groups_by_pol:
+            gk_ref = sorted(groups_by_pol["edd"] & groups_by_pol["price_aware"])
+            tornado.append(paired_summary(
+                _e6_paired_pct(cells_a, gk_ref, ("price_aware", "0.5", "med"), ("edd", "0.5", "med")),
+                "policy: edd->price_aware (rho=0.5, restart=med)"))
+    if b:
+        eff_lo, eff_hi = min(effs, key=float), max(effs, key=float)
+        gk_b = sorted(groups_b)
+        tornado.append(paired_summary(
+            _e6_paired_pct(cells_b, gk_b, (eff_hi, "inf"), (eff_lo, "inf")),
+            f"round-trip efficiency: {eff_lo}->{eff_hi} (C-rate=infinity)"))
+        eff_ref = min(effs, key=lambda e: abs(float(e) - 0.95))
+        crate_lo = min((c for c in crates if c != "inf"), key=float, default=None)
+        if crate_lo:
+            tornado.append(paired_summary(
+                _e6_paired_pct(cells_b, gk_b, (eff_ref, crate_lo), (eff_ref, "inf")),
+                f"C-rate: infinity->{crate_lo} (round-trip eff={eff_ref})"))
+
+    tornado = [t for t in tornado if t["n"] > 0]
+    tornado.sort(key=lambda t: -abs(t["mean"]))
+    if tornado:
+        lines.append(f"    {'factor':52s} {'mean %':>8s} {'95% CI':>20s} {'n':>5s}")
+        for t in tornado:
+            lines.append(f"    {t['effect']:52s} {t['mean']:8.3f} "
+                         f"[{t['ci_lo']:8.3f},{t['ci_hi']:8.3f}] {t['n']:5d}")
+    else:
+        lines.append("    no comparable pairs found")
+
+    txt = "\n".join(lines) + "\n"
+    (out / "e6_machine_battery.txt").write_text(txt)
+    return txt
+
+
+# ---------------------------------------------------------------------------
 # E0 — validation
 # ---------------------------------------------------------------------------
 

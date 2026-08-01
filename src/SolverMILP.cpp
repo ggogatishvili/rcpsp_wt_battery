@@ -7,6 +7,9 @@
 #include <gurobi_c.h>
 #include <solution.h>
 #include "SolverH1.h"
+#include "Map1.h"
+#include "Map2.h"
+#include "Map3.h"
 #include <cmath>
 
 using namespace std;

@@ -42,7 +42,7 @@ def main() -> int:
 
     out = DATA / "analysis"
     out.mkdir(parents=True, exist_ok=True)
-    want = set(args.only.split(",")) if args.only else {"E0", "E1", "E2", "E3", "E4", "E5"}
+    want = set(args.only.split(",")) if args.only else {"E0", "E1", "E2", "E3", "E4", "E5", "E6"}
 
     econ = economics.CENTRAL
     parts = []
@@ -58,6 +58,8 @@ def main() -> int:
         parts.append(A.e4(rows, out))
     if "E5" in want:
         parts.append(A.e5(rows, out))
+    if "E6" in want:
+        parts.append(A.e6(rows, out))
 
     combined = "\n\n".join(parts)
     (out / "summary.txt").write_text(combined)

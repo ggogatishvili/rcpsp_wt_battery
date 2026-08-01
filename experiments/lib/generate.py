@@ -30,8 +30,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from config import design
-from .rcpsp_io import (Instance, Task, read_original, write_instance,
-                       earliest_starts, makespan_lower_bound, descriptors)
+from .rcpsp_io import (Instance, descriptors, earliest_starts,
+                       makespan_lower_bound, read_original, write_instance)
 from .rng import substream
 
 # Energy consumed per interval while the machine is in Proc.
@@ -53,7 +53,7 @@ def build_shop(orig_path: Path, p: int, rep: int, dens: str, tight: str,
     n = inst.n
 
     # --- 2. EI density -----------------------------------------------------
-    target = max(1, int(round(design.EI_DENSITY[dens] * n)))
+    target = max(1, round(design.EI_DENSITY[dens] * n))
     rng = substream(f"ei|{sid}")
     chosen = set(rng.sample(range(n), target))
     tasks = []
@@ -80,7 +80,7 @@ def build_shop(orig_path: Path, p: int, rep: int, dens: str, tight: str,
         latest = h - 1
         room = max(0, latest - rel - t.duration)
         rho = rng_due.uniform(lo, hi)
-        due = min(latest, rel + t.duration + int(round(rho * room)))
+        due = min(latest, rel + t.duration + round(rho * room))
         due = max(due, rel + t.duration)          # never due before it can finish
         # --- 6. weight ----------------------------------------------------
         w = (ref_price / 10.0) * rng_w.uniform(0.5, 1.0) * lam
@@ -90,9 +90,9 @@ def build_shop(orig_path: Path, p: int, rep: int, dens: str, tight: str,
     # NOTE: keys here must not collide with rcpsp_io.descriptors(), which is
     # merged on top of them in instance_row(). The *level labels* live under
     # `_level` names; the realised numeric values come from descriptors().
-    inst.meta = dict(shop_id=sid, size_class=p, replicate=rep,
-                     ei_density_level=dens, due_tightness_level=tight,
-                     lam=lam, makespan_lb=lb, horizon=h, horizon_days=days)
+    inst.meta = {"shop_id": sid, "size_class": p, "replicate": rep,
+                "ei_density_level": dens, "due_tightness_level": tight,
+                "lam": lam, "makespan_lb": lb, "horizon": h, "horizon_days": days}
     return inst
 
 
@@ -109,7 +109,7 @@ def e_day(inst: Instance) -> float:
 
 def battery_arg(inst: Instance, ratio: float) -> int:
     """Integer -b argument realising `ratio` x E_day (solver takes an int)."""
-    return max(0, int(round(ratio * e_day(inst))))
+    return max(0, round(ratio * e_day(inst)))
 
 
 def materialise(inst: Instance, series_values: list[float], out_path: Path) -> str:
@@ -128,13 +128,13 @@ def instance_row(inst: Instance, price_name: str, price_regime: str,
     row = dict(inst.meta)
     row.update(descriptors(inst))
     row.update(price_desc)
-    row.update(dict(
-        instance=path.stem,
-        subset=subset,
-        path=str(path),   # relative to the data root; resolve as DATA / path
-        price_name=price_name,
-        price_regime=price_regime,
-        e_day=round(e_day(inst), 4),
-        sha256=sha,
-    ))
+    row.update({
+        "instance": path.stem,
+        "subset": subset,
+        "path": str(path),   # relative to the data root; resolve as DATA / path
+        "price_name": price_name,
+        "price_regime": price_regime,
+        "e_day": round(e_day(inst), 4),
+        "sha256": sha,
+    })
     return row

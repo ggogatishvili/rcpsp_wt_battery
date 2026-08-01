@@ -10,6 +10,8 @@ seconds before anything is executed and refuses to proceed if the estimate
 exceeds WALL_CLOCK_BUDGET_H * N_WORKERS. Change the profile, not the scripts.
 """
 
+from typing import TypedDict
+
 # ----------------------------------------------------------------------------
 # 0. Machine / budget
 # ----------------------------------------------------------------------------
@@ -31,13 +33,24 @@ MASTER_SEED = 20260801
 # "full"     ~3200 core-h — the design described in EXPERIMENTAL_PLAN.md
 PROFILE = "full"
 
-_PROFILES = {
-    "pilot":    dict(sizes=[2, 4],           reps=2,  core_draws=2, e3_draws=4,
-                     seeds=2, e3_shops=12, e3_synth_draws=1),
-    "moderate": dict(sizes=[1, 2, 4, 8],     reps=6,  core_draws=3, e3_draws=12,
-                     seeds=3, e3_shops=48, e3_synth_draws=1),
-    "full":     dict(sizes=[1, 2, 4, 8, 16], reps=10, core_draws=5, e3_draws=20,
-                     seeds=5, e3_shops=90, e3_synth_draws=1),
+
+class _Profile(TypedDict):
+    sizes: list[int]
+    reps: int
+    core_draws: int
+    e3_draws: int
+    seeds: int
+    e3_shops: int
+    e3_synth_draws: int
+
+
+_PROFILES: dict[str, _Profile] = {
+    "pilot":    {"sizes": [2, 4],           "reps": 2,  "core_draws": 2, "e3_draws": 4,
+                "seeds": 2, "e3_shops": 12, "e3_synth_draws": 1},
+    "moderate": {"sizes": [1, 2, 4, 8],     "reps": 6,  "core_draws": 3, "e3_draws": 12,
+                "seeds": 3, "e3_shops": 48, "e3_synth_draws": 1},
+    "full":     {"sizes": [1, 2, 4, 8, 16], "reps": 10, "core_draws": 5, "e3_draws": 20,
+                "seeds": 5, "e3_shops": 90, "e3_synth_draws": 1},
 }
 P = _PROFILES[PROFILE]
 
@@ -97,14 +110,16 @@ E3_DRAWS_PER_REGIME = P["e3_draws"]
 
 # Spot windows actually *used* per experiment (contractual tariffs always
 # contribute exactly one series each). Must be <= CORE_DRAWS_PER_REGIME.
-SPOT_SERIES_PER_EXP = {"E0": 1, "E1": 3, "E2": 3, "E4": 1}
+SPOT_SERIES_PER_EXP = {"E0": 1, "E1": 3, "E2": 3, "E4": 1, "E6": 1}
 
 # Seeds per experiment for the stochastic methods. E2 sweeps seven capacities
 # and is the most expensive cell, so it runs fewer seeds; its quantity of
 # interest (the shape of the savings curve) is averaged over 450 instances and
-# does not need five seeds each.
+# does not need five seeds each. E6 sweeps two full factor grids on top of the
+# instance/regime plane (see §7), so it follows the plan's default assumption
+# of a single seed per cell rather than P["seeds"].
 SEEDS_PER_EXP = {"E0": P["seeds"], "E1": P["seeds"], "E2": max(1, P["seeds"] - 2),
-                 "E3": P["seeds"], "E4": P["seeds"]}
+                 "E3": P["seeds"], "E4": P["seeds"], "E6": 1}
 
 # Spot regimes are defined by terciles of the mean intra-day spread of every
 # candidate window, computed over the source year.
@@ -114,8 +129,8 @@ SPOT_REGIMES = ["spot_lowvol", "spot_midvol", "spot_highvol"]
 # price no configuration can create arbitrage value, so any measured saving
 # bounds the resolution of every other result in the study.
 CONTRACTUAL = {
-    "flat":  dict(kind="flat"),
-    "tou2":  dict(kind="two_block", peak_hours=(8, 20), peak_ratio=1.6),
+    "flat":  {"kind": "flat"},
+    "tou2":  {"kind": "two_block", "peak_hours": (8, 20), "peak_ratio": 1.6},
 }
 
 # Synthetic controlled family (E3). Orthogonal variation of the three price
@@ -143,8 +158,8 @@ BATTERY_ON_RATIO = 1.0        # the "battery installed" level used by E1/E3/E4
 
 # Scheduling policy: EDD (H1/GA) vs price-aware (H1P/GAP).
 POLICIES = {
-    "edd":         dict(method_h="H1",  method_ga="GA",  flags=[]),
-    "price_aware": dict(method_h="H1P", method_ga="GAP", flags=["--phase1-price-aware"]),
+    "edd":         {"method_h": "H1",  "method_ga": "GA",  "flags": []},
+    "price_aware": {"method_h": "H1P", "method_ga": "GAP", "flags": ["--phase1-price-aware"]},
 }
 
 # State policy (E1 sigma dimension). BLOCKED: requires solver support for
@@ -152,9 +167,9 @@ POLICIES = {
 # generator probes `solver --help` for "--states" and silently omits these
 # cells until the flag exists, so the design does not need editing later.
 STATE_POLICIES = {
-    "sigma3": dict(flag=None,                    blocked=False),  # full model, current behaviour
-    "sigma2": dict(flag="--states=proc,idle",    blocked=True),
-    "sigma1": dict(flag="--states=proc",         blocked=True),
+    "sigma3": {"flag": None,                    "blocked": False},  # full model, current behaviour
+    "sigma2": {"flag": "--states=proc,idle",    "blocked": True},
+    "sigma1": {"flag": "--states=proc",         "blocked": True},
 }
 
 SEEDS = list(range(1, P["seeds"] + 1))   # GA/GAP are stochastic; H1/H1P/MILP are not
@@ -188,6 +203,62 @@ ENABLED = {
     "E2": True,    # storage sizing
     "E3": True,    # tariff regimes
     "E4": True,    # service-energy frontier
-    "E6": False,   # BLOCKED: needs C2/C3/C4 (machine profile, efficiency, C-rate)
+    "E6": True,    # machine profile / battery efficiency / C-rate (needs C2/C3/C4)
     "E7": False,   # BLOCKED: needs C7 (re-costing mode) and C8 (baseline policies)
 }
+
+# ----------------------------------------------------------------------------
+# 7. E6 factors — machine profile (C2), battery efficiency (C3), C-rate (C4)
+# ----------------------------------------------------------------------------
+# These three solver capabilities landed after the rest of this design; none
+# of them are baked into instance files (unlike EI density, tau or lambda), so
+# E6 needs no new instances — it reuses the existing E3 stratified 90-shop
+# subset (B_scr) crossed with CORE_REGIMES, and only adds solver flags.
+#
+# The run-budget line in EXPERIMENTAL_PLAN.md ("12 machine x 2 beta, + 16
+# battery") is a SUM of two independent sub-designs, not one cross-product:
+#   E6a - machine substitution map: (rho, restart) grid x policy, on-battery
+#   E6b - C-rate retention:         (round-trip eff, C-rate) grid, price-aware
+# 12 x 2 x 90 x 3 x 1 seed = 6480, 16 x 1 x 90 x 3 x 1 seed = 4320,
+# 6480 + 4320 = 10800, matching the plan's "~10 800" figure.
+#
+# CALIBRATION WARNING: the archetype numbers below (rho levels, restart
+# time/cost, efficiency/C-rate levels) are the same "invented, needs a
+# citable source" placeholders EXPERIMENTAL_PLAN.md §3.3 flags — swap them
+# for published machine energy-profile data before quoting E6 results.
+
+# e_proc is held fixed at lib/generate.py's E_PROC reference (4.0); only
+# e_idle (via rho) and the Off->Proc restart penalty vary. If e_proc is ever
+# added to this grid, e_day() in lib/generate.py must be recomputed per cell,
+# or every BATTERY_RATIOS / BATTERY_ON_RATIO figure silently changes meaning
+# for those runs — see the E_PROC comment there.
+E_PROC_REF = 4.0
+RHO_LEVELS = [0.0, 0.25, 0.5, 0.75]      # e_idle / e_proc -- archetypes A5, A1, A2, A4
+
+RESTART_LEVELS = {                        # Off->Proc transition {time, cost}
+    "low":  {"time": 1, "cost": 2},       # archetype A1-like
+    "med":  {"time": 2, "cost": 5},       # archetype A2 (current solver default)
+    "high": {"time": 3, "cost": 10},      # archetype A3-like
+}
+
+# Round-trip efficiency eta_c * eta_d (EXPERIMENTAL_PLAN.md §3.4). Split
+# symmetrically since the solver takes charging/discharging efficiency as two
+# separate parameters, not one round-trip figure.
+ROUNDTRIP_EFFICIENCY_LEVELS = [0.75, 0.85, 0.95, 1.0]
+C_RATE_LEVELS = [0.25, 0.5, 1.0, float("inf")]   # infinity = uncapped (--c-rate omitted)
+
+
+def machine_profile_args(rho: float, restart: str) -> list[str]:
+    """Solver flags for one (rho, restart) E6a cell."""
+    r = RESTART_LEVELS[restart]
+    return ["--e-proc", str(E_PROC_REF), "--e-idle", str(round(rho * E_PROC_REF, 4)),
+            "--off-proc-time", str(r["time"]), "--off-proc-cost", str(r["cost"])]
+
+
+def battery_profile_args(roundtrip_eff: float, c_rate: float) -> list[str]:
+    """Solver flags for one (round-trip efficiency, C-rate) E6b cell."""
+    eta = roundtrip_eff ** 0.5
+    args = ["--charging-efficiency", f"{eta:.6f}", "--discharging-efficiency", f"{eta:.6f}"]
+    if c_rate != float("inf"):
+        args += ["--c-rate", str(c_rate)]
+    return args

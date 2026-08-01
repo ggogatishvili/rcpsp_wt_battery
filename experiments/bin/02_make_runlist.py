@@ -24,19 +24,18 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import subprocess
 import sys
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import design                     # noqa: E402
-from lib.rcpsp_io import read_extended        # noqa: E402
-from lib.generate import battery_arg          # noqa: E402
+from config import design
 
-import os
 DATA = Path(os.environ.get("RCPSP_EXP_DATA", ROOT / "data"))
 DEFAULT_SOLVER = ROOT.parent / "build" / "rcpsp_wt_battery"
 
@@ -47,7 +46,7 @@ def probe(solver: Path) -> set[str]:
         launcher = ([sys.executable, str(solver)] if str(solver).endswith(".py")
                     else [str(solver)])
         out = subprocess.run(launcher + ["--help"], capture_output=True,
-                             text=True, timeout=60)
+                             text=True, timeout=60, check=False)
         text = (out.stdout or "") + (out.stderr or "")
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"WARNING: could not probe solver ({exc}); assuming current feature set")
@@ -69,24 +68,24 @@ def main() -> int:
     if not man:
         print("FATAL: run 01_build_instances.py first", file=sys.stderr)
         return 1
-    by_name = {r["instance"]: r for r in man}
     flags = probe(args.solver)
     print(f"solver flags detected: {len(flags)}")
 
     # Battery arguments need E_day, which is in the manifest.
     def barg(row: dict, ratio: float) -> int:
-        return max(0, int(round(ratio * float(row["e_day"]))))
+        return max(0, round(ratio * float(row["e_day"])))
 
     runs: list[dict] = []
     blocked: list[dict] = []
 
     def add(exp: str, row: dict, method: str, ratio: float, policy: str,
-            state: str, seed: int | None, extra: list[str]) -> None:
+            state: str, seed: int | None, extra: list[str],
+            tag: str = "", extra_cols: dict | None = None) -> None:
         spec = design.STATE_POLICIES[state]
         if spec["flag"] and spec["flag"].split("=")[0] not in flags:
-            blocked.append(dict(experiment=exp, instance=row["instance"],
-                                method=method, state_policy=state,
-                                reason=f"solver lacks {spec['flag'].split('=')[0]} (item C1)"))
+            blocked.append({"experiment": exp, "instance": row["instance"],
+                            "method": method, "state_policy": state,
+                            "reason": f"solver lacks {spec['flag'].split('=')[0]} (item C1)"})
             return
         b = barg(row, ratio)
         tl = design.TL[method]
@@ -101,17 +100,21 @@ def main() -> int:
             argv.append(spec["flag"])
         argv += extra
         rid = "__".join([exp, row["instance"], method, policy, state,
-                         f"b{ratio:g}", f"s{seed if seed is not None else 0}"])
-        runs.append(dict(
-            run_id=rid, experiment=exp, instance=row["instance"],
-            instance_path=row["path"], method=method, policy=policy,
-            state_policy=state, battery_ratio=ratio, battery_arg=b,
-            seed=seed if seed is not None else "", time_limit=tl,
-            size_class=row["size_class"], ei_density_level=row["ei_density_level"],
-            due_tightness_level=row["due_tightness_level"], lam=row["lam"],
-            price_name=row["price_name"], price_regime=row["price_regime"],
-            argv="\t".join(argv),
-        ))
+                         f"b{ratio:g}", f"s{seed if seed is not None else 0}"]
+                        + ([tag] if tag else []))
+        run = {
+            "run_id": rid, "experiment": exp, "instance": row["instance"],
+            "instance_path": row["path"], "method": method, "policy": policy,
+            "state_policy": state, "battery_ratio": ratio, "battery_arg": b,
+            "seed": seed if seed is not None else "", "time_limit": tl,
+            "size_class": row["size_class"], "ei_density_level": row["ei_density_level"],
+            "due_tightness_level": row["due_tightness_level"], "lam": row["lam"],
+            "price_name": row["price_name"], "price_regime": row["price_regime"],
+            "argv": "\t".join(argv),
+        }
+        if extra_cols:
+            run.update(extra_cols)
+        runs.append(run)
 
     def in_subset(r: dict, tag: str) -> bool:
         return tag in r["subset"].split(",")
@@ -123,7 +126,7 @@ def main() -> int:
     def is_det(method: str) -> bool:
         return method in ("H1", "H1P", "MILP")
 
-    def seeds_for(method: str, exp: str) -> list[int | None]:
+    def seeds_for(method: str, exp: str) -> Sequence[int | None]:
         if is_det(method):
             return [None]
         k = design.SEEDS_PER_EXP.get(exp, len(design.SEEDS))
@@ -191,6 +194,53 @@ def main() -> int:
                 for s in seeds_for("GAP", "E4"):
                     add("E4", r, "GAP", ratio, "price_aware", "sigma3", s, [])
 
+    # ---- E6: machine profile (C2) / battery efficiency (C3) / C-rate (C4) --
+    # No new instances: none of these three parameters are baked into the
+    # instance file, so E6 reuses E3's stratified 90-shop subset (B_scr)
+    # crossed with CORE_REGIMES (flat, tou2, one spot_midvol window) and only
+    # adds solver flags. Two independent sub-designs, summed per
+    # EXPERIMENTAL_PLAN.md's run-budget line — see design.py §7 for why.
+    if design.ENABLED["E6"]:
+        e6_flags_needed = {"--e-proc", "--off-proc-time", "--charging-efficiency", "--c-rate"}
+        missing = e6_flags_needed - flags
+        if missing:
+            blocked.append({"experiment": "E6", "instance": "", "method": "", "state_policy": "",
+                            "reason": f"solver lacks {sorted(missing)} (items C2/C3/C4)"})
+        else:
+            e6_shop_ids = {r["shop_id"] for r in e3} or {r["shop_id"] for r in core}
+            pool = [r for r in core
+                    if r["shop_id"] in e6_shop_ids
+                    and r["price_regime"] in design.CORE_REGIMES
+                    and series_ok(r, "E6")]
+
+            # E6a: machine substitution map -- (rho, restart) grid x policy, battery on
+            for r in pool:
+                for rho in design.RHO_LEVELS:
+                    for restart in design.RESTART_LEVELS:
+                        machine_args = design.machine_profile_args(rho, restart)
+                        for pol, spec in design.POLICIES.items():
+                            method = spec["method_ga"]
+                            for s in seeds_for(method, "E6"):
+                                add("E6", r, method, design.BATTERY_ON_RATIO, pol, "sigma3", s,
+                                    machine_args, tag=f"mach_rho{rho:g}_{restart}",
+                                    extra_cols={"e6_subdesign": "machine", "rho": rho,
+                                               "restart_level": restart,
+                                               "roundtrip_eff": "", "c_rate": ""})
+
+            # E6b: C-rate retention -- (round-trip efficiency, C-rate) grid, price-aware only
+            for r in pool:
+                for eff in design.ROUNDTRIP_EFFICIENCY_LEVELS:
+                    for crate in design.C_RATE_LEVELS:
+                        batt_args = design.battery_profile_args(eff, crate)
+                        method = design.POLICIES["price_aware"]["method_ga"]
+                        crate_tag = "inf" if crate == float("inf") else f"{crate:g}"
+                        for s in seeds_for(method, "E6"):
+                            add("E6", r, method, design.BATTERY_ON_RATIO, "price_aware",
+                                "sigma3", s, batt_args, tag=f"batt_eff{eff:g}_c{crate_tag}",
+                                extra_cols={"e6_subdesign": "battery", "rho": "",
+                                           "restart_level": "", "roundtrip_eff": eff,
+                                           "c_rate": crate_tag})
+
     # ---- budget ----------------------------------------------------------
     # Deterministic constructive methods finish far below their time limit;
     # only the metaheuristics and the MILP actually consume their budget.
@@ -214,8 +264,8 @@ def main() -> int:
         *[f"    {k:5s} {v:8d}" for k, v in sorted(by_meth.items())],
         "",
         f"  estimated core-hours   {core_h:10.1f}",
-        f"  available core-hours   {avail_h:10.1f}"
-        f"  ({design.N_WORKERS} workers x {design.WALL_CLOCK_BUDGET_H} h)",
+        (f"  available core-hours   {avail_h:10.1f}"
+         f"  ({design.N_WORKERS} workers x {design.WALL_CLOCK_BUDGET_H} h)"),
         f"  estimated wall-clock   {wall_h:10.1f} h  ({wall_h/24:.2f} days)",
         f"  budget utilisation     {100*core_h/avail_h:10.1f} %",
     ]
@@ -243,9 +293,16 @@ def _write(path: Path, rows: list[dict]) -> None:
         path.write_text("")
         print(f"wrote {path.name} (empty)")
         return
-    cols = list(rows[0].keys())
+    # Union of keys across all rows, not just rows[0]: E6 rows carry extra
+    # columns (rho, restart_level, roundtrip_eff, c_rate) that E0-E4 rows
+    # don't, and DictWriter errors on a row with a key outside fieldnames.
+    cols: list[str] = []
+    for r in rows:
+        for c in r:
+            if c not in cols:
+                cols.append(c)
     with path.open("w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=cols)
+        w = csv.DictWriter(fh, fieldnames=cols, restval="")
         w.writeheader()
         w.writerows(rows)
     print(f"wrote {path.name} ({len(rows)} rows)")

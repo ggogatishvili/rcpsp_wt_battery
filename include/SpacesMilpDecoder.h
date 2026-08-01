@@ -24,7 +24,6 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "solution.h"
 #include <gurobi_c++.h>
 #include <vector>
-#include <memory>
 
 struct DecoderResult {
    std::vector<int>    startTimes;
