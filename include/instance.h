@@ -22,7 +22,9 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include <fmt/base.h>
 #include <fmt/format.h>
+#include <limits>
 #include <optional>
+#include <string>
 #include <vector>
 #include <numeric>
 #include <gurobi_c++.h>
@@ -31,6 +33,28 @@ enum class State : int {
     Off  = 0,
     Proc = 1,
     Idle = 2
+};
+
+// Machine energy/transition profile (C2 in experiments/STATUS.md).
+// Defaults reproduce the values that used to be hardcoded in this file —
+// archetype "A2" in EXPERIMENTAL_PLAN.md §3.3.
+//
+// A transition duration of 0 is used elsewhere (SolverMILP::getDuration,
+// SpacesMilpDecoder) as a sentinel meaning "this transition does not
+// exist", so all four durations here must stay >= 1.
+struct MachineProfile {
+   double eProc = 4;
+   double eIdle = 2;
+   double eOff  = 0;
+
+   struct { int time = 2; double cost = 5;   } offProc;
+   struct { int time = 1; double cost = 1;   } procOff;
+   struct { int time = 1; double cost = 2;   } procIdle;
+   struct { int time = 1; double cost = 2.5; } idleProc;
+
+   // Loads a profile from a JSON file; any field absent from the file keeps
+   // its default above. Throws std::runtime_error if the file can't be read.
+   static MachineProfile fromJsonFile(const std::string& path);
 };
 
 inline std::string_view state_name(State s) noexcept {
@@ -109,7 +133,15 @@ class Instance
 {
    public:
       Instance() = default;
-      Instance(const std::string& instancename, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs, int battery_capacity);
+      Instance( const std::string& instancename
+              , const std::vector<int>& _resource_capacities
+              , const std::vector<Task>& _tasks
+              , const std::vector<double>& _costs
+              , const int battery_capacity
+              , const MachineProfile& profile = MachineProfile{}
+              , const double chargingEfficiency = 0.95
+              , const double dischargingEfficiency = 0.95
+              , const double cRate = std::numeric_limits<double>::infinity() );
 
       inline auto instName() const & -> std::string { return instancename; }
       inline auto instName() const && -> std::string { return std::move(instancename); }
@@ -124,7 +156,12 @@ class Instance
 
       auto showInstance() const -> void;
 
-      static auto from(const std::string& fileName, int battery_capacity) -> Instance;
+      static auto from(const std::string& fileName, int battery_capacity,
+                        const MachineProfile& profile = MachineProfile{},
+                        double chargingEfficiency = 0.95,
+                        double dischargingEfficiency = 0.95,
+                        double cRate = std::numeric_limits<double>::infinity(),
+                        double lambda = 1.0) -> Instance;
 
       inline auto cumulative_cost(const int start, const int length) const -> double
       {
@@ -176,43 +213,48 @@ class Instance
          return tasks[j].is_ei_task();
       }
 
-      // Transition costs & durations
-      const struct {
+      // Transition costs & durations (overridable via MachineProfile, C2 —
+      // see experiments/STATUS.md). Defaults match archetype A2.
+      struct {
          int time = 1;
          double cost = 1;
       } procOff;
 
-      const struct {
+      struct {
          int time = 2;
          double cost = 5;
       } offProc;
 
-      const struct {
+      struct {
          int time = 1;
          double cost = 2;
       } procIdle;
 
-      const struct {
+      struct {
          int time = 1;
          double cost = 2.5;
       } idleProc;
 
-      const struct {
-         int cost = 4;
+      struct {
+         double cost = 4;
       } Proc;
 
-      const struct {
-         int cost = 0;
+      struct {
+         double cost = 0;
       } Off;
 
-      const struct {
-         int cost = 2;
+      struct {
+         double cost = 2;
       } Idle;
 
       struct {
           double chargingEfficiency = 0.95;
           double dischargingEfficiency = 0.95;
           int batteryCapacity = 16;
+          // Max charge/discharge power, as a multiple of capacity per hour
+          // (C-rate, C4). Infinity = uncapped (legacy behaviour: full
+          // charge/discharge within a single interval).
+          double cRate = std::numeric_limits<double>::infinity();
       } Battery;
 
       std::vector<int> resource_capacities;

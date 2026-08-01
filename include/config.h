@@ -21,6 +21,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #pragma once
 
 #include <fmt/base.h>
+#include <limits>
 #include <optional>
 #include <string>
 #include <cstdint>
@@ -101,7 +102,32 @@ public:
     // Battery capacity: in MWh
     inline static int batteryCapacity = 16;
 
+    // Machine energy/transition profile (C2). Defaults reproduce the
+    // values that used to be hardcoded in instance.h — archetype "A2" in
+    // EXPERIMENTAL_PLAN.md §3.3. Overridable via --machine-profile <json>
+    // and/or the individual flags below (individual flags win over the file).
+    inline static std::optional<std::string> machineProfileFile = std::nullopt;
+    inline static double eProc = 4;
+    inline static double eIdle = 2;
+    inline static double eOff  = 0;
+    inline static int    offProcTime  = 2;
+    inline static double offProcCost  = 5;
+    inline static int    procOffTime  = 1;
+    inline static double procOffCost  = 1;
+    inline static int    procIdleTime = 1;
+    inline static double procIdleCost = 2;
+    inline static int    idleProcTime = 1;
+    inline static double idleProcCost = 2.5;
 
+    // Battery charge/discharge efficiency (C3)
+    inline static double chargingEfficiency    = 0.95;
+    inline static double dischargingEfficiency = 0.95;
+    // C-rate (C4): max charge/discharge power as a multiple of capacity per
+    // hour. Default: uncapped (legacy behaviour).
+    inline static double cRate = std::numeric_limits<double>::infinity();
+
+    // Tardiness cost scale (C5): multiplies every task weight on load.
+    inline static double lambda = 1.0;
 
     // GA Parameters
     inline static std::optional<uint32_t> seed = std::nullopt;

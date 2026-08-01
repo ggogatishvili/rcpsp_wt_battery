@@ -43,7 +43,18 @@ int main(int argc, char* argv[])
    rng.reseed(activeSeed);
 
    try {
-      Instance instance = Instance::from(Config::inputFile, Config::batteryCapacity);
+      MachineProfile profile;
+      profile.eProc    = Config::eProc;
+      profile.eIdle    = Config::eIdle;
+      profile.eOff     = Config::eOff;
+      profile.offProc  = { Config::offProcTime,  Config::offProcCost  };
+      profile.procOff  = { Config::procOffTime,  Config::procOffCost  };
+      profile.procIdle = { Config::procIdleTime, Config::procIdleCost };
+      profile.idleProc = { Config::idleProcTime, Config::idleProcCost };
+
+      Instance instance = Instance::from(Config::inputFile, Config::batteryCapacity, profile,
+                                          Config::chargingEfficiency, Config::dischargingEfficiency,
+                                          Config::cRate, Config::lambda);
 
       Clock clock;
       clock.start();

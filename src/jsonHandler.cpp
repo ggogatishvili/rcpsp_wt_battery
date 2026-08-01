@@ -18,6 +18,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 */
 
+#include <cmath>
 #include <fstream>
 #include <vector>
 #include "jsonHandler.h"
@@ -94,6 +95,14 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
     configJson["time_limit"] = Config::timeLimit;
     configJson["alpha"] = Config::alpha;
     configJson["battery_capacity"] = Config::batteryCapacity;
+    configJson["charging_efficiency"] = Config::chargingEfficiency;
+    configJson["discharging_efficiency"] = Config::dischargingEfficiency;
+    configJson["c_rate"] = std::isfinite(Config::cRate) ? nlohmann::json(Config::cRate) : nlohmann::json(nullptr);
+    configJson["lambda"] = Config::lambda;
+    configJson["machine_profile"] = Config::machineProfileFile.value_or("default");
+    configJson["e_proc"] = Config::eProc;
+    configJson["e_idle"] = Config::eIdle;
+    configJson["e_off"]  = Config::eOff;
     json["config"] = configJson;
 
     return json;

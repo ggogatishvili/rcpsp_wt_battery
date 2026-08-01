@@ -24,21 +24,64 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <iostream>
 #include <istream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <precedenceGraph.h>
 #include <sstream>
+#include <stdexcept>
 #include <fmt/format.h>
 #include <string>
 #include <ranges>
 #include "instance.h"
 #include "helpers.h"
 
-Instance::Instance(const std::string& _instance_name, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs, int battery_capacity)
+MachineProfile MachineProfile::fromJsonFile(const std::string& path)
+{
+   std::ifstream file{path};
+   if ( !file.is_open() )
+      throw std::runtime_error(fmt::format("Could not open machine profile file {}", path));
+
+   nlohmann::json j;
+   file >> j;
+
+   MachineProfile p; // starts from the A2 defaults; only overrides what's present
+
+   p.eProc = j.value("e_proc", p.eProc);
+   p.eIdle = j.value("e_idle", p.eIdle);
+   p.eOff  = j.value("e_off",  p.eOff);
+
+   auto readTransition = [&](const char* key, auto& field) {
+      if ( !j.contains(key) ) return;
+      const auto& t = j.at(key);
+      field.time = t.value("time", field.time);
+      field.cost = t.value("cost", field.cost);
+   };
+   readTransition("off_proc",  p.offProc);
+   readTransition("proc_off",  p.procOff);
+   readTransition("proc_idle", p.procIdle);
+   readTransition("idle_proc", p.idleProc);
+
+   return p;
+}
+
+Instance::Instance(const std::string& _instance_name, const std::vector<int>& _resource_capacities, const std::vector<Task>& _tasks, const std::vector<double>& _costs, int battery_capacity,
+                    const MachineProfile& profile, double chargingEfficiency, double dischargingEfficiency, double cRate)
    : instancename(_instance_name)
    , resource_capacities(_resource_capacities)
    , tasks(_tasks)
    , costs(_costs)
-   , Battery{ .batteryCapacity = battery_capacity }
+   , Battery{ .chargingEfficiency = chargingEfficiency, .dischargingEfficiency = dischargingEfficiency, .batteryCapacity = battery_capacity, .cRate = cRate }
 {
+   Proc.cost = profile.eProc;
+   Off.cost  = profile.eOff;
+   Idle.cost = profile.eIdle;
+   offProc  = { profile.offProc.time,  profile.offProc.cost  };
+   procOff  = { profile.procOff.time,  profile.procOff.cost  };
+   procIdle = { profile.procIdle.time, profile.procIdle.cost };
+   idleProc = { profile.idleProc.time, profile.idleProc.cost };
+
+   if ( offProc.time < 1 || procOff.time < 1 || procIdle.time < 1 || idleProc.time < 1 )
+      throw std::runtime_error("Machine profile transition durations must be >= 1 (0 is reserved to mean \"no such transition\").");
+
    // Computation of basic information
    std::ranges::for_each( std::views::iota(0ul, tasks.size())
                         | std::views::filter([this](const auto i) { return tasks[i].is_ei_task(); })
@@ -72,7 +115,9 @@ void Instance::showInstance() const
    }
 }
 
-Instance Instance::from(const std::string& fileName, int battery_capacity)
+Instance Instance::from(const std::string& fileName, int battery_capacity,
+                         const MachineProfile& profile, double chargingEfficiency,
+                         double dischargingEfficiency, double cRate, double lambda)
 {
    std::vector<int> resource_capacities;
    std::vector<Task> tasks;
@@ -117,7 +162,7 @@ Instance Instance::from(const std::string& fileName, int battery_capacity)
 
       int release_date = Helpers::readValue<int>(iss);
       int due_date = Helpers::readValue<int>(iss);
-      auto weight = Helpers::readValue<double>(iss);
+      auto weight = Helpers::readValue<double>(iss) * lambda; // C5: tardiness cost scale
 
       tasks.emplace_back(duration, nbr_resources, resources.get(), nbr_successors, successors.get(), release_date, due_date, weight);
    }
@@ -134,5 +179,5 @@ Instance Instance::from(const std::string& fileName, int battery_capacity)
          costs.push_back(v);
    }
 
-   return Instance { fileName, resource_capacities, tasks, costs, battery_capacity };
+   return Instance { fileName, resource_capacities, tasks, costs, battery_capacity, profile, chargingEfficiency, dischargingEfficiency, cRate };
 }

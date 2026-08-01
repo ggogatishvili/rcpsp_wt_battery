@@ -7,6 +7,7 @@
 #include <gurobi_c.h>
 #include <solution.h>
 #include "SolverH1.h"
+#include <cmath>
 
 using namespace std;
 
@@ -55,10 +56,22 @@ Solution SolverMILP::_solve() {
     }
 
     // Energy and battery
+    // C-rate (C4): caps the battery-side charge/discharge power per interval
+    // at cRate * capacity. gBatt is grid-side (pre charging-efficiency), so
+    // its cap is scaled up accordingly; bMach is already battery-side.
+    const bool   cRateCapped = std::isfinite(ins->Battery.cRate);
+    const double battCap     = static_cast<double>(ins->Battery.batteryCapacity);
+    const double chargeCap   = cRateCapped
+        ? (ins->Battery.cRate * battCap) / ins->Battery.chargingEfficiency
+        : GRB_INFINITY;
+    const double dischargeCap = cRateCapped
+        ? (ins->Battery.cRate * battCap)
+        : GRB_INFINITY;
+
     Loop(i, H) {
         gMach.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("gMach_{}", i)));
-        gBatt.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("gBatt_{}", i)));
-        bMach.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("bMach_{}", i)));
+        gBatt.set(i, model.addVar(0.0, chargeCap, 0.0, GRB_CONTINUOUS, fmt::format("gBatt_{}", i)));
+        bMach.set(i, model.addVar(0.0, dischargeCap, 0.0, GRB_CONTINUOUS, fmt::format("bMach_{}", i)));
         bLevel.set(i, model.addVar(0.0, ins->Battery.batteryCapacity, 0.0, GRB_CONTINUOUS, fmt::format("bLevel_{}", i)));
         eMach.set(i, model.addVar(0.0, GRB_INFINITY, 0.0, GRB_CONTINUOUS, fmt::format("eMach_{}", i)));
     }

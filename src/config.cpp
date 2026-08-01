@@ -18,6 +18,8 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 */
 
+#include <cmath>
+#include <fstream>
 #include <iostream>
 #include <thread>
 #include <boost/program_options/parsers.hpp>
@@ -27,8 +29,39 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include <gurobi_c++.h>
+#include <nlohmann/json.hpp>
 #include "helpers.h"
 #include "config.h"
+
+namespace {
+   // Loads machine-profile fields present in the JSON file into Config's
+   // statics; fields absent from the file keep whatever value they already
+   // have (the A2 defaults, unless a preceding CLI flag already set them).
+   void loadMachineProfileFile(const std::string& path)
+   {
+      std::ifstream file{path};
+      if ( !file.is_open() )
+         throw std::runtime_error(fmt::format("Could not open machine profile file {}", path));
+
+      nlohmann::json j;
+      file >> j;
+
+      Config::eProc = j.value("e_proc", Config::eProc);
+      Config::eIdle = j.value("e_idle", Config::eIdle);
+      Config::eOff  = j.value("e_off",  Config::eOff);
+
+      auto readTransition = [&](const char* key, int& time, double& cost) {
+         if ( !j.contains(key) ) return;
+         const auto& t = j.at(key);
+         time = t.value("time", time);
+         cost = t.value("cost", cost);
+      };
+      readTransition("off_proc",  Config::offProcTime,  Config::offProcCost);
+      readTransition("proc_off",  Config::procOffTime,  Config::procOffCost);
+      readTransition("proc_idle", Config::procIdleTime, Config::procIdleCost);
+      readTransition("idle_proc", Config::idleProcTime, Config::idleProcCost);
+   }
+}
 
 
 GRBEnv& Config::gurobiEnv()
@@ -63,6 +96,32 @@ void Config::fromArgs(const int argc, const char* const argv[])
          fmt::format("Battery capacity (default: {})", batteryCapacity).c_str())
       ("verbose,v",   fmt::format("Verbose mode (default: {})", verbose).c_str())
       ("withStats,w", fmt::format("When verbose mode is false, print stats (default: {})", withStats).c_str())
+
+      // Machine profile (C2)
+      ("machine-profile", po::value<std::string>(),
+         "JSON file with machine energy/transition profile (e_proc, e_idle, e_off, "
+         "off_proc/proc_off/proc_idle/idle_proc {time,cost}); individual flags below override it")
+      ("e-proc", po::value<double>(), fmt::format("Energy cost per unit time in Proc state (default: {})", eProc).c_str())
+      ("e-idle", po::value<double>(), fmt::format("Energy cost per unit time in Idle state (default: {})", eIdle).c_str())
+      ("e-off",  po::value<double>(), fmt::format("Energy cost per unit time in Off state (default: {})", eOff).c_str())
+      ("off-proc-time",  po::value<int>(),    fmt::format("Off->Proc transition duration (default: {})", offProcTime).c_str())
+      ("off-proc-cost",  po::value<double>(), fmt::format("Off->Proc transition energy cost per unit time (default: {})", offProcCost).c_str())
+      ("proc-off-time",  po::value<int>(),    fmt::format("Proc->Off transition duration (default: {})", procOffTime).c_str())
+      ("proc-off-cost",  po::value<double>(), fmt::format("Proc->Off transition energy cost per unit time (default: {})", procOffCost).c_str())
+      ("proc-idle-time", po::value<int>(),    fmt::format("Proc->Idle transition duration (default: {})", procIdleTime).c_str())
+      ("proc-idle-cost", po::value<double>(), fmt::format("Proc->Idle transition energy cost per unit time (default: {})", procIdleCost).c_str())
+      ("idle-proc-time", po::value<int>(),    fmt::format("Idle->Proc transition duration (default: {})", idleProcTime).c_str())
+      ("idle-proc-cost", po::value<double>(), fmt::format("Idle->Proc transition energy cost per unit time (default: {})", idleProcCost).c_str())
+
+      // Battery profile (C3 / C4)
+      ("charging-efficiency",    po::value<double>(), fmt::format("Battery charging efficiency [0-1] (default: {})", chargingEfficiency).c_str())
+      ("discharging-efficiency", po::value<double>(), fmt::format("Battery discharging efficiency [0-1] (default: {})", dischargingEfficiency).c_str())
+      ("c-rate", po::value<double>(),
+         "Battery C-rate: max charge/discharge power as a multiple of capacity per hour (default: uncapped)")
+
+      // Tardiness cost scale (C5)
+      ("lambda", po::value<double>(),
+         fmt::format("Tardiness cost scale, multiplies every task weight on load (default: {})", lambda).c_str())
 
       // GA / MatH shared params
       ("seed,s",    po::value<uint32_t>(), "RNG Seed (default: Random)")
@@ -143,6 +202,32 @@ void Config::fromArgs(const int argc, const char* const argv[])
    if (vm.contains("verbose"))         Config::verbose         = true;
    if (vm.contains("withStats"))       Config::withStats       = true;
 
+   // Machine profile (C2) — load the file first, then apply individual
+   // overrides so a specific flag always wins over the file.
+   if (vm.contains("machine-profile")) {
+      Config::machineProfileFile = vm["machine-profile"].as<std::string>();
+      loadMachineProfileFile(Config::machineProfileFile.value());
+   }
+   if (vm.contains("e-proc")) Config::eProc = vm["e-proc"].as<double>();
+   if (vm.contains("e-idle")) Config::eIdle = vm["e-idle"].as<double>();
+   if (vm.contains("e-off"))  Config::eOff  = vm["e-off"].as<double>();
+   if (vm.contains("off-proc-time"))  Config::offProcTime  = vm["off-proc-time"].as<int>();
+   if (vm.contains("off-proc-cost"))  Config::offProcCost  = vm["off-proc-cost"].as<double>();
+   if (vm.contains("proc-off-time"))  Config::procOffTime  = vm["proc-off-time"].as<int>();
+   if (vm.contains("proc-off-cost"))  Config::procOffCost  = vm["proc-off-cost"].as<double>();
+   if (vm.contains("proc-idle-time")) Config::procIdleTime = vm["proc-idle-time"].as<int>();
+   if (vm.contains("proc-idle-cost")) Config::procIdleCost = vm["proc-idle-cost"].as<double>();
+   if (vm.contains("idle-proc-time")) Config::idleProcTime = vm["idle-proc-time"].as<int>();
+   if (vm.contains("idle-proc-cost")) Config::idleProcCost = vm["idle-proc-cost"].as<double>();
+
+   // Battery profile (C3 / C4)
+   if (vm.contains("charging-efficiency"))    Config::chargingEfficiency    = vm["charging-efficiency"].as<double>();
+   if (vm.contains("discharging-efficiency")) Config::dischargingEfficiency = vm["discharging-efficiency"].as<double>();
+   if (vm.contains("c-rate"))                 Config::cRate                 = vm["c-rate"].as<double>();
+
+   // Tardiness cost scale (C5)
+   if (vm.contains("lambda")) Config::lambda = vm["lambda"].as<double>();
+
    // GA / MatH shared params
    if (vm.contains("seed"))      Config::seed            = vm["seed"].as<uint32_t>();
    if (vm.contains("popSize"))   Config::populationSize  = vm["popSize"].as<int>();
@@ -192,6 +277,10 @@ void Config::showConfig()
    fmt::println("   {:<20}{:<15}", "⍺ value:",          alpha);
    fmt::println("   {:<20}{:<15}", "Verbose mode:",     verbose ? "Yes" : "No");
    fmt::println("   {:<20}{:<15}", "Battery capacity:", batteryCapacity);
+   fmt::println("   {:<20}{:<15}", "Charge/discharge eff:", fmt::format("{:.3f}/{:.3f}", chargingEfficiency, dischargingEfficiency));
+   fmt::println("   {:<20}{:<15}", "C-rate:", std::isfinite(cRate) ? fmt::format("{:.3f}", cRate) : std::string("uncapped"));
+   fmt::println("   {:<20}{:<15}", "Lambda:", lambda);
+   fmt::println("   {:<20}{:<15}", "Machine profile:", machineProfileFile ? *machineProfileFile : std::string("default (A2)"));
    fmt::println("   {:<20}{:<15}", "Version:",          VERSION);
    if (method == ResolutionMethod::H1P || method == ResolutionMethod::GAP
        || phase1PriceAware || phase3LP) {

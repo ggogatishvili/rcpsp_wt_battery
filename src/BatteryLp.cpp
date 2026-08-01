@@ -20,6 +20,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include "BatteryLp.h"
 #include "config.h"
+#include <cmath>
 #include <fmt/base.h>
 
 BatteryLp::BatteryLp(const Instance* ins)
@@ -34,6 +35,11 @@ void BatteryLp::build()
    const double ef_d = ins->Battery.dischargingEfficiency;
    const double bmax = static_cast<double>(ins->Battery.batteryCapacity);
 
+   // C-rate (C4): same bound logic as SolverMILP — see comment there.
+   const bool   cRateCapped  = std::isfinite(ins->Battery.cRate);
+   const double chargeCap    = cRateCapped ? (ins->Battery.cRate * bmax) / ef_c : GRB_INFINITY;
+   const double dischargeCap = cRateCapped ? (ins->Battery.cRate * bmax)        : GRB_INFINITY;
+
    model = std::make_unique<GRBModel>(Config::gurobiEnv());
    model->set(GRB_IntParam_OutputFlag, 0);
    model->set(GRB_IntParam_Threads,    1);
@@ -47,8 +53,8 @@ void BatteryLp::build()
 
    for (int i = 0; i < h; ++i) {
       gMach.push_back(model->addVar(0.0,  GRB_INFINITY, ins->costs[i], GRB_CONTINUOUS, fmt::format("gM_{}", i)));
-      gBatt.push_back(model->addVar(0.0,  GRB_INFINITY, ins->costs[i], GRB_CONTINUOUS, fmt::format("gB_{}", i)));
-      bMach.push_back(model->addVar(0.0,  GRB_INFINITY, 0.0,           GRB_CONTINUOUS, fmt::format("bM_{}", i)));
+      gBatt.push_back(model->addVar(0.0,  chargeCap,    ins->costs[i], GRB_CONTINUOUS, fmt::format("gB_{}", i)));
+      bMach.push_back(model->addVar(0.0,  dischargeCap, 0.0,           GRB_CONTINUOUS, fmt::format("bM_{}", i)));
       bLevel.push_back(model->addVar(0.0, bmax,         0.0,           GRB_CONTINUOUS, fmt::format("bL_{}", i)));
    }
    model->update();
