@@ -144,7 +144,7 @@ public:
     // --phase1-window: max delay window (in time units) when price-aware is on
     inline static int  phase1Window = 24;
     // --phase3-lp: replace greedy battery peak-shaving with an exact Gurobi LP
-    inline static bool phase3LP = false;
+    inline static bool phase3LP = true;
 
     // MatH Parameters
     // Fraction of population re-evaluated with MILP per generation (0 = all H1, 1 = all MILP).
