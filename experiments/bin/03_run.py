@@ -50,6 +50,23 @@ LOGS = DATA / "logs"
 
 TIMEOUT_MARGIN = 120        # seconds of grace beyond --tl before SIGKILL
 
+# One thread per instance, enforced here rather than trusting the solver.
+# --thl 1 (already in every argv, see design.THREADS_PER_RUN) only bounds
+# Gurobi's own thread count (SolverMILP.cpp); it does nothing for the TBB
+# pool ParadisEO uses for GA/GAP, which defaults to hardware_concurrency()
+# threads with no env-var override. With N_WORKERS parallel processes that
+# oversubscribes the box badly, so every subprocess is pinned to exactly one
+# CPU core via taskset -- that caps it regardless of what runs inside it.
+# taskset is Linux-only (util-linux); on other platforms (e.g. this may be
+# tested on macOS) pinning is silently skipped and only the env-var caps
+# below apply.
+TASKSET = shutil.which("taskset")
+SINGLE_THREAD_ENV = {
+    **os.environ,
+    "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1",
+}
+
 _stop = False
 
 
@@ -95,16 +112,18 @@ def _sha(p: Path) -> str:
         return ""
 
 
-def run_one(row: dict) -> dict:
+def run_one(row: dict, core: int | None) -> dict:
     rid = row["run_id"]
     out_json = RESULTS / f"{rid}.json"
     argv = row["argv"].split("\t") + ["-o", str(out_json)]
+    if TASKSET and core is not None:
+        argv = [TASKSET, "-c", str(core)] + argv
     tl = int(row["time_limit"])
     t0 = time.time()
     status, rc, err = "ok", 0, ""
     try:
         proc = subprocess.run(argv, capture_output=True, text=True,
-                              timeout=tl + TIMEOUT_MARGIN)
+                              timeout=tl + TIMEOUT_MARGIN, env=SINGLE_THREAD_ENV)
         rc = proc.returncode
         if rc != 0:
             status, err = "error", (proc.stderr or "")[-2000:]
@@ -166,6 +185,7 @@ def main() -> int:
     free_gb = shutil.disk_usage(DATA).free / 1e9
     print(f"runlist {len(rows)}  already done {len(rows)-len(todo)}  todo {len(todo)}")
     print(f"workers {args.workers}   free disk {free_gb:.1f} GB")
+    print(f"CPU pinning: {'taskset -c <core>, 1 core per worker slot' if TASKSET else 'DISABLED (taskset not found on this platform)'}")
     if free_gb < 20:
         print("WARNING: less than 20 GB free; solution JSONs will fill it")
 
@@ -186,17 +206,23 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {}
         it = iter(todo)
-        # Prime the pool, then feed lazily so an interrupt does not have to
-        # drain a 250k-element future map.
-        for _ in range(min(args.workers * 2, len(todo))):
+        # Each concurrent slot keeps the same core for its whole lifetime: a
+        # replacement submitted after a slot's task completes reuses that
+        # exact core, so at most `args.workers` distinct cores are ever
+        # pinned at once, matching the executor's own concurrency cap. Prime
+        # exactly one task per slot (not 2x) -- assigning a core to more than
+        # `args.workers` in-flight-or-queued tasks would let two of them run
+        # concurrently on the same core, since completion order isn't
+        # submission order.
+        for core in range(min(args.workers, len(todo))):
             try:
                 r = next(it)
             except StopIteration:
                 break
-            futures[ex.submit(run_one, r)] = r
+            futures[ex.submit(run_one, r, core)] = (r, core)
         while futures:
             for fut in as_completed(list(futures), timeout=None):
-                r = futures.pop(fut)
+                r, core = futures.pop(fut)
                 meta = fut.result()
                 done += 1
                 if meta["status"] != "ok":
@@ -211,7 +237,7 @@ def main() -> int:
                 if not _stop:
                     try:
                         nxt = next(it)
-                        futures[ex.submit(run_one, nxt)] = nxt
+                        futures[ex.submit(run_one, nxt, core)] = (nxt, core)
                     except StopIteration:
                         pass
                 break
