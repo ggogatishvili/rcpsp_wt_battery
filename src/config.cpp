@@ -99,7 +99,7 @@ void Config::fromArgs(const int argc, const char* const argv[])
       ("phase1-price-aware", "Enable price-aware EI delay in Phase 1 (H1P / GAP)")
       ("phase1-window", po::value<int>(),
          fmt::format("Max delay window for price-aware Phase 1 (default: {})", phase1Window).c_str())
-      ("phase3-lp", "Replace greedy Phase 3 with exact battery LP (H1P / GAP)")
+      ("phase3-lp", fmt::format("Replace greedy Phase 3 with exact battery LP (H1P / GAP) (default: {})", phase3LP).c_str())
 
       // MatH params
       ("mathEliteRatio", po::value<double>(),
