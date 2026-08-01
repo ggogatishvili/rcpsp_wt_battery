@@ -56,7 +56,7 @@ public:
         }
 
         // Crossover delays
-        if (crossoverDelays) {
+        if (crossoverDelays && N_EI > 0) {
             int cut = rng.random(N_EI - 1) + 1;
             for (int tEI = cut; tEI < N_EI; tEI++) {
                 std::swap(chrom1[N + tEI], chrom2[N + tEI]);

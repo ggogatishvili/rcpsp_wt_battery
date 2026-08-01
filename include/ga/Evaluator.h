@@ -3,10 +3,12 @@
 #include <eo>
 #include <eoEvalFunc.h>
 #include <chrono>
+#include <optional>
 #include <vector>
 #include "../SolverGA.h"
 #include "../SolverH1.h"
 #include "../config.h"
+#include "BatteryLp.h"
 
 
 using namespace std;
@@ -16,10 +18,16 @@ typedef eoReal<double> Chromosome;
 
 class Evaluator : public eoEvalFunc<Chromosome> {
 public:
-    inline Evaluator(const Instance* const instance, SolverGA& solverGA, SolverH1& solverH1)
-        : H(instance->maxDuration()), N(instance->nbr_tasks()), N_EI(instance->nbr_ei_tasks()),
-          solverGA(solverGA), solverH1(solverH1),
-          startTime(chrono::steady_clock::now()) {}
+    inline Evaluator( const Instance* const instance, SolverGA& solverGA
+                    , SolverH1& solverH1, bool useLp = true )
+        : ins(instance)
+        , H(instance->maxDuration())
+        , N(instance->nbr_tasks())
+        , N_EI(instance->nbr_ei_tasks())
+        , solverGA(solverGA)
+        , solverH1(solverH1)
+        , useLp(useLp)
+        , startTime(chrono::steady_clock::now()) {}
 
     inline void operator()(Chromosome& chrom) override {
         auto now = chrono::steady_clock::now();
@@ -36,7 +44,17 @@ public:
             vector<MachineBlock> machineBlocks = solverH1.scheduleMachineUsage(startTimes, solverGA.cachedSPACESGraph);
             solverH1.optimizeMachineBlocks(machineBlocks);
             const vector<double> energyRequirements = solverH1.getEnergyRequirements(machineBlocks);
-            const vector<double> batteryLevels = solverH1.scheduleBatteryUsage(energyRequirements);
+            vector<double> batteryLevels;
+            if (useLp) {
+                thread_local std::optional<BatteryLp> tlBattLp;
+                thread_local const Instance* tlIns = nullptr;
+                if (tlIns != ins) { tlBattLp.emplace(ins); tlIns = ins; }
+                auto opt = tlBattLp->solve(energyRequirements);
+                batteryLevels = opt ? std::move(*opt)
+                                    : solverH1.scheduleBatteryUsage(energyRequirements);
+            } else {
+                batteryLevels = solverH1.scheduleBatteryUsage(energyRequirements);
+            }
 
             const double tardinessCost = solverH1.computeTardinessCost(startTimes);
             const double energyCost = solverH1.computeEnergyCost(energyRequirements, batteryLevels);
@@ -50,10 +68,12 @@ public:
     }
 
 private:
-    const int H; // Planning horizon (max duration of the instance)
-    const int N; // Number of tasks
-    const int N_EI; // Number of energy intensive tasks
+    const Instance* ins;
+    const int H;
+    const int N;
+    const int N_EI;
     SolverGA& solverGA;
     SolverH1& solverH1;
+    bool useLp;
     chrono::steady_clock::time_point startTime;
 };

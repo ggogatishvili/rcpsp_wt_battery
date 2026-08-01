@@ -25,8 +25,7 @@ class SolverMILP
       }
 
    private:
-      std::unique_ptr<GRBEnv> env; // Pointer to the Gurobi environment
-      const Instance* ins; // Pointer to the instance to solve
+      const Instance* ins;
 
 
       Solution _solve();

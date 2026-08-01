@@ -25,7 +25,11 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <string>
 #include <cstdint>
 
-#define VERSION "1.0.0"
+// Forward declaration — avoids pulling <gurobi_c++.h> into every TU.
+// Callers that use the returned reference must include <gurobi_c++.h> themselves.
+class GRBEnv;
+
+#define VERSION "1.1.0"
 
 class Config
 {
@@ -35,7 +39,9 @@ public:
     {
         MILP,
         H1,
+        H1P,
         GA,
+        GAP,
         MatH,
         None
     };
@@ -45,11 +51,17 @@ public:
         switch ( method ) {
             case ResolutionMethod::MILP: return "MILP";
             case ResolutionMethod::H1:   return "H1";
+            case ResolutionMethod::H1P:  return "H1P";
             case ResolutionMethod::GA:   return "GA";
+            case ResolutionMethod::GAP:  return "GAP";
             case ResolutionMethod::MatH: return "MatH";
             default:                     return "None";
         }
     }
+
+    // Process-wide Gurobi environment — created on first call, destroyed at exit.
+    // All GRBModel objects must be built from this env.
+    static GRBEnv& gurobiEnv();
 
     // Displays current configuration
     static void showConfig();
@@ -126,6 +138,14 @@ public:
     // Delay Shift Magnitude
     inline static double mutDelayShiftMag = 0.01;
 
+    // H1P / GAP Parameters
+    // --phase1-price-aware: pick EI start time that minimises energy+tardiness cost
+    inline static bool phase1PriceAware = false;
+    // --phase1-window: max delay window (in time units) when price-aware is on
+    inline static int  phase1Window = 24;
+    // --phase3-lp: replace greedy battery peak-shaving with an exact Gurobi LP
+    inline static bool phase3LP = false;
+
     // MatH Parameters
     // Fraction of population re-evaluated with MILP per generation (0 = all H1, 1 = all MILP).
     // Recommended: 0.05–0.10; the MILP is far slower than H1.
@@ -150,20 +170,13 @@ struct fmt::formatter<Config::ResolutionMethod> : formatter<string_view>
     {
         string_view name = "unknown";
         switch ( method ) {
-            case Config::ResolutionMethod::MILP:
-                name = "MILP";
-                break;
-            case Config::ResolutionMethod::H1:
-                name = "H1";
-                break;
-            case Config::ResolutionMethod::GA:
-                name = "GA";
-                break;
-            case Config::ResolutionMethod::MatH:
-                name = "MatH";
-                break;
-            default:
-                break;
+            case Config::ResolutionMethod::MILP: name = "MILP"; break;
+            case Config::ResolutionMethod::H1:   name = "H1";   break;
+            case Config::ResolutionMethod::H1P:  name = "H1P";  break;
+            case Config::ResolutionMethod::GA:   name = "GA";   break;
+            case Config::ResolutionMethod::GAP:  name = "GAP";  break;
+            case Config::ResolutionMethod::MatH: name = "MatH"; break;
+            default: break;
         }
         return formatter<string_view>::format(name, ctx);
     }

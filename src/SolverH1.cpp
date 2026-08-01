@@ -1,4 +1,7 @@
 #include "SolverH1.h"
+#include "BatteryLp.h"
+#include "config.h"
+#include "helpers.h"
 #include <algorithm>
 #include <vector>
 #include <fmt/base.h>
@@ -12,8 +15,10 @@ SolverH1::SolverH1(const Instance* const instance)
 
 Solution SolverH1::_solve() {
     try {
-        // Phase 1
-        vector<int> startTimes = scheduleTasks();
+        // Phase 1 (price-aware if flag is set)
+        vector<int> startTimes = Config::phase1PriceAware
+            ? scheduleTasks(true, Config::phase1Window)
+            : scheduleTasks();
 
         // Phase 2
         vector<MachineBlock> machineBlocks = scheduleMachineUsage(startTimes);
@@ -23,7 +28,14 @@ Solution SolverH1::_solve() {
 
         // Phase 3
         vector<double> energyRequirements = getEnergyRequirements(machineBlocks);
-        vector<double> batteryLevels = scheduleBatteryUsage(energyRequirements);
+        vector<double> batteryLevels;
+        if (Config::phase3LP) {
+            BatteryLp battLp(ins);
+            auto opt = battLp.solve(energyRequirements);
+            batteryLevels = opt ? std::move(*opt) : scheduleBatteryUsage(energyRequirements);
+        } else {
+            batteryLevels = scheduleBatteryUsage(energyRequirements);
+        }
 
 
         auto tardinessCost = computeTardinessCost(startTimes);
@@ -75,6 +87,26 @@ vector<int> SolverH1::scheduleTasks() {
 }
 
 vector<int> SolverH1::scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays) {
+    return scheduleTasks(priorities, eiDelays, false, 0);
+}
+
+vector<int> SolverH1::scheduleTasks(bool priceAware, int wMax) {
+    vector<pair<double,int>> metrics;
+    metrics.reserve(N);
+    for (int task = 0; task < N; task++)
+        metrics.emplace_back(ins->tasks[task].get_due_date(), task);
+    sort(metrics.begin(), metrics.end());
+
+    vector<double> priorities(N);
+    for (int t = 0; t < N; t++)
+        priorities[metrics[t].second] = 1.0 - (static_cast<double>(t) / (N - 1));
+
+    vector<int> eiDelays(ins->nbr_ei_tasks(), 0);
+    return scheduleTasks(priorities, eiDelays, priceAware, wMax);
+}
+
+vector<int> SolverH1::scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays,
+                                     bool priceAware, int wMax) {
     vector<int> startTimes(N, -1);
     vector<int> earliestStartTimes(N);
     vector<int> remainingPredecessors(N, 0);
@@ -147,6 +179,20 @@ vector<int> SolverH1::scheduleTasks(const vector<double>& priorities, const vect
             // Select a task to schedule
             auto selectedTask = selectTaskToSchedule(currentTime, lastEiTaskEnd, availableTasks, priorities);
 
+            // Price-aware delay: EI tasks that begin a new cluster may be postponed
+            // to a cheaper energy window within [currentTime, currentTime+wMax].
+            if (priceAware && ins->is_ei_task(selectedTask) && currentTime > lastEiTaskEnd + 1) {
+                int bestStart = findBestEIStart(selectedTask, currentTime, wMax,
+                                                lastEiTaskEnd, availableResources);
+                if (bestStart > currentTime) {
+                    earliestStartTimes[selectedTask] = bestStart;
+                    availableTasks.erase(
+                        remove(availableTasks.begin(), availableTasks.end(), selectedTask),
+                        availableTasks.end());
+                    continue;
+                }
+            }
+
             // Schedule the selected task
             startTimes[selectedTask] = currentTime;
             scheduledCount++;
@@ -199,6 +245,65 @@ vector<int> SolverH1::scheduleTasks(const vector<double>& priorities, const vect
     }
 
     return startTimes;
+}
+
+int SolverH1::findBestEIStart(int task, int t0, int wMax, int lastEiEnd,
+                               const vector<vector<int>>& availableResources) const {
+    const int    p   = ins->getProcessingTime(task);
+    const int    due = ins->tasks[task].get_due_date();
+    const double w   = ins->tasks[task].get_weight();
+
+    // Latest start keeping tardiness zero (only if t0 is already on-time).
+    const int horizonUB = H - 1 - ins->procOff.time - p;
+    const int dueUB     = (t0 + p - 1 <= due) ? (due - p + 1) : t0;
+    const int wUB       = std::min({t0 + wMax, horizonUB, dueUB});
+
+    if (wUB <= t0) return t0;
+
+    // Cost estimate for EI task starting at s.
+    // Includes: Proc execution energy, tardiness, Off->Proc transition energy.
+    // Bridge hold (Off state, cost=0) is dominant over Idle; both included via min.
+    auto estimateCost = [&](int s) -> double {
+        const double execCost = static_cast<double>(ins->Proc.cost)
+                              * ins->cumulative_cost(s, p);
+        const double tardCost = w * static_cast<double>(std::max(0, s + p - 1 - due));
+        // Off->Proc transition arriving just as task starts
+        const int    ts       = s - ins->offProc.time;
+        const double transCost = (ts >= 0)
+            ? static_cast<double>(ins->offProc.cost)
+              * ins->cumulative_cost(ts, ins->offProc.time)
+            : 0.0;
+        // Bridge gap [t0, ts-1]: machine Off or Idle; pick cheaper hold
+        const int    holdLen  = std::max(0, ts - t0);
+        const double offHold  = holdLen > 0
+            ? static_cast<double>(ins->Off.cost)
+              * ins->cumulative_cost(t0, holdLen) : 0.0;
+        const double idleHold = holdLen > 0
+            ? static_cast<double>(ins->Idle.cost)
+              * ins->cumulative_cost(t0, holdLen) : 0.0;
+        return execCost + tardCost + transCost + std::min(offHold, idleHold);
+    };
+
+    double bestCost  = estimateCost(t0);
+    int    bestStart = t0;
+
+    for (int s = t0 + 1; s <= wUB; ++s) {
+        // Resource feasibility check at candidate start s
+        bool feasible = true;
+        for (int tau = s; tau < s + p && feasible; ++tau)
+            for (int r = 0; r < R && feasible; ++r)
+                if (availableResources[tau][r] < ins->rt(task, r))
+                    feasible = false;
+        if (!feasible) continue;
+
+        const double c = estimateCost(s);
+        if (c < bestCost - MyEPS) {
+            bestCost  = c;
+            bestStart = s;
+        }
+    }
+
+    return bestStart;
 }
 
 vector<int> SolverH1::getReadyTasks(int currentTime, const vector<int>& unscheduledPrecedenceFreeTasks, const vector<int>& earliestStartTimes) {

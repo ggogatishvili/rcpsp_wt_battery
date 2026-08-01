@@ -5,7 +5,6 @@
 #include <fmt/base.h>
 #include <gurobi_c++.h>
 #include <gurobi_c.h>
-#include <memory>
 #include <solution.h>
 #include "SolverH1.h"
 
@@ -14,18 +13,10 @@ using namespace std;
 SolverMILP::SolverMILP(const Instance * const instance)
    : ins(instance)
 {
-   env = std::make_unique<GRBEnv>(true);
-   env->set(GRB_IntParam_OutputFlag, 0);
-   try {
-      env->start();
-   } catch ( const GRBException& e ) {
-      fmt::println(stderr, "Error: {}", e.getMessage());
-      exit(1);
-   }
 }
 
 Solution SolverMILP::_solve() {
-    GRBModel model{*env};
+    GRBModel model{Config::gurobiEnv()};
 
     const int H = ins->maxDuration();
     const int N = ins->nbr_tasks();

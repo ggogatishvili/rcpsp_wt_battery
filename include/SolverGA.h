@@ -23,13 +23,14 @@ class SolverGA {
 public:
     SolverGA(const Instance* const instance);
 
-    Solution solve()
+    inline Solution solve()
     {
         return _solve();
     }
 
-    inline Solution operator()() {
-        return _solve();
+    inline Solution operator()()
+    {
+        return solve();
     }
 
     friend class Evaluator;
@@ -48,7 +49,7 @@ private:
     vector<int> cheapIntervals;
     vector<vector<vector<Edge>>> cachedSPACESGraph;
 
-    Solution _solve();
+    Solution _solve(const bool lp_batt_eval = true);
 
     vector<int> findCheapIntervals() const;
     eoPop<Chromosome> generateInitialPopulation() const;
@@ -60,4 +61,9 @@ private:
 
     vector<double> decodePriorities(const Chromosome& chrom) const;
     vector<int> decodeDelays(const Chromosome& chrom) const;
+
+    // Convert a solution's start times back into a chromosome encoding.
+    // Priority genes reflect the actual schedule order; delay genes are derived
+    // from start-time offsets relative to each EI task's release date.
+    Chromosome generateChromosomeFromSolution(const vector<int>& startTimes) const;
 };

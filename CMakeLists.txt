@@ -18,7 +18,10 @@ add_executable( rcpsp_wt_battery
         src/Solver.cpp
         src/SolverMILP.cpp
         src/SolverH1.cpp
+        src/SolverH1P.cpp
         src/SolverGA.cpp
+        src/SolverGAP.cpp
+        src/BatteryLp.cpp
         src/jsonHandler.cpp
         src/Clock.cpp
         src/solution.cpp

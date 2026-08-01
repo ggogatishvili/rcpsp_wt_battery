@@ -4,10 +4,12 @@
 #include "../include/ga/Mutator.h"
 #include "../include/ga/Terminator.h"
 #include "config.h"
+#include <BatteryLp.h>
 #include <fmt/base.h>
 #include <algorithm>
 
 #include <eo>
+#include <optional>
 #include <ranges>
 #include <es/eoRealInitBounded.h>
 #include <eoDetTournamentSelect.h>
@@ -33,13 +35,13 @@ SolverGA::SolverGA(const Instance* const instance)
     cachedSPACESGraph = solverH1.buildSPACESGraph();
 }
 
-Solution SolverGA::_solve()
+Solution SolverGA::_solve(const bool lp_batt_eval)
 {
     // Generate initial population
     eoPop<Chromosome> pop = generateInitialPopulation();
 
     // Setup GA
-    Evaluator eval(ins, *this, solverH1);
+    Evaluator eval(ins, *this, solverH1, lp_batt_eval);
     apply<Chromosome>(eval, pop);
     Crossover xover(N, N_EI);
     Mutator mut(N, N_EI, *this);
@@ -98,7 +100,9 @@ Solution SolverGA::_solve()
         vector<MachineBlock> machineBlocks = solverH1.scheduleMachineUsage(startTimes, cachedSPACESGraph);
         solverH1.optimizeMachineBlocks(machineBlocks);
         vector<double> energyRequirements = solverH1.getEnergyRequirements(machineBlocks);
-        vector<double> batteryLevels = solverH1.scheduleBatteryUsage(energyRequirements);
+        std::optional<std::vector<double>> opt;
+        if (lp_batt_eval) { BatteryLp battLp(ins); opt = battLp.solve(energyRequirements); }
+        vector<double> batteryLevels = opt ? std::move(*opt) : solverH1.scheduleBatteryUsage(energyRequirements);
 
         double tardinessCost = solverH1.computeTardinessCost(startTimes);
         double energyCost = solverH1.computeEnergyCost(energyRequirements, batteryLevels);
@@ -136,6 +140,35 @@ eoPop<Chromosome> SolverGA::generateInitialPopulation() const
     }
 
     eoPop<Chromosome> population;
+
+    // Seed from actual H1 and H1P schedule runs so the population starts with
+    // chromosomes that faithfully reflect what each heuristic actually produces
+    // (including price-aware EI delays for H1P).
+    {
+        SolverH1 seeder(ins);
+        const vector<int> noDelays(N_EI, 0);
+        for (auto type : { PriorityMetricType::EDD, PriorityMetricType::ERD,
+                           PriorityMetricType::SPT }) {
+            vector<pair<double,int>> m;
+            m.reserve(N);
+            for (int i = 0; i < N; i++) {
+                switch (type) {
+                    case PriorityMetricType::EDD: m.emplace_back(ins->tasks[i].get_due_date(), i);     break;
+                    case PriorityMetricType::ERD: m.emplace_back(ins->tasks[i].get_release_date(), i); break;
+                    case PriorityMetricType::SPT: m.emplace_back(ins->getProcessingTime(i), i);        break;
+                    default: break;
+                }
+            }
+            sort(m.begin(), m.end());
+            vector<double> prios(N);
+            for (int i = 0; i < N; i++) prios[m[i].second] = 1.0 - ((double)i / max(1, N - 1));
+
+            population.push_back(generateChromosomeFromSolution(
+                seeder.scheduleTasks(prios, noDelays, false, 0)));
+            population.push_back(generateChromosomeFromSolution(
+                seeder.scheduleTasks(prios, noDelays, true, Config::phase1Window)));
+        }
+    }
 
     // Inject specific priorities with 0 delays
     population.push_back(generateInitialChromosome(PriorityMetricType::ERD, 0.0, false));
@@ -369,4 +402,27 @@ vector<int> SolverGA::decodeDelays(const Chromosome& chrom) const
     }
 
     return eiDelays;
+}
+
+Chromosome SolverGA::generateChromosomeFromSolution(const vector<int>& startTimes) const
+{
+    Chromosome chrom;
+    chrom.resize(chromosomeSize);
+
+    vector<pair<int,int>> order;
+    order.reserve(N);
+    for (int t = 0; t < N; t++) order.emplace_back(startTimes[t], t);
+    sort(order.begin(), order.end());
+    for (int rank = 0; rank < N; rank++)
+        chrom[order[rank].second] = 1.0 - ((double)rank / max(1, N - 1));
+
+    for (int ei = 0; ei < N_EI; ei++) {
+        const int t  = ins->ei_tasks[ei];
+        const int rd = ins->tasks[t].get_release_date();
+        const int mn = absoluteEIDelayBounds[ei].first;
+        const int mx = absoluteEIDelayBounds[ei].second;
+        const int clamped = max(mn, min(mx, startTimes[t] - rd));
+        chrom[N + ei] = calculateRelativeDelay(clamped, mn, mx);
+    }
+    return chrom;
 }

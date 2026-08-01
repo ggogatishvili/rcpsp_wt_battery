@@ -26,8 +26,21 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <boost/program_options.hpp>
 #include <fmt/base.h>
 #include <fmt/format.h>
+#include <gurobi_c++.h>
 #include "helpers.h"
 #include "config.h"
+
+
+GRBEnv& Config::gurobiEnv()
+{
+   static std::unique_ptr<GRBEnv> env = []() {
+      auto e = std::make_unique<GRBEnv>(true);
+      e->set(GRB_IntParam_OutputFlag, 0);
+      e->start();
+      return e;
+   }();
+   return *env;
+}
 
 
 void Config::fromArgs(const int argc, const char* const argv[])
@@ -45,7 +58,7 @@ void Config::fromArgs(const int argc, const char* const argv[])
       ("ml",  po::value<long>(),     fmt::format("Memory limit in Gb (default: {})", memoryLimit).c_str())
       ("alpha", po::value<double>(), fmt::format("⍺ value [0-1](default: {})", alpha).c_str())
       ("method,m", po::value<std::string>(),
-         fmt::format("Resolution method [MILP|H1|GA|matheur] (default: {})", method).c_str())
+         fmt::format("Resolution method [MILP|H1|H1P|GA|GAP|matheur] (default: {})", method).c_str())
       ("batteryCapacity,b", po::value<int>(),
          fmt::format("Battery capacity (default: {})", batteryCapacity).c_str())
       ("verbose,v",   fmt::format("Verbose mode (default: {})", verbose).c_str())
@@ -81,6 +94,12 @@ void Config::fromArgs(const int argc, const char* const argv[])
       ("wmDelayNewChp", po::value<int>(),    "Mutator Delay Weight: New Cheap")
       ("wmDelayShift",  po::value<int>(),    "Mutator Delay Weight: Shift")
       ("mDelayMag",     po::value<double>(), "Mutator Delay Shift Magnitude")
+
+      // H1P / GAP params
+      ("phase1-price-aware", "Enable price-aware EI delay in Phase 1 (H1P / GAP)")
+      ("phase1-window", po::value<int>(),
+         fmt::format("Max delay window for price-aware Phase 1 (default: {})", phase1Window).c_str())
+      ("phase3-lp", "Replace greedy Phase 3 with exact battery LP (H1P / GAP)")
 
       // MatH params
       ("mathEliteRatio", po::value<double>(),
@@ -151,6 +170,11 @@ void Config::fromArgs(const int argc, const char* const argv[])
    if (vm.contains("wmDelayShift"))  Config::weightMutDelayShift     = vm["wmDelayShift"].as<int>();
    if (vm.contains("mDelayMag"))     Config::mutDelayShiftMag        = vm["mDelayMag"].as<double>();
 
+   // H1P / GAP params
+   if (vm.contains("phase1-price-aware")) Config::phase1PriceAware = true;
+   if (vm.contains("phase1-window"))      Config::phase1Window     = vm["phase1-window"].as<int>();
+   if (vm.contains("phase3-lp"))          Config::phase3LP         = true;
+
    // MatH params
    if (vm.contains("mathEliteRatio")) Config::mathEliteRatio    = vm["mathEliteRatio"].as<double>();
    if (vm.contains("mathMilpTl"))     Config::mathMilpTimeLimit = vm["mathMilpTl"].as<double>();
@@ -169,6 +193,12 @@ void Config::showConfig()
    fmt::println("   {:<20}{:<15}", "Verbose mode:",     verbose ? "Yes" : "No");
    fmt::println("   {:<20}{:<15}", "Battery capacity:", batteryCapacity);
    fmt::println("   {:<20}{:<15}", "Version:",          VERSION);
+   if (method == ResolutionMethod::H1P || method == ResolutionMethod::GAP
+       || phase1PriceAware || phase3LP) {
+      fmt::println("   {:<20}{:<15}", "Phase1 price-aware:", phase1PriceAware ? "Yes" : "No");
+      fmt::println("   {:<20}{:<15}", "Phase1 window:",      phase1Window);
+      fmt::println("   {:<20}{:<15}", "Phase3 LP:",          phase3LP ? "Yes" : "No");
+   }
    if (method == ResolutionMethod::MatH) {
       fmt::println("   {:<20}{:<15}", "MatH elite ratio:", mathEliteRatio);
       fmt::println("   {:<20}{:<15}", "MatH MILP TL:",     mathMilpTimeLimit);
@@ -185,7 +215,9 @@ Config::ResolutionMethod Config::parseResolutionMethod(const std::string& method
    std::string m;
    std::ranges::transform(method, std::back_inserter(m), ::tolower);
    if (m.find("milp")    != m.npos) return Config::ResolutionMethod::MILP;
+   if (m.find("h1p")     != m.npos) return Config::ResolutionMethod::H1P;
    if (m.find("h1")      != m.npos) return Config::ResolutionMethod::H1;
+   if (m.find("gap")     != m.npos) return Config::ResolutionMethod::GAP;
    if (m.find("ga")      != m.npos) return Config::ResolutionMethod::GA;
    if (m.find("matheur") != m.npos || m.find("math") != m.npos)
       return Config::ResolutionMethod::MatH;

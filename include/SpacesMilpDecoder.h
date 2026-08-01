@@ -47,7 +47,6 @@ public:
 private:
    const Instance* ins;
    const int H, N;
-   std::unique_ptr<GRBEnv> env;
 
    struct SpacesArc {
       int    fromTime;

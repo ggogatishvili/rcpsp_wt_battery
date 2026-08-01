@@ -30,14 +30,6 @@ using namespace std;
 SpacesMilpDecoder::SpacesMilpDecoder(const Instance* ins)
    : ins(ins), H(ins->maxDuration()), N(ins->nbr_tasks())
 {
-   env = std::make_unique<GRBEnv>(true);
-   env->set(GRB_IntParam_OutputFlag, 0);
-   try {
-      env->start();
-   } catch (const GRBException& e) {
-      fmt::println(stderr, "SpacesMilpDecoder: Gurobi error: {}", e.getMessage());
-      throw;
-   }
    buildSpacesArcs();
 }
 
@@ -148,7 +140,7 @@ DecoderResult SpacesMilpDecoder::solve(const std::vector<int>& h1StartTimes)
 
    // ── Model ────────────────────────────────────────────────────────────────
 
-   GRBModel model{*env};
+   GRBModel model{Config::gurobiEnv()};
    const int A = static_cast<int>(arcs.size());
 
    // x[e][i]: 1 if EI task e starts at time i (sparse: only i ∈ [lb[e], ub[e]])

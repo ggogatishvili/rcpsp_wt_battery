@@ -21,7 +21,9 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "Solver.h"
 #include "SolverMILP.h"
 #include "SolverH1.h"
+#include "SolverH1P.h"
 #include "SolverGA.h"
+#include "SolverGAP.h"
 #include "SolverMatH.h"
 #include "config.h"
 #include <fmt/base.h>
@@ -36,8 +38,12 @@ Solution solver::solve(const Instance* ins, const Config::ResolutionMethod metho
                 return SolverMILP(ins)();
             case Config::ResolutionMethod::H1:
                 return SolverH1(ins)();
+            case Config::ResolutionMethod::H1P:
+                return SolverH1P(ins)();
             case Config::ResolutionMethod::GA:
                 return SolverGA(ins)();
+            case Config::ResolutionMethod::GAP:
+                return SolverGAP(ins)();
             case Config::ResolutionMethod::MatH:
                 return SolverMatH(ins)();
             default:

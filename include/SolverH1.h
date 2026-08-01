@@ -30,48 +30,55 @@ class SolverH1
 public:
     SolverH1(const Instance* const instance);
 
-    Solution solve()
-    {
-        return _solve();
-    }
+    Solution solve()   { return _solve(); }
+    Solution operator()() { return solve(); }
 
-    inline Solution operator()()
-    {
-        return solve();
-    }
+    // ── Phase 1 ─────────────────────────────────────────────────────────────
 
-    friend class SolverGA;
-    friend class Evaluator;
-    friend class SolverMatH;
-    friend class MatHH1Evaluator;
-    friend class MatHMilpEvaluator;
+    vector<int> scheduleTasks();
+    vector<int> scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays);
+    // Price-aware variant: for EI tasks starting a new cluster, picks the
+    // start in [t0, t0+wMax] that minimises estimated energy + tardiness cost.
+    vector<int> scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays,
+                               bool priceAware, int wMax);
+    // EDD priorities + zero delays, with optional price-aware delay.
+    vector<int> scheduleTasks(bool priceAware, int wMax);
+
+    // ── Phase 2 ─────────────────────────────────────────────────────────────
+
+    vector<MachineBlock> scheduleMachineUsage(const vector<int>& startTimes);
+    vector<MachineBlock> scheduleMachineUsage(const vector<int>& startTimes,
+                                               const vector<vector<vector<Edge>>>& spacesGraph);
+    vector<vector<vector<Edge>>> buildSPACESGraph();
+    void optimizeMachineBlocks(vector<MachineBlock>& machineBlocks);
+
+    // ── Phase 3 ─────────────────────────────────────────────────────────────
+
+    vector<double> getEnergyRequirements(const vector<MachineBlock>& machineBlocks);
+    vector<double> scheduleBatteryUsage(const vector<double>& energyRequirements);
+
+    // ── Cost ────────────────────────────────────────────────────────────────
+
+    double computeTardinessCost(const vector<int>& startTimes);
+    double computeEnergyCost(const vector<double>& energyRequirements,
+                              const vector<double>& batteryLevels);
 
 private:
-    const Instance* ins; // Pointer to the instance to solve
-    const int H; // Planning horizon (max duration of the instance)
-    const int N; // Number of tasks
-    const int R; // Number of resources
-    const int S = 3; // Number of machine states (Proc, Idle, Off)
-
+    const Instance* ins;
+    const int H;
+    const int N;
+    const int R;
+    const int S = 3;
 
     Solution _solve();
 
 
 
 
-    /**
-     * Phase 1: Schedule tasks while respecting precedence and resource constraints, using a heuristic approach (e.g., EDD with EI clustering).
-     * @return vector of start times for each task, indexed by task ID
-     */
-    vector<int> scheduleTasks();
-
-    /**
-     *
-     * @param priorities vector of task priorities, indexed by task ID, which can be used to guide the scheduling decisions (e.g., by preferring tasks with higher priority values when selecting among candidate tasks to schedule)
-     * @param eiDelays vector of delays for EI tasks, indexed by EI task ID (0 to N_EI-1), which indicate how much to delay the earliest start time of each EI task beyond its release date
-     * @return vector of start times for each task, indexed by task ID
-     */
-    vector<int> scheduleTasks(const vector<double>& priorities, const vector<int>& eiDelays);
+    // Returns the best start time in [t0, min(t0+wMax, …)] for EI task t,
+    // minimising estimated execution energy + tardiness + transition cost.
+    int findBestEIStart(int task, int t0, int wMax, int lastEiEnd,
+                        const vector<vector<int>>& availableResources) const;
 
     /**
      * Get the list of ready tasks at the current time, which are the tasks that are precedence-free (all predecessors have been scheduled) and can start at the current time based on their earliest start times.
@@ -106,26 +113,6 @@ private:
 
 
 
-    /**
-     * Phase 2: Given the scheduled tasks and their start times, determine the optimal machine state schedule (Proc, Idle, Off) over time to minimize energy costs while ensuring that the machine is in Proc state whenever an EI task is being processed.
-     * @param startTimes vector of start times for each task, indexed by task ID
-     * @return vector of MachineBlocks representing the machine state schedule, where each block indicates a contiguous time interval during which the machine is in a specific state (Proc, Idle, Off) or transitioning between states
-     */
-    vector<MachineBlock> scheduleMachineUsage(const vector<int>& startTimes);
-
-    /**
-     * Phase 2: Given the scheduled tasks and their start times, determine the optimal machine state schedule (Proc, Idle, Off) over time to minimize energy costs while ensuring that the machine is in Proc state whenever an EI task is being processed.
-     * @param startTimes vector of start times for each task, indexed by task ID
-     * @param spacesGraph cached spacesGraph for repeated usage
-     * @return vector of MachineBlocks representing the machine state schedule, where each block indicates a contiguous time interval during which the machine is in a specific state (Proc, Idle, Off) or transitioning between states
-     */
-    vector<MachineBlock> scheduleMachineUsage(const vector<int>& startTimes, const vector<vector<vector<Edge>>>& spacesGraph);
-
-    /**
-     * Build the SPACES graph representing all possible state transitions of the machine over time, along with their associated costs.
-     * @return 2D graph where graph[time][state] is a list of outgoing edges from that time and state
-     */
-    vector<vector<vector<Edge>>> buildSPACESGraph();
 
     /**
      * Compute the intervals during which the machine must be in Proc state based on the scheduled tasks.
@@ -149,28 +136,9 @@ private:
 
 
 
-    /**
-     * Phase 2.5: Optimize Machine Blocks to exploit negative energy prices.
-     * Extends stable Proc states prior to procOff transitions when energy costs are negative.
-     * @param machineBlocks vector of MachineBlocks representing the machine schedule (modified in-place)
-     */
-    void optimizeMachineBlocks(vector<MachineBlock>& machineBlocks);
 
 
 
-    /**
-     * Phase 3: Given the energy requirements of the machine at each time unit, schedule the usage of the battery to minimize energy costs by reducing the usage of the grid during peak times while ensuring that the battery constraints (capacity, charge/discharge efficiency) are respected.
-     * @param energyRequirements vector of energy requirements for each time unit, indexed by time
-     * @return vector of battery levels for each time unit, indexed by time
-     */
-    vector<double> scheduleBatteryUsage(const vector<double>& energyRequirements);
-
-    /**
-     * Get the energy requirements of the machine at each time unit based on the machine blocks, which indicate the state of the machine (Proc, Idle, Off) and any transitions between states.
-     * @param machineBlocks vector of MachineBlocks representing the machine state schedule, where each block indicates a contiguous time interval during which the machine is in a specific state (Proc, Idle, Off) or transitioning between states
-     * @return vector of energy requirements for each time unit, indexed by time
-     */
-    vector<double> getEnergyRequirements(const vector<MachineBlock>& machineBlocks);
 
     /**
      * Find the next maximal interval starting from 'start' (inclusive) during which the machine has any energy requirements
@@ -244,18 +212,4 @@ private:
      */
     int findCheapEnoughTimeBeforePeak(int peakTime, int cheapestTimeBeforePeak, double upperThresholdCost);
 
-    /**
-     * Compute the tardiness cost of the scheduled tasks based on their start times and the instance data (processing times, due dates, weights).
-     * @param startTimes vector of start times for each task, indexed by task ID
-     * @return the total tardiness cost of the scheduled tasks
-     */
-    double computeTardinessCost(const vector<int>& startTimes);
-
-    /**
-     * Compute the cost of energy from the grid used to charge the battery and directly used by the machine.
-     * @param machineBlocks vector of MachineBlocks representing the machine state schedule
-     * @param batteryLevels vector of battery levels for each time unit, which indicates when we are charging or discharging the battery
-     * @return the total cost of energy from the grid
-     */
-    double computeEnergyCost(const vector<double>& energyRequirements, const vector<double>& batteryLevels);
 };
