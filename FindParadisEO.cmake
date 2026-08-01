@@ -1,5 +1,6 @@
 set(PARADISEO_SEARCH_PATHS
         $ENV{HOME}/.local
+        $ENV{HOME}/paradiseo
         /root/.local
         /usr/local
 )

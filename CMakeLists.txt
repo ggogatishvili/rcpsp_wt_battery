@@ -45,17 +45,14 @@ find_package(fmt REQUIRED)
 find_package(TBB REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(ParadisEO REQUIRED)
-#find_package(OpenMP REQUIRED)
-find_library(EO_LIB      eo      PATHS /usr/local/lib64 REQUIRED)
-find_library(EOUTILS_LIB eoutils PATHS /usr/local/lib64 REQUIRED)
 
 
 # Debug: Print what was found
 message(STATUS "GUROBI_INCLUDE_DIRS: ${GUROBI_INCLUDE_DIRS}")
 message(STATUS "GUROBI_LIBRARY: ${GUROBI_LIBRARY}")
 message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
-message(STATUS "EO_LIB: ${EO_LIB}")
-message(STATUS "EOUTILS_LIB: ${EOUTILS_LIB}")
+message(STATUS "PARADISEO_LIBRARIES=${PARADISEO_LIBRARIES}")
+message(STATUS "PARADISEO_INCLUDE_DIRS=${PARADISEO_INCLUDE_DIRS}")
 #message(STATUS "Cplex_INCLUDE_LIBRARY: ${Cplex_INCLUDE_DIRS}")
 #message(STATUS "Cplex_ConstraintProgramming_INCLUDE_DIRS: ${Cplex_ConstraintProgramming_INCLUDE_DIRS}")
 #message(STATUS "Cplex_LIBRARIES: ${Cplex_LIBRARIES}")
@@ -80,7 +77,6 @@ target_link_libraries(rcpsp_wt_battery PRIVATE fmt::fmt)
 target_link_libraries(rcpsp_wt_battery PRIVATE onetbb::onetbb)
 target_link_libraries(rcpsp_wt_battery PRIVATE boost::boost)
 target_link_libraries(rcpsp_wt_battery PRIVATE nlohmann_json::nlohmann_json)
-#target_link_libraries(rcpsp_wt_battery PRIVATE OpenMP::OpenMP_CXX)
 
 # Link solver libraries
 #target_link_libraries(rcpsp_wt_battery PRIVATE ${Cplex_ConstraintProgramming_LIBRARIES})
@@ -89,14 +85,12 @@ target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_CXX_LIBRARY})
 target_link_libraries(rcpsp_wt_battery PRIVATE ${GUROBI_LIBRARY})
 
 # Link additional libraries (ParadisEO and system libraries)
-#target_link_libraries(rcpsp_wt_battery PRIVATE ${PARADISEO_LIBRARIES})
-target_link_libraries(rcpsp_wt_battery PRIVATE ${EO_LIB} ${EOUTILS_LIB} dl)
+target_link_libraries(rcpsp_wt_battery PRIVATE ${PARADISEO_LIBRARIES} dl)
 
 # Apply linker options
 target_link_options(rcpsp_wt_battery PRIVATE ${LINKER_OPTIONS})
 
 # Compile options (uncommented and organized)
-#target_compile_options(rcpsp_wt_battery PRIVATE ${WARNING_OPTIONS})
 target_compile_options(rcpsp_wt_battery PRIVATE $<$<CONFIG:RELEASE>:${RELEASE_OPTIONS}>)
 target_compile_options(rcpsp_wt_battery PRIVATE $<$<CONFIG:DEBUG>:${DEBUG_OPTIONS}>)
 target_compile_options(rcpsp_wt_battery PRIVATE $<$<AND:$<CONFIG:DEBUG>,$<CXX_COMPILER_ID:GNU>>:${GDB_DEBUG_OPTIONS}>)
