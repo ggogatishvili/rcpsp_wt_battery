@@ -1,0 +1,5 @@
+# Generated and fully reproducible from config/design.py + MASTER_SEED.
+# Do not commit: ~200 MB of instances and up to ~20 GB of solution JSONs.
+data/
+__pycache__/
+*.pyc

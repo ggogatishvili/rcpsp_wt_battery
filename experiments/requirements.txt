@@ -1,0 +1,6 @@
+# Minimal by design: the harness must run identically on the compute server
+# without a package-resolution step that can silently differ.
+numpy>=1.21
+# Optional, not imported by any script:
+#   matplotlib   if you want to plot from data/results.csv yourself
+#   gurobipy     only for the preflight license check; the solver links C++ Gurobi
