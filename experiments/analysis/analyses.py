@@ -737,6 +737,53 @@ def e0(rows: list[dict], out: Path) -> str:
     if not rows:
         return "E0: no data\n"
 
+    # ---- anytime profile -------------------------------------------------
+    # The metaheuristic parameters were tuned by irace at --tl 600 for GA only
+    # (tuning/target-runner), while the main design runs at 60 s. Ranking GA
+    # against GAP at a single budget therefore confounds the methods with a
+    # parameter setting calibrated elsewhere. Reporting the ranking as a
+    # function of the budget is the honest form of the comparison, and it is
+    # a more informative result than a single row.
+    budgets = sorted({int(r["time_limit"]) for r in rows
+                      if r["method"] in ("GA", "GAP")})
+    if len(budgets) > 1:
+        lines += ["", "anytime profile: mean objective by budget "
+                      "(paired on instance x battery, lower is better)"]
+        paired = defaultdict(dict)
+        for r in rows:
+            if r["method"] not in ("GA", "GAP"):
+                continue
+            k = (r["instance"], r["battery_ratio"], int(r["time_limit"]))
+            paired[k].setdefault(r["method"], []).append(r["objective"])
+        rowsby = defaultdict(lambda: {"GA": [], "GAP": [], "n": 0})
+        for (inst, b, tl), d in paired.items():
+            if "GA" in d and "GAP" in d:
+                rowsby[tl]["GA"].append(float(np.mean(d["GA"])))
+                rowsby[tl]["GAP"].append(float(np.mean(d["GAP"])))
+                rowsby[tl]["n"] += 1
+        lines.append(f"  {'budget':>8s} {'n':>6s} {'GA':>14s} {'GAP':>14s} "
+                     f"{'GAP-GA %':>10s} {'95% CI':>20s}")
+        for tl in sorted(rowsby):
+            ga = np.array(rowsby[tl]["GA"])
+            gp = np.array(rowsby[tl]["GAP"])
+            if not len(ga):
+                continue
+            rel = 100 * (gp - ga) / np.abs(ga)
+            lo, hi = boot_ci(rel)
+            lines.append(f"  {tl:8d} {rowsby[tl]['n']:6d} {ga.mean():14.2f} "
+                         f"{gp.mean():14.2f} {rel.mean():10.3f} "
+                         f"[{lo:8.3f},{hi:8.3f}]")
+        lines += ["  Positive GAP-GA % means GAP is worse. A sign change across",
+                  "  budgets means the ranking is a budget artefact, not a",
+                  "  property of price-aware scheduling.", ""]
+
+    # ---- gaps at the reference budget ------------------------------------
+    ref = 60 if 60 in budgets else (budgets[0] if budgets else None)
+    if ref is not None:
+        rows = [r for r in rows if r["method"] not in ("GA", "GAP")
+                or int(r["time_limit"]) == ref]
+        lines.append(f"gaps below are at the reference budget tl={ref}s")
+
     best = defaultdict(lambda: float("inf"))
     for r in rows:
         k = (r["instance"], r["battery_ratio"])

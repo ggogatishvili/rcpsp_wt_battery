@@ -64,6 +64,22 @@ def build_shop(orig_path: Path, p: int, rep: int, dens: str, tight: str,
     inst = Instance(capacities=inst.capacities, tasks=tasks, prices=[])
 
     # --- 3. horizon --------------------------------------------------------
+    # NOTE ON THE 6.96% NON-COMPLETION RATE OF THE FIRST FULL RUN.
+    #
+    # It is tempting to blame this rule: the model forces the machine Off at
+    # t=0 and t=h-1, the boundary transitions consume p^{off,proc}=2 and
+    # p^{proc,off}=1 intervals, and this rule does not reserve them. But that
+    # is NOT the cause, and padding the horizon here is the wrong fix -- it
+    # changes h for 100% of instances, which changes due dates AND the drawn
+    # price window, i.e. it invalidates the entire benchmark.
+    #
+    # The actual cause is in the solver: SolverH1::getReadyTasks throws when a
+    # task cannot fit before the mandatory Off tail, and SolverGA/SolverGAP
+    # call scheduleTasks() during initial-population seeding *outside* any
+    # try/catch, unlike their fitness evaluators which catch and assign
+    # -BIG_M. One unlucky seeding ordering therefore kills the whole run.
+    # Hence H1/H1P/MILP never fail while GA/GAP fail together on every seed.
+    # Guard the seeding calls and the horizon rule below is fine as it stands.
     lb = makespan_lower_bound(inst)
     days = max(design.MIN_HORIZON_DAYS,
                math.ceil(lb * design.HORIZON_SLACK / design.HOURS_PER_DAY))

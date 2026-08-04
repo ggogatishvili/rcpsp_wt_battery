@@ -84,6 +84,13 @@ HORIZON_SLACK = 1.45
 HOURS_PER_DAY = 24
 MIN_HORIZON_DAYS = 3      # storage needs at least a few troughs to arbitrage
 
+# DO NOT pad the horizon to work around the non-completion rate of the first
+# full run. Changing this rule changes h for 100% of instances, and because due
+# dates and the drawn price window both depend on h, that discards the entire
+# benchmark and every result computed on it. The cause is an unguarded
+# scheduleTasks() call in GA/GAP initial-population seeding, not this rule.
+# See the note in lib/generate.py build_shop().
+
 # Tardiness cost scale (E4 treatment). 1.0 is the baseline used everywhere else.
 LAMBDA_BASE = 1.0
 LAMBDA_LEVELS = [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
@@ -178,13 +185,43 @@ SEEDS = list(range(1, P["seeds"] + 1))   # GA/GAP are stochastic; H1/H1P/MILP ar
 # 5. Time limits (seconds)
 # ----------------------------------------------------------------------------
 
+# PROVENANCE OF THE METAHEURISTIC TIME LIMIT -- read before trusting any
+# method comparison made at it.
+#
+# 60 s was derived from the compute budget, not from the problem. The full
+# design is 255,350 runs; at 60 s it costs 4,256 core-h (2.96 days on 60
+# workers) and fits. At 600 s it costs 42,558 core-h (29.5 days), 7x over.
+# The number was chosen to make the design fit, and nothing else.
+#
+# That is a problem for one specific comparison. Config::timeLimit defaults to
+# 3600 s, and tuning/target-runner tuned popSize/stagLimit with irace at
+# --tl 600 -m GA. So the GA parameters used here were calibrated at 10x this
+# budget, for GA only, and are then also applied to GAP, whose per-evaluation
+# cost is higher. Any ranking of GA against GAP at 60 s is therefore
+# confounded with a parameter setting that suits neither.
+#
+# Treatment effects inside a single method (E2, E3, E4, E6) are largely
+# protected: both arms carry the same budget and the same parameters, so the
+# bias is common-mode. E1's policy MAIN effect is not protected -- it is
+# literally GA against GAP -- though its interaction term is a
+# difference-in-differences and is far less exposed.
+#
+# Fix: see TL_PROFILE below. Do not simply raise this constant; that costs 7x.
 TL = {
     "MILP": 600,     # only run on the two smallest size classes
     "H1":   120,     # constructive; the limit is a guard, not a budget
     "H1P":  120,
-    "GA":    60,     # the planning-time budget the paper reports
+    "GA":    60,     # budget-derived, NOT principled -- see note above
     "GAP":   60,
 }
+
+# Time budgets at which E0 additionally re-runs the metaheuristics, to turn the
+# confound above into an anytime profile. E0 is the only experiment that ranks
+# methods and it holds ~9,000 GA/GAP runs, so this is affordable where
+# re-running the whole design at 600 s is not: 10+60+600 s costs 1,675 core-h
+# (27.9 h on 60 workers). 600 matches the tuning budget; 10 shows whether the
+# ranking inverts under tighter budgets.
+TL_PROFILE = [10, 60, 600]
 
 MILP_MAX_SIZE_CLASS = 2      # MILP only for n <= 64
 

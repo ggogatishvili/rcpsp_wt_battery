@@ -80,7 +80,8 @@ def main() -> int:
 
     def add(exp: str, row: dict, method: str, ratio: float, policy: str,
             state: str, seed: int | None, extra: list[str],
-            tag: str = "", extra_cols: dict | None = None) -> None:
+            tag: str = "", extra_cols: dict | None = None,
+            tl_override: int | None = None) -> None:
         spec = design.STATE_POLICIES[state]
         if spec["flag"] and spec["flag"].split("=")[0] not in flags:
             blocked.append({"experiment": exp, "instance": row["instance"],
@@ -88,7 +89,13 @@ def main() -> int:
                             "reason": f"solver lacks {spec['flag'].split('=')[0]} (item C1)"})
             return
         b = barg(row, ratio)
-        tl = design.TL[method]
+        # The tl tag is appended ONLY when the budget differs from the method
+        # default. That keeps every run_id generated before TL_PROFILE existed
+        # byte-identical, so the results already on disk are not orphaned and
+        # only the genuinely new budgets have to be executed.
+        tl = design.TL[method] if tl_override is None else tl_override
+        if tl != design.TL[method]:
+            tag = f"tl{tl}" if not tag else f"{tag}__tl{tl}"
         launcher = ([sys.executable, str(args.solver)] if str(args.solver).endswith(".py")
                     else [str(args.solver)])
         argv = launcher + ["-i", str((DATA / row["path"]).resolve()), "-m", method,
@@ -150,9 +157,17 @@ def main() -> int:
                 continue
             for ratio in (0.0, design.BATTERY_ON_RATIO):
                 for method in ("H1", "H1P", "GA", "GAP"):
-                    for s in seeds_for(method, "E0"):
-                        pol = "edd" if method in ("H1", "GA") else "price_aware"
-                        add("E0", r, method, ratio, pol, "sigma3", s, [])
+                    pol = "edd" if method in ("H1", "GA") else "price_aware"
+                    # Anytime profile: only the metaheuristics have a genuine
+                    # time budget. H1/H1P are constructive (their --tl is a
+                    # guard) and the MILP already runs at its own limit, so
+                    # sweeping those would burn compute for no information.
+                    budgets = (design.TL_PROFILE if method in ("GA", "GAP")
+                               else [design.TL[method]])
+                    for tl in budgets:
+                        for s in seeds_for(method, "E0"):
+                            add("E0", r, method, ratio, pol, "sigma3", s, [],
+                                tl_override=tl)
                 if int(r["size_class"]) <= design.MILP_MAX_SIZE_CLASS:
                     add("E0", r, "MILP", ratio, "exact", "sigma3", None, [])
 
@@ -245,9 +260,23 @@ def main() -> int:
     # Deterministic constructive methods finish far below their time limit;
     # only the metaheuristics and the MILP actually consume their budget.
     est_frac = {"H1": 0.05, "H1P": 0.08, "GA": 1.0, "GAP": 1.0, "MILP": 0.9}
-    core_s = sum(design.TL[r["method"]] * est_frac[r["method"]] for r in runs)
-    core_h = core_s / 3600.0
+    # Use each run's own time_limit, not the method default: with TL_PROFILE
+    # the same method appears at several budgets and the default would
+    # under-count the 600 s cells by an order of magnitude.
+    def cost_of(rs) -> float:
+        return sum(int(r["time_limit"]) * est_frac[r["method"]] for r in rs) / 3600.0
+
+    # A run that produced a solution has both {rid}.json and {rid}.meta.json;
+    # a failed one has only the meta file. So completion can be read from the
+    # filenames alone, without opening 266k files.
+    done = {p.name[:-5] for p in (DATA / "results").glob("*.json")
+            if not p.name.endswith(".meta.json")}
+    todo = [r for r in runs if r["run_id"] not in done]
+
+    core_h = cost_of(runs)
+    todo_h = cost_of(todo)
     wall_h = core_h / design.N_WORKERS
+    todo_wall = todo_h / design.N_WORKERS
     avail_h = design.WALL_CLOCK_BUDGET_H * design.N_WORKERS
 
     by_exp = Counter(r["experiment"] for r in runs)
@@ -263,12 +292,23 @@ def main() -> int:
         "  runs per method:",
         *[f"    {k:5s} {v:8d}" for k, v in sorted(by_meth.items())],
         "",
-        f"  estimated core-hours   {core_h:10.1f}",
+        f"  whole design           {core_h:10.1f} core-h  "
+        f"({wall_h:6.1f} h wall, {wall_h/24:.2f} days)",
+        f"  already complete       {len(done):10d} runs",
+        f"  REMAINING TO RUN       {len(todo):10d} runs = {todo_h:.1f} core-h  "
+        f"({todo_wall:.1f} h wall, {todo_wall/24:.2f} days)",
         (f"  available core-hours   {avail_h:10.1f}"
          f"  ({design.N_WORKERS} workers x {design.WALL_CLOCK_BUDGET_H} h)"),
-        f"  estimated wall-clock   {wall_h:10.1f} h  ({wall_h/24:.2f} days)",
-        f"  budget utilisation     {100*core_h/avail_h:10.1f} %",
+        f"  budget utilisation     {100*todo_h/avail_h:10.1f} %  (of REMAINING work)",
     ]
+    if todo:
+        rem_exp = Counter(r["experiment"] for r in todo)
+        rem_tl = Counter((r["method"], int(r["time_limit"])) for r in todo)
+        lines += ["", "  remaining by experiment:",
+                  *[f"    {k:5s} {v:8d}" for k, v in sorted(rem_exp.items())],
+                  "  remaining by (method, budget):",
+                  *[f"    {k[0]:5s} tl={k[1]:4d}s {v:8d}"
+                    for k, v in sorted(rem_tl.items())]]
     if blocked:
         lines += ["", "  blocked cells by reason:"]
         for reason, k in Counter(b["reason"] for b in blocked).items():
@@ -277,9 +317,12 @@ def main() -> int:
     (DATA / "budget_report.txt").write_text(report + "\n")
     print(report)
 
-    if core_h > avail_h and not args.allow_over_budget:
-        print("\nFATAL: estimated cost exceeds the budget. Lower PROFILE in "
-              "config/design.py, or pass --allow-over-budget to proceed anyway.",
+    # Gate on REMAINING work: already-completed runs are sunk cost, and gating
+    # on the whole design would block every incremental extension once the bulk
+    # of the benchmark exists.
+    if todo_h > avail_h and not args.allow_over_budget:
+        print("\nFATAL: remaining cost exceeds the budget. Lower PROFILE in "
+              "config/design.py, trim TL_PROFILE, or pass --allow-over-budget.",
               file=sys.stderr)
         return 2
 
