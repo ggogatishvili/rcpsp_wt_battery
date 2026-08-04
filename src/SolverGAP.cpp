@@ -111,7 +111,17 @@ Solution SolverGAP::_solve()
               startTimes, battLevels, machineBlocks, SolutionStats::defaultStats()};
    } catch (const exception& e) {
       fmt::println(stderr, "GAP solution extraction failed ({}). Falling back to H1.", e.what());
-      return solverH1();
+      // H1 can throw for the same reason the extraction just did (no ordering
+      // fits the horizon). Guard the fallback so the process reports an
+      // infeasible solution instead of aborting with a non-zero exit status,
+      // which the caller cannot distinguish from a crash.
+      try {
+         return solverH1();
+      } catch (const exception& e2) {
+         fmt::println(stderr, "GAP fallback to H1 also failed ({}). "
+                              "Reporting infeasible.", e2.what());
+         return Solution::infeasibleSolution(ins);
+      }
    }
 }
 
@@ -126,9 +136,33 @@ eoPop<Chromosome> SolverGAP::generateInitialPopulation() const
 
    // Seed from actual H1 and H1P runs — H1P seeds carry the ordering that
    // price-aware Phase 1 naturally produces, giving the GA a warm start.
+   //
+   // A seeding ordering may legitimately fail to produce a schedule: Phase 1
+   // is a greedy construction without backtracking, so on a tight horizon
+   // SolverH1::getReadyTasks throws once a remaining task no longer fits
+   // before the mandatory Off tail. The fitness evaluator already treats that
+   // as an infeasible individual (fitness -BIG_M, see gap/EvaluatorP.h);
+   // seeding must degrade the same way. Letting the exception escape here
+   // aborted the entire run before the search started. See SolverGA.cpp for
+   // the same guard and the measured impact.
    {
       SolverH1 seeder(ins);
       const vector<int> noDelays(N_EI, 0);
+      int skippedSeeds = 0;
+
+      auto seedWith = [&](const vector<double>& prios, const bool priceAware) {
+         try {
+            population.push_back(generateChromosomeFromSolution(
+               seeder.scheduleTasks(prios, noDelays, priceAware,
+                                    priceAware ? Config::phase1Window : 0)));
+         } catch (const exception&) {
+            // This ordering does not fit the horizon; drop the seed. The
+            // population is topped up with random chromosomes below, so its
+            // size is unaffected.
+            ++skippedSeeds;
+         }
+      };
+
       for (auto type : { PriorityMetricType::EDD, PriorityMetricType::ERD,
                          PriorityMetricType::SPT }) {
          vector<pair<double,int>> m;
@@ -145,11 +179,13 @@ eoPop<Chromosome> SolverGAP::generateInitialPopulation() const
          vector<double> prios(N);
          for (int i = 0; i < N; i++) prios[m[i].second] = 1.0 - ((double)i / max(1, N - 1));
 
-         population.push_back(generateChromosomeFromSolution(
-            seeder.scheduleTasks(prios, noDelays, false, 0)));
-         population.push_back(generateChromosomeFromSolution(
-            seeder.scheduleTasks(prios, noDelays, true, Config::phase1Window)));
+         seedWith(prios, false);
+         seedWith(prios, true);
       }
+
+      if (Config::verbose && skippedSeeds > 0)
+         fmt::println("GAP: {} of 6 heuristic seed(s) skipped "
+                      "(schedule did not fit the horizon)", skippedSeeds);
    }
 
    for (auto t : { PriorityMetricType::ERD, PriorityMetricType::EDD,

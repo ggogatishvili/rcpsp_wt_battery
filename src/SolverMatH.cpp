@@ -203,14 +203,24 @@ Solution SolverMatH::_solve()
    for (int pos = 0; pos < N; ++pos)
       priorities[best[pos]] = 1.0 - static_cast<double>(pos) / (N - 1);
 
+   // Same guard as SolverGA/SolverGAP: Phase 1 can legitimately fail to fit a
+   // given ordering within the horizon, and the MatH evaluators already treat
+   // that as an infeasible individual. Letting it escape here would abort the
+   // process at the very end of an otherwise complete run.
    const vector<int> noDelays(ins->nbr_ei_tasks(), 0);
-   const auto h1Times = solverH1.scheduleTasks(priorities, noDelays);
-   const auto res     = decoder.solve(h1Times);
-   const auto battLvls = solverH1.scheduleBatteryUsage(res.machineEnergyDemand);
-   const double tCost  = solverH1.computeTardinessCost(res.startTimes);
-   const double eCost  = solverH1.computeEnergyCost(res.machineEnergyDemand, battLvls);
+   try {
+      const auto h1Times = solverH1.scheduleTasks(priorities, noDelays);
+      const auto res     = decoder.solve(h1Times);
+      const auto battLvls = solverH1.scheduleBatteryUsage(res.machineEnergyDemand);
+      const double tCost  = solverH1.computeTardinessCost(res.startTimes);
+      const double eCost  = solverH1.computeEnergyCost(res.machineEnergyDemand, battLvls);
 
-   return { ins, tCost + eCost, eCost, tCost,
-            res.startTimes, battLvls, res.machineBlocks,
-            SolutionStats::defaultStats() };
+      return { ins, tCost + eCost, eCost, tCost,
+               res.startTimes, battLvls, res.machineBlocks,
+               SolutionStats::defaultStats() };
+   } catch (const exception& e) {
+      fmt::println(stderr, "MatH solution extraction failed ({}). Reporting infeasible.",
+                   e.what());
+      return Solution::infeasibleSolution(ins);
+   }
 }
