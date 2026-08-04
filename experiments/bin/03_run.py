@@ -42,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import design                      # noqa: E402
+from config import design
 
 DATA = Path(os.environ.get("RCPSP_EXP_DATA", ROOT / "data"))
 RESULTS = DATA / "results"
@@ -70,7 +70,7 @@ SINGLE_THREAD_ENV = {
 _stop = False
 
 
-def _sigint(signum, frame):          # noqa: ARG001
+def _sigint(signum, frame):
     global _stop
     _stop = True
     print("\ninterrupt received — finishing in-flight runs, then stopping "
@@ -81,23 +81,21 @@ def provenance(solver: Path) -> dict:
     def sh(cmd: list[str]) -> str:
         try:
             return subprocess.run(cmd, capture_output=True, text=True,
-                                  timeout=30).stdout.strip()
+                                  timeout=30, check=False).stdout.strip()
         except Exception:
             return ""
-    return dict(
-        started_utc=datetime.now(timezone.utc).isoformat(),
-        hostname=platform.node(),
-        platform=platform.platform(),
-        python=sys.version.split()[0],
-        cpu_count=os.cpu_count(),
-        solver_path=str(solver),
-        solver_sha256=_sha(solver),
-        solver_version=sh([str(solver), "--version"]),
-        git_commit=sh(["git", "-C", str(ROOT.parent), "rev-parse", "HEAD"]),
-        git_dirty=bool(sh(["git", "-C", str(ROOT.parent), "status", "--porcelain"])),
-        design_profile=design.PROFILE,
-        master_seed=design.MASTER_SEED,
-    )
+    return { "started_utc": datetime.now(timezone.utc).isoformat()
+           , "hostname": platform.node()
+           , "platform": platform.platform()
+           , "python": sys.version.split()[0]
+           , "cpu_count": os.cpu_count()
+           , "solver_path": str(solver)
+           , "solver_sha256": _sha(solver)
+           , "solver_version": sh([str(solver), "--version"])
+           , "git_commit": sh(["git", "-C", str(ROOT.parent), "rev-parse", "HEAD"])
+           , "git_dirty": bool(sh(["git", "-C", str(ROOT.parent), "status", "--porcelain"]))
+           , "design_profile": design.PROFILE
+           , "master_seed": design.MASTER_SEED }
 
 
 def _sha(p: Path) -> str:
@@ -122,7 +120,7 @@ def run_one(row: dict, core: int | None) -> dict:
     t0 = time.time()
     status, rc, err = "ok", 0, ""
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True,
+        proc = subprocess.run(argv, capture_output=True, text=True, check=False,
                               timeout=tl + TIMEOUT_MARGIN, env=SINGLE_THREAD_ENV)
         rc = proc.returncode
         if rc != 0:
@@ -135,8 +133,11 @@ def run_one(row: dict, core: int | None) -> dict:
         status, err = "exec_error", str(exc)
     wall = time.time() - t0
 
-    meta = dict(run_id=rid, status=status, returncode=rc,
-                wall_seconds=round(wall, 3), stderr_tail=err)
+    meta = { "run_id": rid
+           , "status": status
+           , "returncode": rc
+           , "wall_seconds": round(wall, 3)
+           , "stderr_tail": err }
     (RESULTS / f"{rid}.meta.json").write_text(json.dumps(meta))
     return meta
 
@@ -245,11 +246,12 @@ def main() -> int:
                 break
 
     el = time.time() - t0
-    summary = dict(finished_utc=datetime.now(timezone.utc).isoformat(),
-                   attempted=done, failures=len(fails),
-                   wall_hours=round(el / 3600, 3),
-                   core_hours=round(done * el / 3600 / max(1, args.workers), 3),
-                   interrupted=_stop)
+    summary = { "finished_utc": datetime.now(timezone.utc).isoformat()
+              , "attempted": done
+              , "failures": len(fails)
+              , "wall_hours": round(el / 3600, 3)
+              , "core_hours": round(done * el / 3600 / max(1, args.workers), 3)
+              , "interrupted": _stop }
     (LOGS / f"run_summary_{stamp}.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
     if fails:

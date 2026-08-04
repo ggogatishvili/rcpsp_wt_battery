@@ -113,10 +113,17 @@ def main() -> int:
             continue
 
         si = sol.get("solution_info", {})
-        obj = float(si.get("objective_value", float("nan")))
-        ec = float(si.get("energy_cost", float("nan")))
-        tc = float(si.get("tardiness_cost", float("nan")))
-        levels = [float(x) for x in sol.get("battery_levels", [])]
+        # nlohmann::json serializes non-finite doubles (NaN/inf) as JSON null,
+        # so a present-but-null field must fall back to nan same as a missing one.
+        def _num(key: str) -> float:
+            v = si.get(key)
+            return float("nan") if v is None else float(v)
+
+        obj = _num("objective_value")
+        ec = _num("energy_cost")
+        tc = _num("tardiness_cost")
+        levels = [float("nan") if x is None else float(x)
+                  for x in sol.get("battery_levels", [])]
         cap = float(run["battery_arg"])
 
         # ---- C1 objective decomposition ---------------------------------
