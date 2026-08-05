@@ -1,6 +1,6 @@
 # Rerun runbook
 
-Three things changed since the first full run. This is the order to apply them
+Four things changed since the first full run. This is the order to apply them
 and what each costs.
 
 | # | Change | Effect |
@@ -8,12 +8,32 @@ and what each costs.
 | 1 | GA/GAP seeding guarded (`SolverGA.cpp`, `SolverGAP.cpp`, `SolverMatH.cpp`) | recovers the 18,413 runs that aborted before the search started |
 | 2 | `TL_PROFILE = [10, 60, 600]` for E0 | adds 18,000 runs; makes the GA/GAP ranking a function of budget instead of a single confounded row |
 | 3 | Budget gate now keys on *remaining* work | lets an incremental extension through instead of blocking on the whole design |
+| 4 | `SYNTH_SPREADS` and `SYNTH_NOISE` extended at the low end | fills the identification hole in E3 (see below); adds 3,060 instances and 30,600 runs |
+
+### Why (4)
+
+E3's spread covariate was close to bimodal: a flat control at 0, then nothing
+until \~18.4 EUR/MWh, then the bulk above 45. No threshold below 18.4 was
+identifiable, so the screening rule originally reported (1 % saving at
+3.8 EUR/MWh) was extrapolation into an empty region and has been removed from
+the paper.
+
+Adding low nominal spreads alone does not fix it, because **noise dominates
+the realised spread**: at `noise = 0.05`, a nominal spread of 1 still realises
+at 18.3. Only `noise = 0.01` reaches the low region (realised 3.6). Both
+levels were therefore added. Measured effect on the E3 subset:
+
+| | before | after |
+|---|---|---|
+| min non-zero realised spread | 18.4 | **3.3** |
+| observations in (0, 18.4) | 0 | **525** |
+| E3 instances | 8,280 | 11,340 |
 
 **Nothing already computed is discarded.** Verified against the real option
-set of `src/config.cpp`: all 266,150 existing `run_id`s survive regeneration,
-0 orphaned, 18,000 added. The `tl` tag is appended to a `run_id` only when the
-budget differs from the method default, which is what keeps the existing 60 s
-runs addressable under their original identifiers.
+set of `src/config.cpp`: all 266,150 existing `run_id`s survive regeneration
+— 0 orphaned, 48,600 added. The `tl` tag is appended to a `run_id` only when
+the budget differs from the method default, which is what keeps the existing
+60 s runs addressable under their original identifiers.
 
 ---
 
@@ -33,24 +53,33 @@ binary silently reproduces every one of the 18,413 failures.
 ```bash
 cd experiments
 export RCPSP_EXP_DATA=/path/to/data      # if not experiments/data
-python3 bin/02_make_runlist.py           # probes the real binary
 ```
 
-Do **not** re-run `01_build_instances.py`. The instances are unchanged and
-regenerating them is a no-op, but there is no reason to touch 17,084 files.
+**You must re-run `01_build_instances.py`** — change (4) adds new synthetic
+tariffs. It is incremental: existing instance files are byte-identical and are
+skipped, only the ~3,060 new ones are written (~27 MB).
+
+```bash
+python3 bin/01_build_instances.py     # incremental, ~1 min
+python3 bin/02_make_runlist.py        # probes the real binary
+```
 
 Read `data/budget_report.txt` and check the `REMAINING TO RUN` line before
 going further. Expected, from the current state:
 
 ```
   already complete       247,614 runs
-  REMAINING TO RUN        36,413 runs
-    18,413  previously failed (all budgets, mostly GA/GAP at 60 s)
-    18,000  new E0 cells      (GA/GAP at 10 s and 600 s)
+  REMAINING TO RUN        67,136 runs = 2,344 core-h (39.1 h wall)
+  budget utilisation         40.7 %  (of REMAINING work)
+    18,536  previously failed  (all budgets, mostly GA/GAP at 60 s)
+    18,000  new E0 cells       (GA/GAP at 10 s and 600 s)
+    30,600  new E3 cells       (low-spread synthetic tariffs)
 ```
 
-Cost: roughly **1,832 core-h ≈ 31 h on 60 workers**, against 5,760 available.
-About 32 % utilisation, so there is ample headroom for a second pass.
+Cost: **2,344 core-h ≈ 39 h on 60 workers**, against 5,760 available — about
+41 % utilisation, leaving headroom for a second pass. Verified against a
+simulation of the current completion state: **0 existing run_ids orphaned,
+48,600 added.**
 
 ## 2. Execute
 
@@ -60,13 +89,14 @@ python3 bin/03_run.py --rerun-failed
 
 `--rerun-failed` is required: without it the driver skips anything with a
 `.meta.json`, which includes every failed run. With it, runs that already
-succeeded are still skipped, so this executes exactly the 36,413 above.
+succeeded are still skipped, so this executes exactly the 67,136 above.
 
-Resumable and safe to interrupt. To do it in two stages instead:
+Resumable and safe to interrupt. To do it in stages instead:
 
 ```bash
-python3 bin/03_run.py --rerun-failed --experiments E1,E2,E3,E4,E6   # ~5 h
-python3 bin/03_run.py --rerun-failed --experiments E0               # ~26 h
+python3 bin/03_run.py --rerun-failed --experiments E1,E2,E4,E6   # ~4 h
+python3 bin/03_run.py --rerun-failed --experiments E3            # ~9 h
+python3 bin/03_run.py --rerun-failed --experiments E0            # ~26 h
 ```
 
 ## 3. Collect and check
@@ -96,6 +126,16 @@ E0 now leads with an anytime profile: mean objective by budget, paired on
 instance × battery, with the GAP−GA gap and its bootstrap CI at each of
 10 / 60 / 600 s. Gaps are then reported at the reference budget (60 s) as
 before.
+
+E3 now leads with the non-parametric regime means and demotes the regression
+to a descriptive fit, guarded by three diagnostics that print automatically:
+variance inflation (spread and CV sit at 5.0 and 7.4, so their coefficients
+are flagged as not separately identified), covariate support (a screening
+threshold is only emitted where observations actually exist, otherwise it
+prints `NOT IDENTIFIABLE`), and a real-vs-synthetic split of the spread
+coefficient. **With the new low-spread tariffs the screening rule may become
+identifiable for the first time** — if it does, the diagnostic will emit it
+with the supporting observation count, and it can go back into the paper.
 
 ---
 

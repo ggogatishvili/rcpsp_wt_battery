@@ -382,6 +382,20 @@ def e3(rows: list[dict], out: Path) -> str:
     if not recs:
         return "E3: no paired battery/no-battery cells\n"
 
+    # ---- lead with the non-parametric result -----------------------------
+    # The regime means need no functional form, no covariate support and no
+    # identification assumption. They are the finding; the regression below is
+    # a description of it, and is reported second for that reason.
+    lines.append("\n  PRIMARY: mean saving by tariff regime (non-parametric)")
+    byreg = defaultdict(list)
+    for r in recs:
+        byreg[r["regime"]].append(r["saving"])
+    for reg, v in sorted(byreg.items(), key=lambda kv: float(np.mean(kv[1]))):
+        a = np.array(v)
+        lo, hi = boot_ci(a)
+        lines.append(f"    {reg:14s} n={len(a):5d}  mean {a.mean():7.3f} % "
+                     f"[{lo:7.3f},{hi:7.3f}]")
+
     y = np.array([r["saving"] for r in recs])
     X = np.column_stack([np.ones(len(recs)),
                          [r["spread"] for r in recs],
@@ -391,8 +405,8 @@ def e3(rows: list[dict], out: Path) -> str:
     clusters = np.array([r["shop"] for r in recs])
     beta, se, r2 = ols_cluster(X, y, clusters)
     names = ["intercept", "spread_intraday", "price_cv", "neg_share", "price_mean"]
-    lines += [f"  n = {len(recs)} instance-tariff pairs, "
-              f"{len(set(clusters))} shop clusters, R2 = {r2:.4f}",
+    lines += ["", f"  SECONDARY: descriptive fit, n = {len(recs)} instance-tariff "
+                  f"pairs, {len(set(clusters))} shop clusters, R2 = {r2:.4f}",
               "  saving% ~ spread + cv + neg_share + mean "
               "(cluster-robust SE by shop)",
               f"    {'term':18s} {'coef':>10s} {'se':>10s} {'t':>8s}"]
@@ -400,22 +414,76 @@ def e3(rows: list[dict], out: Path) -> str:
         lines.append(f"    {nm:18s} {b_:10.4f} {s_:10.4f} "
                      f"{(b_/s_ if s_ else float('nan')):8.2f}")
 
-    # screening rule: spread at which saving crosses a threshold
-    lines.append("")
-    for target in (1.0, 2.0, 5.0):
-        if beta[1] > 1e-9:
-            x = (target - beta[0] - beta[2] * np.mean(X[:, 2])
-                 - beta[3] * np.mean(X[:, 3]) - beta[4] * np.mean(X[:, 4])) / beta[1]
-            lines.append(f"  screening rule: {target:.0f}% saving requires an "
-                         f"intra-day spread of ~{x:.1f} EUR/MWh")
-        else:
-            lines.append(f"  screening rule for {target:.0f}%: spread coefficient "
-                         f"not positive; no usable rule")
+    # ---- diagnostic 1: multicollinearity ---------------------------------
+    # spread and cv both measure dispersion and are near-collinear by
+    # construction. Individual coefficients are then not separately
+    # identified, and a sign flip on the weaker one is an artefact, not a
+    # finding. Report VIF so nobody ranks the predictors without seeing it.
+    lines.append("\n  DIAGNOSTIC - variance inflation (VIF > 5 caution, > 10 severe)")
+    Zc = X[:, 1:]
+    Zs = (Zc - Zc.mean(0)) / np.where(Zc.std(0) == 0, 1.0, Zc.std(0))
+    worst = 0.0
+    for i, nm in enumerate(names[1:]):
+        others = np.delete(Zs, i, 1)
+        coef, *_ = np.linalg.lstsq(others, Zs[:, i], rcond=None)
+        resid = Zs[:, i] - others @ coef
+        ss = float(((Zs[:, i] - Zs[:, i].mean()) ** 2).sum())
+        r2i = 1 - float(resid @ resid) / ss if ss else 0.0
+        vif = 1 / (1 - r2i) if r2i < 1 else float("inf")
+        worst = max(worst, vif)
+        flag = "SEVERE" if vif > 10 else ("caution" if vif > 5 else "")
+        lines.append(f"    {nm:18s} VIF {vif:8.2f}  {flag}")
+    if worst > 5:
+        lines.append("    -> individual coefficients are NOT separately identified;")
+        lines.append("       do not rank predictors or interpret a sign flip.")
 
-    lines.append("\n  by regime:")
-    byreg = defaultdict(list)
-    for r in recs:
-        byreg[r["regime"]].append(r["saving"])
+    # ---- diagnostic 2: support, and the screening rule -------------------
+    # Inverting the fit for a target saving is only meaningful where the data
+    # actually lie. The spread covariate here is close to bimodal (a flat
+    # control at 0, then a gap, then the real tariffs), so a naive inversion
+    # lands in a region with no observations.
+    sp = X[:, 1]
+    nz = sp[sp > 0]
+    lines.append("\n  DIAGNOSTIC - support of spread_intraday (EUR/MWh)")
+    lines.append(f"    zero (flat control): {int((sp == 0).sum())} obs;  "
+                 f"non-zero min {nz.min():.1f}" if len(nz) else "    no non-zero spreads")
+    lines.append("    percentiles: " + "  ".join(
+        f"p{q}={np.percentile(sp, q):.1f}" for q in (1, 5, 25, 50, 95, 100)))
+
+    lines.append("\n  screening rule (only where the data support it)")
+    for target in (1.0, 2.0, 5.0):
+        if beta[1] <= 1e-9:
+            lines.append(f"    {target:.0f}%: spread coefficient not positive; "
+                         f"no usable rule")
+            continue
+        x = (target - beta[0] - beta[2] * np.mean(X[:, 2])
+             - beta[3] * np.mean(X[:, 3]) - beta[4] * np.mean(X[:, 4])) / beta[1]
+        near = int(((sp >= 0.5 * x) & (sp <= 1.5 * x)).sum())
+        if near >= max(30, 0.01 * len(sp)):
+            lines.append(f"    {target:.0f}% saving at spread ~{x:.1f} "
+                         f"({near} obs within +/-50% of it)")
+        else:
+            lines.append(f"    {target:.0f}%: implied spread {x:.1f} is NOT "
+                         f"IDENTIFIABLE - only {near} obs within +/-50% of it; "
+                         f"this is extrapolation outside the design, not a rule")
+
+    # ---- diagnostic 3: real vs synthetic ---------------------------------
+    # A third of the sample is a generated sinusoid. If the slope differs
+    # between families, the pooled coefficient is partly an artefact of the
+    # generator rather than a property of real tariffs.
+    lines.append("\n  DIAGNOSTIC - fit separately by price family")
+    for label, mask in (("real (spot+contractual)",
+                         np.array([r["regime"] != "synthetic" for r in recs])),
+                        ("synthetic", np.array([r["regime"] == "synthetic"
+                                                for r in recs]))):
+        if mask.sum() < 50:
+            continue
+        b2, s2, r22 = ols_cluster(X[mask], y[mask], clusters[mask])
+        lines.append(f"    {label:24s} n={int(mask.sum()):5d}  R2={r22:6.4f}  "
+                     f"spread coef {b2[1]:8.4f} (se {s2[1]:.4f})  "
+                     f"range {sp[mask].min():.1f}-{sp[mask].max():.1f}")
+
+    lines.append("\n  by regime (detail):")
     for reg, v in sorted(byreg.items()):
         a = np.array(v)
         lo, hi = boot_ci(a)

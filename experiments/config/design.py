@@ -31,7 +31,7 @@ MASTER_SEED = 20260801
 # "pilot"    ~40 core-h   — sanity check the pipeline and the E1/E4 signal
 # "moderate" ~900 core-h  — adequately powered for E1, E2, E4
 # "full"     ~3200 core-h — the design described in EXPERIMENTAL_PLAN.md
-PROFILE = "full"
+PROFILE = "pilot"
 
 
 class _Profile(TypedDict):
@@ -142,8 +142,27 @@ CONTRACTUAL = {
 
 # Synthetic controlled family (E3). Orthogonal variation of the three price
 # characteristics that real data confounds.
-SYNTH_SPREADS = [10.0, 30.0, 60.0, 100.0, 150.0]   # EUR/MWh peak-to-trough
-SYNTH_NOISE = [0.05, 0.15, 0.30]                   # sd as fraction of mean
+# Peak-to-trough spread of the synthetic family, EUR/MWh.
+#
+# The low end matters more than it looks. Realised spread_intraday on the first
+# full benchmark was close to bimodal: the flat control at 0, then NOTHING
+# until 18.4, then the bulk above 45. E3 therefore cannot identify where the
+# value of storage vanishes, and any screening threshold read off the fitted
+# line is extrapolation into that gap (see the E3 support diagnostic in
+# analysis/analyses.py, and Threats to Validity in the paper).
+#
+# The 1, 3 and 5 levels exist to fill the gap. Note that generator spread and
+# realised spread differ: noise inflates the realised value, so a nominal 10
+# came out at 18.4. Check the realised distribution in
+# data/manifest_instances.csv after regenerating, not the nominal levels here.
+SYNTH_SPREADS = [1.0, 3.0, 5.0, 10.0, 30.0, 60.0, 100.0, 150.0]
+# Noise sd as a fraction of the mean. 0.01 is not a realism level -- no real
+# tariff is that smooth -- it is there because noise dominates the REALISED
+# intra-day spread at low nominal spreads. Measured on a 168 h series, nominal
+# spread 1 gives realised spread 18.3 at noise 0.05 but 3.6 at noise 0.01. So
+# without this level the low-spread region cannot be populated at all, whatever
+# SYNTH_SPREADS says, and E3 keeps the identification hole described there.
+SYNTH_NOISE = [0.01, 0.05, 0.15, 0.30]
 SYNTH_NEG_SHARE = [0.0, 0.08]                      # share of hours below zero
 SYNTH_MEAN = 90.0                                  # EUR/MWh
 SYNTH_DRAWS = P["e3_synth_draws"]

@@ -61,6 +61,17 @@ TIMEOUT_MARGIN = 120        # seconds of grace beyond --tl before SIGKILL
 # tested on macOS) pinning is silently skipped and only the env-var caps
 # below apply.
 TASKSET = shutil.which("taskset")
+
+# Worker slot i must be pinned to a CPU this process is actually allowed to
+# use, which is NOT necessarily i. Under a cpuset, a container, or cgroup
+# limits, the permitted set can be sparse or smaller than the slot count, and
+# `taskset -c <slot>` then fails for every run -- turning a multi-hour job into
+# a multi-hour sequence of "failed to set affinity" errors. sched_getaffinity
+# is the authoritative answer, so slots are mapped onto it.
+try:
+    CPUS = sorted(os.sched_getaffinity(0))
+except (AttributeError, OSError):        # not Linux
+    CPUS = []
 SINGLE_THREAD_ENV = {
     **os.environ,
     "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
@@ -114,8 +125,8 @@ def run_one(row: dict, core: int | None) -> dict:
     rid = row["run_id"]
     out_json = RESULTS / f"{rid}.json"
     argv = row["argv"].split("\t") + ["-o", str(out_json)]
-    if TASKSET and core is not None:
-        argv = [TASKSET, "-c", str(core)] + argv
+    if TASKSET and CPUS and core is not None:
+        argv = [TASKSET, "-c", str(CPUS[core % len(CPUS)])] + argv
     tl = int(row["time_limit"])
     t0 = time.time()
     status, rc, err = "ok", 0, ""
@@ -182,11 +193,31 @@ def main() -> int:
     if args.limit:
         todo = todo[:args.limit]
 
+    # Verify pinning on a CPU we will actually use, before committing hours.
+    global TASKSET
+    if TASKSET and CPUS:
+        probe_cpu = CPUS[min(args.workers, len(CPUS)) - 1]
+        probe = subprocess.run([TASKSET, "-c", str(probe_cpu),
+                                sys.executable, "-c", "pass"],
+                               capture_output=True, text=True, check=False)
+        if probe.returncode != 0:
+            print(f"WARNING: taskset probe on cpu {probe_cpu} failed "
+                  f"({(probe.stderr or '').strip()}); continuing WITHOUT pinning.")
+            TASKSET = ""
+    if args.workers > len(CPUS or [1]):
+        print(f"WARNING: {args.workers} workers but only {len(CPUS)} CPUs are "
+              f"available to this process; slots will share cores and each run "
+              f"will get less than the wall-clock time its --tl assumes.")
+
     solver = Path(rows[0]["argv"].split("\t")[0])
     free_gb = shutil.disk_usage(DATA).free / 1e9
     print(f"runlist {len(rows)}  already done {len(rows)-len(todo)}  todo {len(todo)}")
     print(f"workers {args.workers}   free disk {free_gb:.1f} GB")
-    print(f"CPU pinning: {'taskset -c <core>, 1 core per worker slot' if TASKSET else 'DISABLED (taskset not found on this platform)'}")
+    if TASKSET and CPUS:
+        print(f"CPU pinning: taskset, {len(CPUS)} cpus available "
+              f"({CPUS[0]}..{CPUS[-1]}), 1 per worker slot")
+    else:
+        print("CPU pinning: DISABLED")
     if free_gb < 20:
         print("WARNING: less than 20 GB free; solution JSONs will fill it")
 
