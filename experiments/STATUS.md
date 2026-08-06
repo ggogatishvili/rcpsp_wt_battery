@@ -15,7 +15,7 @@ never needs editing.
 | Exp. | Status | What you get |
 |---|---|---|
 | **E0** validation | full | gaps and runtimes for MILP/H1/H1P/GA/GAP; gap stability across battery levels; LP overhead |
-| **E1** decomposition | **partial** | policy × battery plane only. The σ (state-policy) dimension is blocked, so `V_σ` and `I_σβ` — the paper's headline interaction — are **not estimable**. Reported as NOT ESTIMABLE, not silently omitted. |
+| **E1** decomposition | **full** | σ × β decomposition against the always-hot/no-battery baseline: `V_σ`, `V_β`, `V_joint`, `I_σβ`, substitution index, plus the Σ₁→Σ₂ rung. Policy × battery retained as secondary. |
 | **E2** sizing | full | savings curve, marginal value, saturation, NPV, payback, NPV>0 share |
 | **E3** tariffs | full | regression on spread/CV/negative share, screening rule, regime comparison |
 | **E4** frontier | full | Pareto frontiers with and without storage, exchange rates, frontier shift |
@@ -31,17 +31,26 @@ horizon, and the price vector. No solver flag is required for any of them.
 
 Ordered by how much of the paper each unlocks.
 
-### C1 — state-set restriction `--states {proc | proc,idle | all}`
-**Blocks: E1's headline result.** Without it there is no Σ₁/Σ₂/Σ₃ ladder, so
-the substitutes-vs-complements finding — the thing that makes this a
-management paper rather than an algorithm paper — cannot be measured at all.
-Everything else in this list is secondary to it.
+### C1 — state-set restriction `--states {proc | proc,idle | all}` — **DONE**
+Implemented. E1's Σ₁/Σ₂/Σ₃ ladder is now measurable.
 
-Implementation: forbid excluded states in the MILP; drop the corresponding
-nodes from the SPACES graph in H1 Phase 2. Σ₁ ("always hot") additionally
-needs a definition of the production window (first EI start → last EI end).
+The restriction is applied per *bridge* inside `SolverH1::findOptimalPath`,
+not when the SPACES graph is built. That matters: `scheduleMachineUsage`
+routes the first bridge **from** Off at t=0 and the last **to** Off at t=h-1
+through the same graph, so filtering Off out of the graph would make both
+infeasible and abort every run. Restricting only the interior bridges gives
+exactly the intended reading — "never re-entered mid-schedule" — while the
+model's mandatory start-up and shut-down are untouched.
 
-Cells waiting: 90,000.
+Verified on a standalone replica: interior bridge cost is monotone in the
+ladder (690 → 4,060 → 8,040 as states are removed, as a nested relaxation
+must be), boundary bridges stay feasible under all three levels, and applying
+the ladder to a boundary bridge is confirmed to make it infeasible.
+
+The MILP was **not** changed: E1 uses GA/GAP only, so the SPACES graph is the
+only path that needs it.
+
+Cells activated: 45,000 (Σ₁ and Σ₂, GA only — see below). ~12.5 h.
 
 ### C0 — make the Phase-3 LP unconditional
 `Config::phase3LP` currently defaults to `false`, but the paper (§4.3) now
@@ -81,10 +90,8 @@ remove that inference and make degradation accounting exact.
 
 ## Suggested order
 
-1. **C0** — silent correctness. Nothing else matters if the runs measure the
-   wrong Phase 3.
-2. **C1** — unlocks E1's headline.
-3. **C4** — before E2 is final, since it will move the sizing result.
+1. ~~**C0**~~ done. ~~**C1**~~ done — E1's headline is now measurable.
+2. **C4** — before E2 is final, since it will move the sizing result.
 4. **C2 / C3** — unlocks E6.
 5. **C7 / C8** — unlocks E7.
 

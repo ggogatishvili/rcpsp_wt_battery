@@ -214,6 +214,85 @@ def e1(rows: list[dict], out: Path, how: str = "mean") -> str:
 
     states = sorted({r["state_policy"] for r in rows})
     lines.append(f"state policies present: {', '.join(states)}")
+
+    # ---- PRIMARY: the sigma x beta decomposition (RQ1) --------------------
+    # This is the question the paper poses: are machine-state flexibility and
+    # storage substitutes or complements? The baseline is the status quo cell
+    # -- always hot, no battery -- and everything is measured against it:
+    #
+    #   V_sigma = Z(s1,0) - Z(s3,0)      state flexibility alone
+    #   V_beta  = Z(s1,0) - Z(s1,b)      storage alone
+    #   V_joint = Z(s1,0) - Z(s3,b)      both
+    #   I_sigma_beta = V_joint - V_sigma - V_beta
+    #
+    # A negative interaction means the levers compete for the same arbitrage
+    # (substitutes) and a plant that has one should discount the other.
+    if len({"sigma1", "sigma3"} & set(states)) == 2:
+        ladder_pol = sorted({r["policy"] for r in rows
+                             if r["state_policy"] != "sigma3"}) or ["edd"]
+        pol0 = ladder_pol[0]
+        lines += ["", "=" * 62,
+                  f"PRIMARY (RQ1): machine-state x storage, policy = {pol0}",
+                  "=" * 62]
+        for regime in sorted({r["price_regime"] for r in rows}):
+            sub = [r for r in rows
+                   if r["price_regime"] == regime and r["policy"] == pol0]
+            cells = collapse_seeds(
+                sub, ("instance", "state_policy", "battery_ratio"), how=how)
+            insts = sorted({k[0] for k in cells})
+
+            def g(i, st, b):
+                return cells.get((i, st, b))
+
+            keep = [i for i in insts
+                    if all(g(i, st, b) is not None
+                           for st in ("sigma1", "sigma3") for b in (0.0, 1.0))]
+            if not keep:
+                lines.append(f"  {regime}: no complete sigma1/sigma3 cells")
+                continue
+            Z00 = np.array([g(i, "sigma1", 0.0) for i in keep])   # status quo
+            Z10 = np.array([g(i, "sigma3", 0.0) for i in keep])   # states only
+            Z01 = np.array([g(i, "sigma1", 1.0) for i in keep])   # storage only
+            Z11 = np.array([g(i, "sigma3", 1.0) for i in keep])   # both
+
+            V_s = (Z00 - Z10) / Z00 * 100
+            V_b = (Z00 - Z01) / Z00 * 100
+            V_j = (Z00 - Z11) / Z00 * 100
+            I_sb = V_j - V_s - V_b
+
+            st4 = [paired_summary(V_s, "V_sigma  (state flexibility only)"),
+                   paired_summary(V_b, "V_beta   (storage only)"),
+                   paired_summary(V_j, "V_joint  (both)"),
+                   paired_summary(I_sb, "I_sigma_beta (interaction)")]
+            ps = {x["effect"]: two_sided_p_from_t(x["t"], x["n"] - 1) for x in st4}
+            padj = holm(ps)
+            lines.append(f"\n--- {regime}  n={len(keep)} "
+                         f"(% of the always-hot, no-battery baseline) ---")
+            lines.append(f"    {'effect':36s} {'mean':>8s} {'95% CI':>20s} "
+                         f"{'dz':>7s} {'p(holm)':>9s}")
+            for x in st4:
+                lines.append(f"    {x['effect']:36s} {x['mean']:8.3f} "
+                             f"[{x['ci_lo']:8.3f},{x['ci_hi']:8.3f}] "
+                             f"{x['cohens_dz']:7.3f} {padj[x['effect']]:9.4f}")
+            mn = min(abs(float(np.mean(V_s))), abs(float(np.mean(V_b))))
+            si = -float(np.mean(I_sb)) / mn if mn > 1e-12 else float("nan")
+            verdict = ("SUBSTITUTES" if si > 0.05 else
+                       "COMPLEMENTS" if si < -0.05 else "approximately ADDITIVE")
+            lines.append(f"    substitution index SI = {si:.3f}  -> {verdict}")
+
+            # the intermediate rung, for the ladder table in the paper
+            if "sigma2" in states:
+                mid = [i for i in keep if g(i, "sigma2", 0.0) is not None]
+                if mid:
+                    Zm = np.array([g(i, "sigma2", 0.0) for i in mid])
+                    Zs = np.array([g(i, "sigma1", 0.0) for i in mid])
+                    v = (Zs - Zm) / Zs * 100
+                    lo, hi = boot_ci(v)
+                    lines.append(f"    rung sigma1->sigma2 (idling only): "
+                                 f"{v.mean():.3f} % [{lo:.3f},{hi:.3f}]  n={len(mid)}")
+        lines += ["", "=" * 62,
+                  "SECONDARY: scheduling policy x storage, within each state",
+                  "=" * 62]
     if states == ["sigma3"]:
         lines += ["",
                   "  NOT ESTIMABLE: V_sigma and I_sigma_beta.",

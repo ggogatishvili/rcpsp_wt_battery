@@ -413,12 +413,17 @@ vector<MachineBlock> SolverH1::scheduleMachineUsage(const vector<int>& startTime
     for (const auto& procRequiredInterval : procRequiredIntervals) {
         // Find and add the optimal path from current time/state to just before the start of the required Proc interval
         if (currentTime < procRequiredInterval.start) {
+            // Interior bridge (Proc -> ... -> Proc): the state ladder applies.
+            // The very first bridge starts from Off at t=0, which is mandatory
+            // rather than a mid-schedule shutdown, so it is left unrestricted.
+            const bool isFirstBridge = machineBlocks.empty();
             auto path= findOptimalPath(
                     spacesGraph,
                     currentTime,
                     currentState,
                     procRequiredInterval.start,
-                    State::Proc
+                    State::Proc,
+                    !isFirstBridge
             );
 
             // If previous block is Proc and the first block of the path is also Proc, we can merge them into one block
@@ -462,12 +467,15 @@ vector<MachineBlock> SolverH1::scheduleMachineUsage(const vector<int>& startTime
     }
 
     // After last Proc block find and add the optimal path to the end of the horizon, which should end in Off state
+    // Final bridge to the mandatory Off at t=h-1: unrestricted, for the same
+    // reason as the first one.
     auto path = findOptimalPath(
             spacesGraph,
             currentTime,
             currentState,
             H - 1,
-            State::Off
+            State::Off,
+            false
     );
 
     // The machine should be in Off state at the end of the horizon, so we can extend the last block if it ends in Off state
@@ -605,8 +613,27 @@ vector<MachineBlock> SolverH1::findOptimalPath(
         int startTime,
         State startState,
         int endTime,
-        State endState
+        State endState,
+        bool restrictStates
 ) {
+    // Machine-state ladder (Config::stateSet, --states) -- the sigma dimension
+    // of experiment E1.
+    //
+    // The restriction is applied HERE, per bridge, and not when the graph is
+    // built. Constraints (3.14) force the machine Off at t=0 and t=h-1, and
+    // scheduleMachineUsage() realises that by routing the first bridge FROM
+    // Off and the last bridge TO Off through this same graph. Filtering Off
+    // out of the shared graph would therefore make those two bridges
+    // infeasible and every run would abort.
+    //
+    // Excluding a state only for the interior bridges gives exactly the
+    // intended operational reading: "never re-entered mid-schedule", i.e.
+    //   proc,idle -> idles between jobs but is never shut down
+    //   proc      -> stays hot for the whole production window
+    // while the mandatory start-up and shut-down remain untouched.
+    const auto allowed = [restrictStates](const int st) {
+        return !restrictStates || Config::stateAllowed(st);
+    };
     // Total cost to reach each node (time, state) initialized to infinity, except for the start node
     vector<vector<double>> totalPathCost(H, vector<double>(S, BIG_M));
     totalPathCost[startTime][(int)startState] = 0.0;
@@ -625,10 +652,20 @@ vector<MachineBlock> SolverH1::findOptimalPath(
                 continue;
             }
 
+            // Skip states excluded by the machine-state ladder
+            if (!allowed(s)) {
+                continue;
+            }
+
             // Explore outgoing edges from the current node (t, s)
             for (const Edge& e : graph[i][s]) {
                 // Skip edges that go beyond the end time
                 if (e.toTime > endTime) {
+                    continue;
+                }
+
+                // ... and edges that would enter an excluded state
+                if (!allowed((int)e.toState)) {
                     continue;
                 }
 

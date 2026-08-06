@@ -132,7 +132,9 @@ private:
      * @param endState  the required state of the machine at endTime
      * @return vector of MachineBlocks representing the optimal path from (startTime, startState) to (endTime, endState), where each block indicates a contiguous time interval during which the machine is in a specific state or transitioning between states
      */
-    vector<MachineBlock> findOptimalPath(const vector<vector<vector<Edge>>>& graph, int startTime, State startState, int endTime, State endState);
+    // restrictStates: apply the --states ladder (interior bridges only;
+    // the mandatory boundary Off transitions must stay unrestricted).
+    vector<MachineBlock> findOptimalPath(const vector<vector<vector<Edge>>>& graph, int startTime, State startState, int endTime, State endState, bool restrictStates = false);
 
 
 

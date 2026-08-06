@@ -178,6 +178,11 @@ def main() -> int:
                 continue
             for state in design.STATE_POLICIES:
                 for pol, spec in design.POLICIES.items():
+                    # The sigma ladder is crossed with GA only (see
+                    # design.E1_LADDER_POLICIES). sigma3 keeps every policy so
+                    # that the runs already on disk stay addressable.
+                    if state != "sigma3" and pol not in design.E1_LADDER_POLICIES:
+                        continue
                     method = spec["method_ga"]
                     for ratio in (0.0, design.BATTERY_ON_RATIO):
                         for s in seeds_for(method, "E1"):

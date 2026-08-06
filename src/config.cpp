@@ -155,6 +155,11 @@ void Config::fromArgs(const int argc, const char* const argv[])
       ("mDelayMag",     po::value<double>(), "Mutator Delay Shift Magnitude")
 
       // H1P / GAP params
+      ("states", po::value<std::string>(),
+         fmt::format("Machine states usable between Proc blocks "
+                     "[all|proc,idle|proc] (default: {}). Restricts the SPACES "
+                     "graph only; the mandatory Off at t=0 and t=h-1 is "
+                     "unaffected.", to_string(stateSet)).c_str())
       ("phase1-price-aware", "Enable price-aware EI delay in Phase 1 (H1P / GAP)")
       ("phase1-window", po::value<int>(),
          fmt::format("Max delay window for price-aware Phase 1 (default: {})", phase1Window).c_str())
@@ -256,6 +261,7 @@ void Config::fromArgs(const int argc, const char* const argv[])
    if (vm.contains("mDelayMag"))     Config::mutDelayShiftMag        = vm["mDelayMag"].as<double>();
 
    // H1P / GAP params
+   if (vm.contains("states"))             Config::stateSet         = parseStateSet(vm["states"].as<std::string>());
    if (vm.contains("phase1-price-aware")) Config::phase1PriceAware = true;
    if (vm.contains("phase1-window"))      Config::phase1Window     = vm["phase1-window"].as<int>();
    if (vm.contains("phase3-lp"))          Config::phase3LP         = true;
@@ -281,6 +287,7 @@ void Config::showConfig()
    fmt::println("   {:<20}{:<15}", "C-rate:", std::isfinite(cRate) ? fmt::format("{:.3f}", cRate) : std::string("uncapped"));
    fmt::println("   {:<20}{:<15}", "Lambda:", lambda);
    fmt::println("   {:<20}{:<15}", "Machine profile:", machineProfileFile ? *machineProfileFile : std::string("default (A2)"));
+   fmt::println("   {:<20}{:<15}", "Machine states:",   to_string(stateSet));
    fmt::println("   {:<20}{:<15}", "Version:",          VERSION);
    if (method == ResolutionMethod::H1P || method == ResolutionMethod::GAP
        || phase1PriceAware || phase3LP) {
@@ -297,6 +304,28 @@ void Config::showConfig()
 void Config::init_config()
 {
    Config::threadLimit = std::max(1u, std::thread::hardware_concurrency());
+}
+
+Config::StateSet Config::parseStateSet(const std::string& spec)
+{
+   std::string m;
+   std::ranges::transform(spec, std::back_inserter(m), ::tolower);
+   std::erase(m, ' ');
+
+   if ( m == "all" || m == "off,idle,proc" || m == "proc,idle,off" )
+      return Config::StateSet::All;
+   if ( m == "proc,idle" || m == "idle,proc" )
+      return Config::StateSet::ProcIdle;
+   if ( m == "proc" )
+      return Config::StateSet::ProcOnly;
+
+   // An unrecognised value must not silently fall back to the full model: that
+   // would make an E1 sigma cell secretly identical to its baseline and the
+   // measured interaction meaningless.
+   fmt::println(stderr, "Invalid --states value '{}'. Expected one of: "
+                        "all | proc,idle | proc", spec);
+   exit_final(1);
+   return Config::StateSet::All;   // unreachable
 }
 
 Config::ResolutionMethod Config::parseResolutionMethod(const std::string& method)

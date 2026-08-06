@@ -192,11 +192,32 @@ POLICIES = {
 # restricting the state set (item C1 in EXPERIMENTAL_PLAN.md). The runlist
 # generator probes `solver --help` for "--states" and silently omits these
 # cells until the flag exists, so the design does not need editing later.
+# The sigma ladder of experiment E1 -- the machine-state dimension.
+# Realised by the solver's --states flag (implemented; the runlist generator
+# probes for it and activates these cells automatically).
+#
+#   sigma3  full model: the machine may shut down between jobs
+#   sigma2  idles between jobs but is never shut down mid-schedule
+#   sigma1  stays hot for the whole production window
+#
+# The flag restricts only the INTERIOR bridges between mandatory Proc blocks;
+# the model's mandatory Off at t=0 and t=h-1 is untouched, so "no Off" means
+# "never shuts down mid-schedule" rather than an infeasible model.
 STATE_POLICIES = {
-    "sigma3": {"flag": None,                    "blocked": False},  # full model, current behaviour
-    "sigma2": {"flag": "--states=proc,idle",    "blocked": True},
-    "sigma1": {"flag": "--states=proc",         "blocked": True},
+    "sigma3": {"flag": None},                   # full model, the existing runs
+    "sigma2": {"flag": "--states=proc,idle"},
+    "sigma1": {"flag": "--states=proc"},
 }
+
+# Which scheduling policies the sigma ladder is crossed with.
+#
+# GA only, deliberately. E0 shows GAP is worse than GA at every budget tested
+# and is not gap-stable across battery levels, so it is disqualified as a
+# measurement device; crossing it into the sigma plane would double the cost
+# (90,000 -> 45,000 runs, 25 h -> 12.5 h) to add a second, noisier estimate of
+# the same interaction. sigma3 keeps BOTH policies because those runs already
+# exist -- restricting it would orphan them.
+E1_LADDER_POLICIES = ["edd"]
 
 SEEDS = list(range(1, P["seeds"] + 1))   # GA/GAP are stochastic; H1/H1P/MILP are not
 

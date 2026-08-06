@@ -198,10 +198,30 @@ superseded — **do not reuse it**. The three stable rows (efficiency, C-rate,
 rho) are unchanged and are what the subsection now rests on. Expect the two
 suppressed rows to become estimable on this pass.
 
+## A second pass is now queued: E1's σ ladder
+
+`--states` landed *after* this run started, so the 45,000 ladder cells
+(Σ₁ and Σ₂, GA only) are in the runlist but not in this execution. Run them
+when the current pass finishes:
+
+```bash
+python3 bin/02_make_runlist.py          # picks up --states, blocked list -> empty
+python3 bin/03_run.py --rerun-failed --experiments E1     # ~12.5 h
+python3 bin/05_analyse.py --only E1
+```
+
+`e1()` then reports the σ × β decomposition as its PRIMARY section. Read
+`I_sigma_beta` and the substitution index: negative SI means complements,
+positive means substitutes, and near zero means additive — all three are
+legitimate findings, but only one matches the introduction as written.
+
+**Check the C5 resolution floor first.** The interaction was ~1.9 pp against a
+17.96 % worst-case floor on the pre-fix run. If the floor has not fallen
+substantially, the ladder result will not be resolvable either and the 12.5 h
+is better spent on the irace re-tune.
+
 ## Still outstanding after this rerun
 
-- **E1's σ dimension** (`--states`) remains unimplemented; 90,000 cells stay
-  blocked and the machine-state × storage question stays unanswered.
 - **irace was tuned at `--tl 600`, `-m GA` only.** The profile measures the
   consequence but does not fix it. A per-method, per-budget re-tune is the
   real remedy; `tuning/` already has the scenario, parameters and runner.

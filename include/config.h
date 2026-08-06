@@ -164,6 +164,41 @@ public:
     // Delay Shift Magnitude
     inline static double mutDelayShiftMag = 0.01;
 
+    // Machine-state ladder (--states). Restricts which states the machine may
+    // occupy *between* mandatory Proc blocks. It does NOT touch the boundary
+    // conditions: constraints (3.14) force Off at t=0 and t=h-1 and those are
+    // handled outside the SPACES graph, so "no Off" means "never shuts down
+    // mid-schedule", which is the operational reading intended.
+    //
+    //   All      Off/Idle/Proc      full model (default, = sigma3)
+    //   ProcIdle Idle/Proc          idles between jobs, never shuts down
+    //   ProcOnly Proc               stays hot for the whole production window
+    //
+    // This is the sigma dimension of experiment E1: it is what makes the
+    // machine-state x storage interaction measurable at all.
+    enum class StateSet { All, ProcIdle, ProcOnly };
+
+    inline static StateSet stateSet = StateSet::All;
+
+    static std::string to_string(const StateSet s)
+    {
+        switch ( s ) {
+            case StateSet::ProcIdle: return "proc,idle";
+            case StateSet::ProcOnly: return "proc";
+            default:                 return "all";
+        }
+    }
+
+    // True when state `s` may be used for bridging between Proc blocks.
+    static bool stateAllowed(const int s)
+    {
+        switch ( stateSet ) {
+            case StateSet::ProcOnly: return s == 1;             // State::Proc
+            case StateSet::ProcIdle: return s == 1 || s == 2;   // Proc, Idle
+            default:                 return true;
+        }
+    }
+
     // H1P / GAP Parameters
     // --phase1-price-aware: pick EI start time that minimises energy+tardiness cost
     inline static bool phase1PriceAware = false;
@@ -186,6 +221,9 @@ private:
 
     // Parses a string to a resolution method
     static ResolutionMethod parseResolutionMethod(const std::string& method);
+
+    // Parses --states ("all" | "proc,idle" | "proc")
+    static StateSet parseStateSet(const std::string& spec);
 };
 
 // Template specialization for fmt to format ResolutionMethod enum
