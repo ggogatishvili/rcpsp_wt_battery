@@ -31,7 +31,7 @@ MASTER_SEED = 20260801
 # "pilot"    ~40 core-h   — sanity check the pipeline and the E1/E4 signal
 # "moderate" ~900 core-h  — adequately powered for E1, E2, E4
 # "full"     ~3200 core-h — the design described in EXPERIMENTAL_PLAN.md
-PROFILE = "pilot"
+PROFILE = "full"
 
 
 class _Profile(TypedDict):

@@ -116,11 +116,25 @@ the rerun worked:
   pre-registration fixes 0.5 % as the level above which the metaheuristic is
   too noisy to support the managerial claims.
 
-## 4. Analyse
+## 4. Analyse and plot
 
 ```bash
 python3 bin/05_analyse.py
+python3 bin/06_figures.py     # vector PDFs into data/figures/
 ```
+
+`06_figures.py` produces the six paper figures. It degrades rather than
+crashes on a partial results table, so it can be run while the cluster is
+still working:
+
+| file | shows |
+|---|---|
+| `fig_e0_anytime.pdf` | GAP $-$ GA cost vs time budget, with CIs |
+| `fig_e2_sizing.pdf`  | savings curve and marginal value, by regime |
+| `fig_e2_npv.pdf`     | NPV$>$0 share over CAPEX $\times$ capacity, with the 50 % contour |
+| `fig_e3_spread.pdf`  | saving vs intra-day spread, with the support gap shaded |
+| `fig_e4_frontier.pdf`| the two service--energy frontiers |
+| `fig_e6_tornado.pdf` | technology factors ranked, with CIs |
 
 E0 now leads with an anytime profile: mean objective by budget, paired on
 instance × battery, with the GAP−GA gap and its bootstrap CI at each of
@@ -164,6 +178,25 @@ low-EI-density, loosely-due-dated instances, so the sample was unbalanced along
 three of the covariates E5 regresses on. Its R² of 0.028 may be partly that.
 
 ---
+
+## Changed since the last analysis pass — read this
+
+**A normalised metric replaces the unbounded one.** Savings and gaps were
+reported as a fraction of the baseline cost, which degenerates when negative
+prices push that baseline towards zero. `analyses.norm_scale()` divides
+instead by `e_day x horizon_days x mean_price` — the bill for running the EI
+machine flat out at the mean price, which is positive, configuration-invariant
+and comparable across regimes. E0 gains a `norm gap` column, E2 a `norm`
+column, and E6's tornado now uses it throughout.
+
+**E6 was affected badly and its paper table has been rewritten.** On the
+current data the old denominator gives a policy effect of $+233\%$ with a CI
+of $[2, 691]$, and a restart effect of $-28\%$ with a CI of $[-125, +22]$ that
+does not determine its sign. Both are now reported as *not estimable* in the
+paper, and an earlier draft figure of $+16.8\%$ for the restart penalty is
+superseded — **do not reuse it**. The three stable rows (efficiency, C-rate,
+rho) are unchanged and are what the subsection now rests on. Expect the two
+suppressed rows to become estimable on this pass.
 
 ## Still outstanding after this rerun
 

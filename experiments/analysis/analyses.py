@@ -37,9 +37,27 @@ RNG_SEED = 20260801
 # io helpers
 # ---------------------------------------------------------------------------
 
+DROPPED_NONFINITE = 0
+
+
 def load_results(path: Path) -> list[dict]:
+    """Load successful runs, discarding those with a non-finite objective.
+
+    A run can exit cleanly and still carry NaN: the solver serialises a
+    non-finite double as JSON null (an infeasible fallback, or a chromosome
+    scored -BIG_M reaching extraction), and 04_collect turns that back into
+    NaN. Such a row is not an observation.
+
+    Keeping them is worse than dropping them, because NaN propagates through
+    np.mean and poisons the whole aggregate: a single bad run turned an entire
+    regime of E2, half of E4 and the whole of E5 into "nan" while every other
+    cell looked healthy. The count is exported so the rate is visible rather
+    than silent -- if it is more than a fraction of a percent, the solver is
+    reporting failures as successes and that is a finding in its own right.
+    """
+    global DROPPED_NONFINITE
     rows = list(csv.DictReader(Path(path).open()))
-    out = []
+    out, dropped = [], 0
     for r in rows:
         if r.get("status") != "ok":
             continue
@@ -51,8 +69,49 @@ def load_results(path: Path) -> list[dict]:
             r["wall_seconds"] = float(r["wall_seconds"])
         except (KeyError, ValueError):
             continue
+        if not (math.isfinite(r["objective"]) and math.isfinite(r["energy_cost"])
+                and math.isfinite(r["tardiness_cost"])):
+            dropped += 1
+            continue
         out.append(r)
+    DROPPED_NONFINITE = dropped
+    if dropped:
+        print(f"WARNING: dropped {dropped} run(s) with status=ok but a "
+              f"non-finite objective ({100*dropped/max(1,dropped+len(out)):.2f} % "
+              f"of otherwise-successful runs)")
     return out
+
+
+def norm_scale(row: dict) -> float:
+    """A strictly positive, treatment-invariant scale for one instance.
+
+    WHY THIS EXISTS. Savings and gaps are reported as a fraction of the
+    baseline cost, and with 64 % of the price series containing negative hours
+    the baseline can approach or cross zero. The ratio is then unbounded: it is
+    what produces the >100 % savings in E2 and the divergent relative gaps in
+    E0. Normalising by a quantity that does not depend on the configuration
+    fixes that, at the cost of no longer reading as "percent of cost".
+
+    The scale is the energy bill of running the EI machine flat out at the mean
+    price of the attached tariff, with no optimisation at all:
+
+        E_ref = e_day  x  horizon_days  x  mean_price
+              = e_proc x  sum(EI durations)  x  mean_price
+
+    It is instance-level, identical across every configuration compared, and
+    strictly positive for every series in the library (the lowest regime mean
+    is ~82 EUR/MWh). A normalised difference of 0.10 therefore means "one tenth
+    of the naive energy bill", and is comparable across regimes and sizes in a
+    way that a percentage of the realised cost is not.
+    """
+    try:
+        e_day = float(row.get("inst_e_day", 0) or 0)
+        days = float(row.get("inst_horizon_days", 0) or 0)
+        price = float(row.get("inst_price_mean", 0) or 0)
+    except (TypeError, ValueError):
+        return float("nan")
+    s = e_day * days * abs(price)
+    return s if s > 1e-9 else float("nan")
 
 
 def collapse_seeds(rows: list[dict], keys: tuple[str, ...],
@@ -261,8 +320,8 @@ def e2(rows: list[dict], out: Path, econ: dict) -> str:
         keep = [i for i in insts if base.get(i)]
         lines += [f"\n--- regime {regime}  ({len(keep)} instances) ---",
                   f"  {'B/E_day':>8s} {'saving %':>9s} {'95% CI':>19s} "
-                  f"{'MVS %/unit':>11s} {'cap MWh':>9s} {'NPV kEUR':>10s} "
-                  f"{'payback y':>10s} {'NPV>0':>6s}"]
+                  f"{'norm':>8s} {'MVS %/unit':>11s} {'cap MWh':>9s} "
+                  f"{'NPV kEUR':>10s} {'payback y':>10s} {'NPV>0':>6s}"]
         prev_mean = 0.0
         for b in ratios:
             present = [i for i in keep if (i, regime, b) in cells]
@@ -271,6 +330,12 @@ def e2(rows: list[dict], out: Path, econ: dict) -> str:
             rel = np.array([100 * (base[i] - cells[(i, regime, b)]) / base[i]
                             for i in present])
             lo, hi = boot_ci(rel)
+            # Same difference, normalised by a positive configuration-invariant
+            # scale instead of the (possibly near-zero) baseline. Where the two
+            # disagree badly, trust this one.
+            nrm = np.array([(base[i] - cells[(i, regime, b)]) / _scale_of(rows, i)
+                            for i in present
+                            if math.isfinite(_scale_of(rows, i))])
 
             # Per-instance annualisation, then aggregate. Averaging horizons
             # first would bias the annual figure towards long-horizon instances.
@@ -293,7 +358,9 @@ def e2(rows: list[dict], out: Path, econ: dict) -> str:
             med_pay = float(np.median(pays)) if pays else float("nan")
             frac_pos = (100 * sum(1 for v in npvs if v > 0) / len(npvs)) if npvs else float("nan")
             lines.append(f"  {b:8.2f} {float(np.mean(rel)):9.3f} "
-                         f"[{lo:8.3f},{hi:8.3f}] {mvs:11.3f} "
+                         f"[{lo:8.3f},{hi:8.3f}] "
+                         f"{(float(np.mean(nrm)) if len(nrm) else float('nan')):8.3f} "
+                         f"{mvs:11.3f} "
                          f"{(float(np.mean(caps)) if caps else float('nan')):9.2f} "
                          f"{med_npv:10.1f} {med_pay:10.2f} {frac_pos:5.0f}%")
             prev_mean = float(np.mean(rel))
@@ -301,6 +368,10 @@ def e2(rows: list[dict], out: Path, econ: dict) -> str:
         lines += [
             "  MVS   marginal saving (percentage points) per unit of B/E_day.",
             "  NPV   median across instances, thousand EUR, config/economics.py.",
+            "  norm  same saving divided by e_day x horizon_days x mean_price,",
+            "        a positive configuration-invariant scale. Percentages are",
+            "        unbounded here because negative prices can drive the",
+            "        baseline cost towards zero; this column is not.",
             "  NPV>0 share of instances where the investment is worth making.",
             "  Saturation is where MVS approaches zero; the NPV-optimal size is",
             "  normally well below it, and that gap is the managerial point."]
@@ -314,6 +385,17 @@ def e2(rows: list[dict], out: Path, econ: dict) -> str:
 
 
 _EDAY_CACHE: dict[str, float] = {}
+_SCALE_CACHE: dict[str, float] = {}
+
+
+def _scale_of(rows: list[dict], inst: str) -> float:
+    if inst not in _SCALE_CACHE:
+        _SCALE_CACHE[inst] = float("nan")
+        for r in rows:
+            if r["instance"] == inst:
+                _SCALE_CACHE[inst] = norm_scale(r)
+                break
+    return _SCALE_CACHE[inst]
 
 
 def _e_day_of(rows: list[dict], inst: str) -> float:
@@ -624,13 +706,29 @@ _E6_ARCHETYPES = {
 }
 
 
-def _e6_paired_pct(cells: dict, group_keys, key_hi, key_lo) -> np.ndarray:
-    """Paired %% change (hi vs lo) over every group key present at both."""
+def _e6_paired_pct(cells: dict, group_keys, key_hi, key_lo,
+                   scales: dict | None = None) -> np.ndarray:
+    """Paired change (hi vs lo) over every group key present at both.
+
+    DENOMINATOR. Dividing by the low-configuration cost is unstable here for
+    the same reason it is everywhere else in this study: negative prices can
+    drive an energy cost towards zero, and the ratio then explodes. It did:
+    the first E6 tornado reported a policy effect of +233 % with a 95 % CI of
+    [2, 691], and a restart effect whose sign was not even determined. When
+    `scales` is supplied (instance -> norm_scale) the difference is divided by
+    that positive, configuration-invariant quantity instead, which keeps the
+    "% of the naive energy bill" reading and cannot degenerate.
+    """
     out = []
     for gk in group_keys:
         lo = cells.get(gk + key_lo)
         hi = cells.get(gk + key_hi)
-        if lo and hi is not None:
+        if lo is None or hi is None:
+            continue
+        sc = scales.get(gk[0]) if scales else None
+        if sc is not None and math.isfinite(sc) and sc > 0:
+            out.append(100 * (hi - lo) / sc)
+        elif lo:
             out.append(100 * (hi - lo) / lo)
     return np.array(out)
 
@@ -667,6 +765,11 @@ def e6(rows: list[dict], out: Path) -> str:
         "  or to C-rate=infinity, NOT relative to no storage (E6 has no",
         "  zero-battery counterpart) -- do not conflate with E1/E2 savings.",
     ]
+
+    # instance -> positive normalising scale, shared by every tornado row
+    e6_scales: dict[str, float] = {}
+    for r in rows:
+        e6_scales.setdefault(r["instance"], norm_scale(r))
 
     a = [r for r in rows if r.get("e6_subdesign") == "machine"]
     b = [r for r in rows if r.get("e6_subdesign") == "battery"]
@@ -756,28 +859,28 @@ def e6(rows: list[dict], out: Path) -> str:
         rho_lo, rho_hi = min(rhos, key=float), max(rhos, key=float)
         gk_edd = sorted(groups_by_pol.get("edd", set()))
         tornado.append(paired_summary(
-            _e6_paired_pct(cells_a, gk_edd, ("edd", rho_hi, "med"), ("edd", "0.5", "med")),
+            _e6_paired_pct(cells_a, gk_edd, ("edd", rho_hi, "med"), ("edd", "0.5", "med"), e6_scales),
             f"rho: {rho_lo}->{rho_hi} (restart=med, policy=edd)"))
         if "low" in restarts and "high" in restarts:
             tornado.append(paired_summary(
-                _e6_paired_pct(cells_a, gk_edd, ("edd", "0.5", "high"), ("edd", "0.5", "low")),
+                _e6_paired_pct(cells_a, gk_edd, ("edd", "0.5", "high"), ("edd", "0.5", "low"), e6_scales),
                 "restart: low->high (rho=0.5, policy=edd)"))
         if "price_aware" in groups_by_pol:
             gk_ref = sorted(groups_by_pol["edd"] & groups_by_pol["price_aware"])
             tornado.append(paired_summary(
-                _e6_paired_pct(cells_a, gk_ref, ("price_aware", "0.5", "med"), ("edd", "0.5", "med")),
+                _e6_paired_pct(cells_a, gk_ref, ("price_aware", "0.5", "med"), ("edd", "0.5", "med"), e6_scales),
                 "policy: edd->price_aware (rho=0.5, restart=med)"))
     if b:
         eff_lo, eff_hi = min(effs, key=float), max(effs, key=float)
         gk_b = sorted(groups_b)
         tornado.append(paired_summary(
-            _e6_paired_pct(cells_b, gk_b, (eff_hi, "inf"), (eff_lo, "inf")),
+            _e6_paired_pct(cells_b, gk_b, (eff_hi, "inf"), (eff_lo, "inf"), e6_scales),
             f"round-trip efficiency: {eff_lo}->{eff_hi} (C-rate=infinity)"))
         eff_ref = min(effs, key=lambda e: abs(float(e) - 0.95))
         crate_lo = min((c for c in crates if c != "inf"), key=float, default=None)
         if crate_lo:
             tornado.append(paired_summary(
-                _e6_paired_pct(cells_b, gk_b, (eff_ref, crate_lo), (eff_ref, "inf")),
+                _e6_paired_pct(cells_b, gk_b, (eff_ref, crate_lo), (eff_ref, "inf"), e6_scales),
                 f"C-rate: infinity->{crate_lo} (round-trip eff={eff_ref})"))
 
     tornado = [t for t in tornado if t["n"] > 0]
@@ -858,17 +961,26 @@ def e0(rows: list[dict], out: Path) -> str:
         best[k] = min(best[k], r["objective"])
 
     lines.append(f"  {'method':6s} {'class':>6s} {'n':>6s} {'gap% mean':>10s} "
-                 f"{'gap% p90':>10s} {'time s':>9s}")
+                 f"{'gap% p90':>10s} {'norm gap':>9s} {'time s':>9s}")
+    lines.append("  gap% diverges where the best-known objective approaches zero "
+                 "(negative prices);")
+    lines.append("  'norm gap' divides the same difference by a positive "
+                 "instance scale instead.")
     agg = defaultdict(list)
     for r in rows:
         b = best[(r["instance"], r["battery_ratio"])]
         gap = 100 * (r["objective"] - b) / abs(b) if b else float("nan")
-        agg[(r["method"], r["size_class"])].append((gap, r["wall_seconds"]))
+        sc_ = norm_scale(r)
+        ngap = ((r["objective"] - b) / sc_) if math.isfinite(sc_) else float("nan")
+        agg[(r["method"], r["size_class"])].append((gap, r["wall_seconds"], ngap))
     for (meth, sc), v in sorted(agg.items()):
         g = np.array([x[0] for x in v])
         t = np.array([x[1] for x in v])
-        lines.append(f"  {meth:6s} {sc:>6s} {len(v):6d} {g.mean():10.3f} "
-                     f"{np.percentile(g,90):10.3f} {t.mean():9.2f}")
+        ng = np.array([x[2] for x in v])
+        ng = ng[np.isfinite(ng)]
+        lines.append(f"  {meth:6s} {sc:>6s} {len(v):6d} {np.nanmean(g):10.3f} "
+                     f"{np.nanpercentile(g,90) if np.isfinite(g).any() else float('nan'):10.3f} "
+                     f"{(ng.mean() if len(ng) else float('nan')):9.4f} {t.mean():9.2f}")
 
     lines.append("\n  gap stability across battery levels (the property that")
     lines.append("  licenses using the solver as a measurement device):")
