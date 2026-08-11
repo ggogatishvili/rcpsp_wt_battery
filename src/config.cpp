@@ -262,6 +262,22 @@ void Config::fromArgs(const int argc, const char* const argv[])
 
    // H1P / GAP params
    if (vm.contains("states"))             Config::stateSet         = parseStateSet(vm["states"].as<std::string>());
+
+   // --states is honoured by the SPACES graph (H1/H1P/GA/GAP) only. The MILP
+   // and the MatH decoder build their own state models and would silently
+   // ignore it, returning full-model results under a sigma1/sigma2 label --
+   // exactly the kind of silent wrong answer that is impossible to spot in an
+   // aggregate. Refuse rather than mislead.
+   if ( Config::stateSet != Config::StateSet::All
+        && (Config::method == ResolutionMethod::MILP
+            || Config::method == ResolutionMethod::MatH) ) {
+      fmt::println(stderr,
+         "--states={} is not implemented for method {}: only the SPACES-graph "
+         "methods (H1, H1P, GA, GAP) honour it. Refusing rather than silently "
+         "returning full-model results.",
+         to_string(Config::stateSet), to_string(Config::method));
+      exit_final(1);
+   }
    if (vm.contains("phase1-price-aware")) Config::phase1PriceAware = true;
    if (vm.contains("phase1-window"))      Config::phase1Window     = vm["phase1-window"].as<int>();
    if (vm.contains("phase3-lp"))          Config::phase3LP         = true;
