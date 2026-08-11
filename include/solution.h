@@ -22,6 +22,8 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include <config.h>
 #include <list>
+#include <map>
+#include <string>
 #include <fmt/format.h>
 #include <sstream>
 #include "instance.h"
@@ -130,6 +132,16 @@ public:
     void setStats(const SolutionStats&& newStats) { stats = newStats; }
     bool isInfeasible() const { return objVal >= GRB_INFINITY; }
 
+    // Free-form per-method measurements, serialised by JsonHandler under
+    // "diagnostics" when non-empty and passed through to the experiment CSV as
+    // diag_* columns. Exists so that a method can export what it alone knows --
+    // a valid dual bound, a cut count, the energy cost the same schedule would
+    // carry without storage -- without every other method growing a field it
+    // has no value for. Methods that set nothing are serialised exactly as
+    // before.
+    const std::map<std::string, double>& getDiagnostics() const & { return diagnostics; }
+    void setDiagnostic(const std::string& key, const double value) { diagnostics[key] = value; }
+
 private:
     const Instance* ins;
     double objVal;
@@ -140,6 +152,7 @@ private:
     std::vector<MachineBlock> machineBlocks;
     std::list<std::pair<State,State>> machineTransitions;
     SolutionStats stats;
+    std::map<std::string, double> diagnostics;
 };
 
 // Formatter specialization for Solution class

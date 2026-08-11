@@ -59,8 +59,10 @@ void BatteryLp::build()
    }
    model->update();
 
-   // Battery initialisation: bLevel[0] = 0
+   // Battery initialisation: bLevel[0] = 0 (as in SolverMILP)
    model->addConstr(bLevel[0] == 0.0, "bInit");
+   // Battery end: bLevel[h-1] = 0 (as in SolverMILP)
+   model->addConstr(bLevel[h-1] == 0.0, "bEnd");
 
    // Battery balance: bLevel[i] = bLevel[i-1] - bMach[i-1] + ef_c * gBatt[i-1]
    for (int i = 1; i < h; ++i)
@@ -68,6 +70,19 @@ void BatteryLp::build()
 
    // No charging at the last time unit (nothing to discharge into)
    model->addConstr(gBatt[h-1] == 0.0, "noChargeLast");
+
+   // Terminal battery level. SolverMILP forces bLevel[h-1] == 0 ("BatteryEnd");
+   // this model used to leave it free, and with negative prices in the instance
+   // set that is not a harmless difference -- charging at a negative price
+   // earns money, so a free terminal level lets every BatteryLp-based method
+   // book revenue on energy the horizon never consumes, and undercut the exact
+   // MILP on the very same schedule. Matching the MILP is the conservative
+   // reading (the battery is a buffer, not a trading position) and keeps the
+   // exact method exact. Config::batteryTerminalEmpty exists so the old
+   // behaviour can be reproduced when re-checking results produced before this
+   // constraint existed.
+   if ( Config::batteryTerminalEmpty )
+      model->addConstr(bLevel[h-1] == 0.0, "batteryEnd");
 
    // Demand balance: gMach[i] + ef_d * bMach[i] = eMach[i]
    // RHS is 0 here; updated to the actual eMach values before each solve.
@@ -100,6 +115,34 @@ std::optional<std::vector<double>> BatteryLp::solve(const std::vector<double>& e
       return std::nullopt;
    } catch ( ... ) {
       fmt::println(stderr, "BatteryLp: unexpected error in solve()");
+      return std::nullopt;
+   }
+}
+
+std::optional<BatteryDuals> BatteryLp::solveWithDuals(const std::vector<double>& eMach)
+{
+   try {
+      for (int i = 0; i < h; ++i)
+         demandConstrs[i].set(GRB_DoubleAttr_RHS, eMach[i]);
+
+      model->optimize();
+
+      const int status = model->get(GRB_IntAttr_Status);
+      if ( status != GRB_OPTIMAL )
+         return std::nullopt;   // duals are only meaningful at an optimal basis
+
+      BatteryDuals duals;
+      duals.objVal = model->get(GRB_DoubleAttr_ObjVal);
+      duals.demandDual.resize(h);
+      for (int i = 0; i < h; ++i)
+         duals.demandDual[i] = demandConstrs[i].get(GRB_DoubleAttr_Pi);
+      return duals;
+
+   } catch ( const GRBException& e ) {
+      fmt::println(stderr, "BatteryLp: Gurobi error {}: {}", e.getErrorCode(), e.getMessage());
+      return std::nullopt;
+   } catch ( ... ) {
+      fmt::println(stderr, "BatteryLp: unexpected error in solveWithDuals()");
       return std::nullopt;
    }
 }

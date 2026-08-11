@@ -25,6 +25,8 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "SolverGA.h"
 #include "SolverGAP.h"
 #include "SolverMatH.h"
+#include "SolverLBBD.h"
+#include "SolverBenders.h"
 #include "config.h"
 #include <fmt/base.h>
 #include <solution.h>
@@ -46,6 +48,17 @@ Solution solver::solve(const Instance* ins, const Config::ResolutionMethod metho
                 return SolverGAP(ins)();
             case Config::ResolutionMethod::MatH:
                 return SolverMatH(ins)();
+            case Config::ResolutionMethod::LBBD:
+            case Config::ResolutionMethod::NoGoodCuts:
+                // Same solver; the method decides whether infeasible fixings
+                // get a refined conflict or a plain no-good cut.
+                return SolverLBBD(ins, method)();
+            case Config::ResolutionMethod::Benders:
+            case Config::ResolutionMethod::StateLBBD:
+                // Same solver; the method decides whether the battery enters as
+                // Benders cuts or as post-processing. StateLBBD is the control
+                // that holds the master fixed so the two can be told apart.
+                return SolverBenders(ins, method)();
             default:
                 throw std::runtime_error("Unknown resolution method");
         }

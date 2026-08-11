@@ -52,6 +52,24 @@ The solver includes many additional configuration options. These include time li
 ./build/rcpsp_wt_battery --help
 ```
 
+### Logic-based Benders decomposition (`LBBD` / `nogood`)
+
+Two additional methods decompose the problem instead of solving it monolithically. An ILP master places the energy-intensive tasks and chooses the machine's state schedule; an RCPSP subproblem schedules everything else to minimise total weighted tardiness and feeds cuts back to the master.
+
+```bash
+./build/rcpsp_wt_battery -m LBBD   -i ./instances/1_10.txt -o ./results/1_10.txt
+./build/rcpsp_wt_battery -m nogood -i ./instances/1_10.txt -o ./results/1_10.txt
+```
+
+`LBBD` refines infeasible fixings into a small conflicting subset before cutting; `nogood` excludes the whole assignment instead. The two differ only in that respect, which is what makes them a controlled comparison.
+
+Relevant options: `--sub-tl` (per-call subproblem time limit), `--refine-tl` (conflict-refinement budget), `--no-warmstart`, `--lbbd-tardiness-bounds`.
+
+Two things to know before reading the results:
+
+* **The battery is applied afterwards, not during.** The master and the subproblem both reason about a battery-free world; the exact battery LP prices the resulting machine schedule once at the end. LBBD is therefore exact for the battery-free problem and a strong heuristic for the battery problem, and the MIP gap it reports certifies only the former. `docs/BENDERS_BATTERY.md` works through what a battery-aware version would take.
+* **The subproblem backend matters.** By default it is a Gurobi MILP, which keeps the build free of CPLEX but is only comfortable on the smaller instances. Configure with `-DWITH_CPOPTIMIZER=ON` to use CP Optimizer instead — much stronger here, and it is what the original LBBD uses.
+
 ## Running Benchmarks
 
 The benchmark tool automates the execution of the solver across multiple instances and solution methods. The tool and its configuration files are located in the `./benchmarks/` directory.

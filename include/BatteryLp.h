@@ -34,6 +34,22 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // The GRBEnv is shared process-wide via sharedEnv() (one Gurobi licence
 // connection).  Each BatteryLp holds its own GRBModel so parallel threads
 // can each own a BatteryLp without contention on the model.
+// Optimal value and demand-row duals of one battery LP solve.
+//
+// The demand rows are the only place the machine's energy profile enters the
+// model, so their duals are a subgradient of the optimal cost with respect to
+// that profile: alpha_i is the marginal cost of one more energy unit at
+// interval i *after* the battery has optimally responded. Because gMach_i >= 0
+// carries cost price_i, its reduced cost gives alpha_i <= price_i -- the
+// shadow tariff is nowhere above the raw tariff.
+//
+// SolverBenders turns these into Benders optimality cuts; see
+// docs/BENDERS_BATTERY.md for the derivation.
+struct BatteryDuals {
+   double objVal = 0.0;
+   std::vector<double> demandDual;   // alpha, one per interval
+};
+
 class BatteryLp {
 public:
    explicit BatteryLp(const Instance* ins);
@@ -42,6 +58,11 @@ public:
    // Returns battery levels (same format as SolverH1::scheduleBatteryUsage).
    // Returns std::nullopt if Gurobi fails (caller should fall back to greedy).
    std::optional<std::vector<double>> solve(const std::vector<double>& eMach);
+
+   // As solve(), but returns the optimal cost and the demand-row duals instead
+   // of the level trace. Same model, same warm start; only the extraction
+   // differs, so calling this in a hot loop costs the same as solve().
+   std::optional<BatteryDuals> solveWithDuals(const std::vector<double>& eMach);
 
 private:
    const Instance* ins;

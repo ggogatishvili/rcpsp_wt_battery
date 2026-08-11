@@ -30,7 +30,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // Callers that use the returned reference must include <gurobi_c++.h> themselves.
 class GRBEnv;
 
-#define VERSION "1.1.1"
+#define VERSION "1.2.0"
 
 class Config
 {
@@ -44,19 +44,42 @@ public:
         GA,
         GAP,
         MatH,
+        // Logic-based Benders decomposition (branch & check): ILP master on the
+        // energy-intensive task placement + machine states, RCPSP subproblem on
+        // everything else, battery applied as a post-processing step.
+        LBBD,
+        // The same algorithm with conflict refinement switched off, i.e. plain
+        // no-good cuts over the whole fixing. This is the baseline the
+        // "logic-based" part of LBBD is meant to beat, so it is a method in its
+        // own right rather than a flag.
+        NoGoodCuts,
+        // Explicit-state master + battery LP contributing classical Benders
+        // optimality cuts, so the EI placement becomes battery-aware.
+        // docs/BENDERS_BATTERY.md.
+        Benders,
+        // The control for Benders: the same explicit-state master, but the
+        // battery is post-processed exactly as in LBBD instead of cut into the
+        // master. Comparing Benders against LBBD alone would confound two
+        // changes -- battery coordination AND the loss of the SPACES switching
+        // pre-processing -- so this arm exists to separate them.
+        StateLBBD,
         None
     };
 
     static std::string to_string(const ResolutionMethod method)
     {
         switch ( method ) {
-            case ResolutionMethod::MILP: return "MILP";
-            case ResolutionMethod::H1:   return "H1";
-            case ResolutionMethod::H1P:  return "H1P";
-            case ResolutionMethod::GA:   return "GA";
-            case ResolutionMethod::GAP:  return "GAP";
-            case ResolutionMethod::MatH: return "MatH";
-            default:                     return "None";
+            case ResolutionMethod::MILP:       return "MILP";
+            case ResolutionMethod::H1:         return "H1";
+            case ResolutionMethod::H1P:        return "H1P";
+            case ResolutionMethod::GA:         return "GA";
+            case ResolutionMethod::GAP:        return "GAP";
+            case ResolutionMethod::MatH:       return "MatH";
+            case ResolutionMethod::LBBD:       return "LBBD";
+            case ResolutionMethod::NoGoodCuts: return "NoGoodCuts";
+            case ResolutionMethod::Benders:    return "Benders";
+            case ResolutionMethod::StateLBBD:  return "StateLBBD";
+            default:                           return "Undefined";
         }
     }
 
@@ -128,6 +151,13 @@ public:
 
     // Tardiness cost scale (C5): multiplies every task weight on load.
     inline static double lambda = 1.0;
+
+    // Force the battery empty at the end of the horizon. SolverMILP has always
+    // done this; BatteryLp did not, which under negative prices let every
+    // LP-based method bank revenue on energy never consumed and undercut the
+    // exact MILP on the same schedule. Default true so the two agree; set
+    // --battery-free-end to reproduce results produced before the fix.
+    inline static bool batteryTerminalEmpty = true;
 
     // GA Parameters
     inline static std::optional<uint32_t> seed = std::nullopt;
@@ -207,6 +237,36 @@ public:
     // --phase3-lp: replace greedy battery peak-shaving with an exact Gurobi LP
     inline static bool phase3LP = true;
 
+    // LBBD / NoGoodCuts Parameters
+    // Per-call time limit of the RCPSP subproblem, in seconds. The subproblem
+    // is re-solved at every master incumbent, so this is the single most
+    // important knob: too tight and the optimality cuts fall back to weak
+    // bounds, too loose and the master barely branches.
+    inline static double subproblemTimeLimit = 60.0;
+    // Time budget for isolating a small conflicting subset of an infeasible
+    // fixing (CP conflict refiner, or Gurobi IIS in the MILP backend). Only
+    // spent on infeasible subproblems, and only for method LBBD.
+    inline static double conflictRefinerTimeLimit = 10.0;
+    // Seed the master with the H1 schedule. Costs one H1 run and guarantees an
+    // incumbent even if the master times out.
+    inline static bool lbbdWarmStart = true;
+    // How many EI-ancestor tardiness bounds to write per task in the master
+    // relaxation. Every such constraint is valid; keeping only the few with the
+    // longest precedence paths keeps the master small without measurably
+    // weakening it, since the optimality cuts close the rest.
+    inline static int lbbdTardinessBoundsPerTask = 3;
+
+    // Benders Parameters
+    // Separate battery cuts at fractional nodes as well as at incumbents. The
+    // battery LP is convex in the demand profile, so a cut taken at a
+    // fractional machine-state solution is still a valid global underestimator
+    // -- and it is where most of the early bound improvement comes from. Cheap
+    // enough to leave on; the flag exists to measure what it is worth.
+    inline static bool bendersNodeCuts = true;
+    // Skip a node cut when the incumbent theta already satisfies it by more
+    // than this margin, to stop the cut pool growing without bound.
+    inline static double bendersCutTolerance = 1e-6;
+
     // MatH Parameters
     // Fraction of population re-evaluated with MILP per generation (0 = all H1, 1 = all MILP).
     // Recommended: 0.05–0.10; the MILP is far slower than H1.
@@ -234,12 +294,16 @@ struct fmt::formatter<Config::ResolutionMethod> : formatter<string_view>
     {
         string_view name = "unknown";
         switch ( method ) {
-            case Config::ResolutionMethod::MILP: name = "MILP"; break;
-            case Config::ResolutionMethod::H1:   name = "H1";   break;
-            case Config::ResolutionMethod::H1P:  name = "H1P";  break;
-            case Config::ResolutionMethod::GA:   name = "GA";   break;
-            case Config::ResolutionMethod::GAP:  name = "GAP";  break;
-            case Config::ResolutionMethod::MatH: name = "MatH"; break;
+            case Config::ResolutionMethod::MILP:       name = "MILP";       break;
+            case Config::ResolutionMethod::H1:         name = "H1";         break;
+            case Config::ResolutionMethod::H1P:        name = "H1P";        break;
+            case Config::ResolutionMethod::GA:         name = "GA";         break;
+            case Config::ResolutionMethod::GAP:        name = "GAP";        break;
+            case Config::ResolutionMethod::MatH:       name = "MatH";       break;
+            case Config::ResolutionMethod::LBBD:       name = "LBBD";       break;
+            case Config::ResolutionMethod::NoGoodCuts: name = "NoGoodCuts"; break;
+            case Config::ResolutionMethod::Benders:    name = "Benders";    break;
+            case Config::ResolutionMethod::StateLBBD:  name = "StateLBBD";  break;
             default: break;
         }
         return formatter<string_view>::format(name, ctx);

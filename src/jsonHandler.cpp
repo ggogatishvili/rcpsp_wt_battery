@@ -37,6 +37,14 @@ nlohmann::json JsonHandler::toJson(const Solution& solution, const double comput
     solutionInfo["gap"] = solution.getStats().gap_to_optimal;
     json["solution_info"] = solutionInfo;
 
+    // Per-method measurements, present only for methods that produce them.
+    if ( !solution.getDiagnostics().empty() ) {
+        nlohmann::json diagnostics;
+        for (const auto& [key, value] : solution.getDiagnostics())
+            diagnostics[key] = value;
+        json["diagnostics"] = diagnostics;
+    }
+
     // Task assignments
     auto& taskAssignments = solution.getTaskAssignments();
     json["task_assignments"] = nlohmann::json::array();

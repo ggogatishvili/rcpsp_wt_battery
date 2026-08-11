@@ -91,7 +91,8 @@ void Config::fromArgs(const int argc, const char* const argv[])
       ("ml",  po::value<long>(),     fmt::format("Memory limit in Gb (default: {})", memoryLimit).c_str())
       ("alpha", po::value<double>(), fmt::format("⍺ value [0-1](default: {})", alpha).c_str())
       ("method,m", po::value<std::string>(),
-         fmt::format("Resolution method [MILP|H1|H1P|GA|GAP|matheur] (default: {})", method).c_str())
+         fmt::format("Resolution method [MILP|H1|H1P|GA|GAP|matheur|LBBD|nogood|Benders|StateLBBD] "
+                     "(default: {})", method).c_str())
       ("batteryCapacity,b", po::value<int>(),
          fmt::format("Battery capacity (default: {})", batteryCapacity).c_str())
       ("verbose,v",   fmt::format("Verbose mode (default: {})", verbose).c_str())
@@ -164,6 +165,23 @@ void Config::fromArgs(const int argc, const char* const argv[])
       ("phase1-window", po::value<int>(),
          fmt::format("Max delay window for price-aware Phase 1 (default: {})", phase1Window).c_str())
       ("phase3-lp", fmt::format("Replace greedy Phase 3 with exact battery LP (H1P / GAP) (default: {})", phase3LP).c_str())
+
+      // LBBD / NoGoodCuts params
+      ("sub-tl", po::value<double>(),
+         fmt::format("LBBD: per-call time limit of the RCPSP subproblem, in seconds (default: {})",
+                     subproblemTimeLimit).c_str())
+      ("refine-tl", po::value<double>(),
+         fmt::format("LBBD: time budget for isolating a minimal infeasible subset (default: {})",
+                     conflictRefinerTimeLimit).c_str())
+      ("no-warmstart", "LBBD/Benders: do not seed the master with the H1 schedule")
+      ("lbbd-tardiness-bounds", po::value<int>(),
+         fmt::format("LBBD: EI-ancestor tardiness bounds written per task in the master (default: {})",
+                     lbbdTardinessBoundsPerTask).c_str())
+      ("no-benders-node-cuts",
+         "Benders: separate battery cuts only at incumbents, not at fractional nodes")
+      ("battery-free-end",
+         "Let the battery end the horizon non-empty (pre-fix behaviour of BatteryLp; "
+         "note SolverMILP always forces it empty, so the two then disagree under negative prices)")
 
       // MatH params
       ("mathEliteRatio", po::value<double>(),
@@ -282,6 +300,21 @@ void Config::fromArgs(const int argc, const char* const argv[])
    if (vm.contains("phase1-window"))      Config::phase1Window     = vm["phase1-window"].as<int>();
    if (vm.contains("phase3-lp"))          Config::phase3LP         = true;
 
+   // LBBD / NoGoodCuts params
+   if (vm.contains("sub-tl"))    Config::subproblemTimeLimit       = vm["sub-tl"].as<double>();
+   if (vm.contains("refine-tl")) Config::conflictRefinerTimeLimit   = vm["refine-tl"].as<double>();
+   if (vm.contains("no-warmstart")) Config::lbbdWarmStart          = false;
+   if (vm.contains("lbbd-tardiness-bounds"))
+      Config::lbbdTardinessBoundsPerTask = vm["lbbd-tardiness-bounds"].as<int>();
+   if (vm.contains("no-benders-node-cuts")) Config::bendersNodeCuts     = false;
+   if (vm.contains("battery-free-end"))     Config::batteryTerminalEmpty = false;
+
+   // Same reasoning as for the MILP above: the SPACES graph inside the LBBD
+   // switching matrix *does* honour --states, but the RCPSP subproblem has no
+   // notion of machine states at all, so a restricted ladder is applied
+   // consistently here. Nothing to refuse -- this note exists so the next
+   // reader does not add LBBD to the refusal list by analogy.
+
    // MatH params
    if (vm.contains("mathEliteRatio")) Config::mathEliteRatio    = vm["mathEliteRatio"].as<double>();
    if (vm.contains("mathMilpTl"))     Config::mathMilpTimeLimit = vm["mathMilpTl"].as<double>();
@@ -315,6 +348,16 @@ void Config::showConfig()
       fmt::println("   {:<20}{:<15}", "MatH elite ratio:", mathEliteRatio);
       fmt::println("   {:<20}{:<15}", "MatH MILP TL:",     mathMilpTimeLimit);
    }
+   if (method == ResolutionMethod::LBBD || method == ResolutionMethod::NoGoodCuts
+       || method == ResolutionMethod::Benders || method == ResolutionMethod::StateLBBD) {
+      fmt::println("   {:<20}{:<15}", "Subproblem TL:",    subproblemTimeLimit);
+      fmt::println("   {:<20}{:<15}", "Refiner TL:",       conflictRefinerTimeLimit);
+      fmt::println("   {:<20}{:<15}", "Warm start:",       lbbdWarmStart ? "Yes" : "No");
+      fmt::println("   {:<20}{:<15}", "Tardiness bounds:", lbbdTardinessBoundsPerTask);
+   }
+   if (method == ResolutionMethod::Benders)
+      fmt::println("   {:<20}{:<15}", "Benders node cuts:", bendersNodeCuts ? "Yes" : "No");
+   fmt::println("   {:<20}{:<15}", "Battery ends empty:", batteryTerminalEmpty ? "Yes" : "No");
 }
 
 void Config::init_config()
@@ -348,6 +391,15 @@ Config::ResolutionMethod Config::parseResolutionMethod(const std::string& method
 {
    std::string m;
    std::ranges::transform(method, std::back_inserter(m), ::tolower);
+   // Checked before "milp": these masters *are* ILPs and users write things
+   // like "lbbd-milp", which must not silently resolve to the monolithic model.
+   // "statelbbd" is checked before "lbbd" because it contains it.
+   if (m.find("statelbbd") != m.npos || m.find("state-lbbd") != m.npos)
+      return Config::ResolutionMethod::StateLBBD;
+   if (m.find("benders") != m.npos) return Config::ResolutionMethod::Benders;
+   if (m.find("lbbd")    != m.npos) return Config::ResolutionMethod::LBBD;
+   if (m.find("nogood")  != m.npos || m.find("no-good") != m.npos)
+      return Config::ResolutionMethod::NoGoodCuts;
    if (m.find("milp")    != m.npos) return Config::ResolutionMethod::MILP;
    if (m.find("h1p")     != m.npos) return Config::ResolutionMethod::H1P;
    if (m.find("h1")      != m.npos) return Config::ResolutionMethod::H1;
