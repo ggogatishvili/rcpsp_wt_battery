@@ -487,19 +487,47 @@ def check_battery(inst: Instance, run: Run, rep: Report, label: str) -> None:
 
 
 def check_bound(run: Run, rep: Report, label: str) -> None:
-    """T12 - the dual bound bounds, and only claims what it can."""
+    """T12 - the dual bound bounds, and only claims what it can.
+
+    Which objective the bound applies to depends on the method, and getting
+    this wrong is easy: only Benders' theta is a lower bound on the
+    battery-AWARE cost. LBBD, NoGoodCuts and StateLBBD price energy at the raw
+    tariff, so their master bounds the battery-FREE problem, and comparing it
+    against the post-processed objective is comparing two different problems --
+    it will exceed it whenever the battery saves anything, which is most of the
+    time. The right reference is the objective the master was actually
+    optimising.
+    """
     bound = run.dnum("bound")
     if not math.isfinite(bound):
         rep.skip(f"T12 bound/{label}", "method exports no bound")
         return
-    rep.check(f"T12 bound <= objective/{label}",
-              bound <= run.objective + max(TOL_ABS, TOL_REL * abs(run.objective)),
-              f"bound {bound:.6f} > objective {run.objective:.6f}")
 
     aware = run.dnum("bound_is_battery_aware")
     expected = 1.0 if run.method == "Benders" else 0.0
     rep.check(f"T12 bound flagged correctly/{label}", close(aware, expected, rel=0),
               f"{run.method} reports battery_aware={aware}, expected {expected}")
+
+    if aware > 0.5:
+        ref, what = run.objective, "objective"
+    else:
+        no_batt = run.dnum("energy_cost_no_battery")
+        if not math.isfinite(no_batt):
+            rep.skip(f"T12 bound/{label}", "no battery-free objective to compare against")
+            return
+        ref, what = no_batt + run.num("tardiness_cost"), "battery-free objective"
+
+    rep.check(f"T12 bound <= {what}/{label}",
+              bound <= ref + max(TOL_ABS, TOL_REL * abs(ref)),
+              f"bound {bound:.6f} > {what} {ref:.6f}")
+
+    # Storage can only ever lower the bill. A negative saving means the
+    # post-processing made the schedule worse, which is impossible for an
+    # exactly-solved LP and would point at the energy accounting.
+    saving = run.dnum("battery_saving")
+    if math.isfinite(saving):
+        rep.check(f"T12 battery saving >= 0/{label}", saving >= -TOL_ABS,
+                  f"post-processing made it worse by {-saving:.6f}")
 
 
 # ==========================================================================
@@ -563,8 +591,10 @@ def check_refiner(runs: dict[str, Run], rep: Report, label: str) -> None:
     a, b = mean_mis(lbbd), mean_mis(ngc)
     if not (math.isfinite(a) and math.isfinite(b)):
         rep.info(f"T13 conflict refiner/{label}",
-                 "no feasibility cuts were generated -- this instance never made the "
-                 "master propose an infeasible EI placement, so the refiner is untested")
+                 "no feasibility cuts were generated -- the master never proposed an "
+                 "infeasible EI placement here, so the refiner is UNTESTED. Retry on a "
+                 "higher EI-density instance (1_5 and 1_12 have 9 EI tasks at n=32) or "
+                 "on a tight-due-date instance from experiments/data/instances/core")
         return
     rep.check(f"T13 conflict refiner/{label}", a <= b + TOL_ABS,
               f"mean infeasibility set: LBBD={a:.2f} > NoGoodCuts={b:.2f}; "
@@ -648,8 +678,12 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     root = Path(__file__).resolve().parents[1]
     ap.add_argument("--solver", type=Path, default=root / "build" / "rcpsp_wt_battery")
+    # 1_1 has only 2 EI tasks, so its master is never handed an infeasible
+    # placement and T13 cannot exercise the conflict refiner. 1_5 is the same
+    # size class with 9 EI tasks (28 % density) and does put pressure on it.
     ap.add_argument("--instances", type=Path, nargs="+",
-                    default=[root / "instances" / "1_1.txt"])
+                    default=[root / "instances" / "1_1.txt",
+                             root / "instances" / "1_5.txt"])
     ap.add_argument("--tl", type=int, default=300,
                     help="time limit per run, seconds (default 300)")
     ap.add_argument("--quick", action="store_true",
