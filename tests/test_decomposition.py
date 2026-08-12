@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -231,12 +232,26 @@ class Run:
 
 def run_solver(solver: Path, method: str, instance: Path, battery: int,
                tl: int, extra: list[str] | None = None,
-               workdir: Path | None = None) -> Run:
+               workdir: Path | None = None, threads: int = 1, mem_gb: int = 8,
+               cpu: int | None = None, tag: str = "") -> Run:
+    """One solver invocation.
+
+    `cpu` pins the process to a single core with taskset. That is not a
+    nicety when runs execute in parallel: --thl bounds Gurobi's own threads but
+    does nothing for the TBB pool ParadisEO uses for GA, which defaults to
+    hardware_concurrency() with no env override. Without pinning, one GA run
+    oversubscribes the whole box and every wall-clock number in the comparison
+    becomes a measure of contention rather than of the method.
+    """
     workdir = workdir or Path(tempfile.mkdtemp(prefix="rcpsp_test_"))
-    out_json = workdir / f"{instance.stem}__{method}__b{battery}.json"
+    stem = f"{instance.stem}__{method}__b{battery}" + (f"__{tag}" if tag else "")
+    out_json = workdir / f"{stem}.json"
     argv = [str(solver), "-i", str(instance), "-m", method, "-b", str(battery),
-            "--tl", str(tl), "--thl", "1", "--ml", "8", "-o", str(out_json)]
+            "--tl", str(tl), "--thl", str(threads), "--ml", str(mem_gb),
+            "-o", str(out_json)]
     argv += (extra or [])
+    if cpu is not None and shutil.which("taskset"):
+        argv = ["taskset", "-c", str(cpu)] + argv
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=tl + 180)
     except subprocess.TimeoutExpired:

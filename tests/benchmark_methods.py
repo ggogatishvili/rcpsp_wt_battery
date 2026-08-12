@@ -43,12 +43,13 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
-import inspect
+import json
 import math
 import os
 import queue
 import shutil
 import statistics
+import subprocess
 import sys
 import tempfile
 import threading
@@ -64,22 +65,21 @@ td = importlib.util.module_from_spec(_spec)
 sys.modules["td"] = td            # dataclasses needs the module registered
 _spec.loader.exec_module(td)
 
-# The two files share run_solver deliberately, so they cannot disagree about how
-# a run is executed or parsed -- but that also means they have to travel
-# together. Check up front rather than failing with a bare TypeError forty
-# minutes into a benchmark.
-_NEEDED = {"threads", "mem_gb", "cpu", "tag"}
-_MISSING = _NEEDED - set(inspect.signature(td.run_solver).parameters)
+# Only the STABLE helpers are imported: instance parsing, the Run wrapper around
+# a solution JSON, and the battery-sizing rule. Those have not changed and are
+# the same question in both scripts.
+#
+# The solver runner is NOT imported, and deliberately so. This benchmark needs
+# core pinning, which the sequential test script has no use for, and sharing a
+# function whose signature only one side evolves turned into a version-skew trap
+# the moment the two files lived on different machines. One file to copy here.
+_NEEDED = ["read_instance", "Run", "battery_size", "E_PROC"]
+_MISSING = [n for n in _NEEDED if not hasattr(td, n)]
 if _MISSING:
     raise SystemExit(
-        f"tests/test_decomposition.py is out of date: run_solver() is missing "
-        f"{sorted(_MISSING)}.\n"
+        f"tests/test_decomposition.py is missing {_MISSING}.\n"
         f"  file: {_HERE / 'test_decomposition.py'}\n"
-        f"Copy the current test_decomposition.py alongside this script and re-run.\n"
-        f"Those parameters are what pin each run to its own core. Running without "
-        f"them is not a degraded mode -- GA's TBB pool would saturate the machine "
-        f"and every wall-clock number would measure contention -- so the benchmark "
-        f"stops here rather than producing numbers that look fine and are not.")
+        f"Copy the current test_decomposition.py alongside this script.")
 
 REFERENCE = "MILP"
 DEFAULT_METHODS = ["MILP", "GA", "LBBD", "NoGoodCuts", "StateLBBD", "Benders"]
@@ -124,6 +124,44 @@ def pick_instances(root: Path, sizes: list[int], per_size: int) -> list[Path]:
 # execution
 # ==========================================================================
 
+def run_pinned(solver: Path, method: str, instance: Path, battery: int, tl: int,
+               seed: int | None, mem_gb: int, cpu: int | None, workdir: Path):
+    """One solver invocation, pinned to a single core.
+
+    Pinning is not a nicety when runs execute in parallel: --thl bounds Gurobi's
+    own threads but does nothing for the TBB pool ParadisEO uses for GA, which
+    defaults to hardware_concurrency() with no env override. Without taskset,
+    one GA run oversubscribes the whole box and every wall-clock number in the
+    comparison measures contention rather than the method.
+
+    Owned here rather than shared with test_decomposition.py: the sequential
+    test has no use for pinning, and a shared signature that only one caller
+    evolves is a version-skew trap across machines.
+    """
+    stem = f"{instance.stem}__{method}__b{battery}" + (f"__s{seed}" if seed else "")
+    out_json = workdir / f"{stem}.json"
+    argv = [str(solver), "-i", str(instance), "-m", method, "-b", str(battery),
+            "--tl", str(tl), "--thl", "1", "--ml", str(mem_gb), "-o", str(out_json)]
+    if seed:
+        argv += ["-s", str(seed)]
+    if cpu is not None and shutil.which("taskset"):
+        argv = ["taskset", "-c", str(cpu)] + argv
+
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=tl + 180)
+    except subprocess.TimeoutExpired:
+        return td.Run(method, instance, battery, False, -9,
+                      f"hard timeout after {tl + 180}s (the solver ignored --tl)")
+    if proc.returncode != 0 or not out_json.exists():
+        return td.Run(method, instance, battery, False, proc.returncode,
+                      (proc.stderr or "")[-2000:])
+    try:
+        sol = json.loads(out_json.read_text())
+    except ValueError as exc:
+        return td.Run(method, instance, battery, False, proc.returncode, f"bad JSON: {exc}")
+    return td.Run(method, instance, battery, True, 0, (proc.stderr or "")[-2000:], sol)
+
+
 class CorePool:
     """Hands each concurrent run its own core, and takes it back afterwards."""
 
@@ -146,11 +184,8 @@ def run_job(job: dict, args, pool: CorePool, lock: threading.Lock,
     core = pool.acquire()
     try:
         t0 = time.perf_counter()
-        run = td.run_solver(
-            args.solver, job["method"], job["path"], job["battery"], args.tl,
-            extra=(["-s", str(job["seed"])] if job["seed"] else []),
-            workdir=workdir, threads=1, mem_gb=args.mem, cpu=core,
-            tag=f"s{job['seed']}" if job["seed"] else "")
+        run = run_pinned(args.solver, job["method"], job["path"], job["battery"],
+                         args.tl, job["seed"], args.mem, core, workdir)
         wall = time.perf_counter() - t0
     finally:
         pool.release(core)
