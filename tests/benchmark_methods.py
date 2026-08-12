@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import inspect
 import math
 import os
 import queue
@@ -62,6 +63,23 @@ if _spec is None or _spec.loader is None:
 td = importlib.util.module_from_spec(_spec)
 sys.modules["td"] = td            # dataclasses needs the module registered
 _spec.loader.exec_module(td)
+
+# The two files share run_solver deliberately, so they cannot disagree about how
+# a run is executed or parsed -- but that also means they have to travel
+# together. Check up front rather than failing with a bare TypeError forty
+# minutes into a benchmark.
+_NEEDED = {"threads", "mem_gb", "cpu", "tag"}
+_MISSING = _NEEDED - set(inspect.signature(td.run_solver).parameters)
+if _MISSING:
+    raise SystemExit(
+        f"tests/test_decomposition.py is out of date: run_solver() is missing "
+        f"{sorted(_MISSING)}.\n"
+        f"  file: {_HERE / 'test_decomposition.py'}\n"
+        f"Copy the current test_decomposition.py alongside this script and re-run.\n"
+        f"Those parameters are what pin each run to its own core. Running without "
+        f"them is not a degraded mode -- GA's TBB pool would saturate the machine "
+        f"and every wall-clock number would measure contention -- so the benchmark "
+        f"stops here rather than producing numbers that look fine and are not.")
 
 REFERENCE = "MILP"
 DEFAULT_METHODS = ["MILP", "GA", "LBBD", "NoGoodCuts", "StateLBBD", "Benders"]
