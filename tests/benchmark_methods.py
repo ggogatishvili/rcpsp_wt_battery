@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Small head-to-head benchmark: the decomposition methods against GA, with the
 compact MILP as the reference.
@@ -48,8 +47,13 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location("td", _HERE / "test_decomposition.py")
+if not _spec:
+    raise ImportError("test_decomposition.py not found")
+
 td = importlib.util.module_from_spec(_spec)
 sys.modules["td"] = td            # dataclasses needs the module registered
+if _spec.loader is None:
+    raise ImportError("test_decomposition.py has no loader")
 _spec.loader.exec_module(td)
 
 REFERENCE = "MILP"
