@@ -337,6 +337,113 @@ def fig_e6(rows) -> None:
     save(fig, "fig_e6_tornado")
 
 
+# ---------------------------------------------------------------------------
+
+METHOD_COLOUR = {"MILP": CB["grey"], "LBBD": CB["blue"], "NoGoodCuts": CB["skyblue"],
+                 "StateLBBD": CB["orange"], "Benders": CB["red"]}
+
+
+def fig_e8_gap(rows) -> None:
+    """Distance to the compact ILP as a function of the time budget.
+
+    The point of plotting it against the budget rather than at one budget: a
+    decomposition and a monolithic model routinely cross over, and a single
+    budget picks the winner by accident.
+    """
+    rows = [r for r in rows if r["experiment"] == "E8"]
+    if not rows:
+        return
+    cells = A._by_cell(rows)
+    budgets = sorted({int(r["time_limit"]) for r in rows})
+    methods = [m for m in ("LBBD", "NoGoodCuts", "StateLBBD", "Benders")
+               if any(r["method"] == m for r in rows)]
+
+    fig, ax = plt.subplots(figsize=ONE_COL)
+    for m in methods:
+        mu, lo, hi = [], [], []
+        for tl in budgets:
+            d = A._paired_norm_diff(cells, m, "MILP", tl)
+            mu.append(d.mean() if len(d) else np.nan)
+            a, b = _ci(d)
+            lo.append(a); hi.append(b)
+        ax.plot(budgets, mu, marker="o", color=METHOD_COLOUR.get(m, CB["green"]), label=m)
+        ax.fill_between(budgets, lo, hi, color=METHOD_COLOUR.get(m, CB["green"]), alpha=0.15, lw=0)
+    ax.axhline(0.0, color="k", lw=0.6)
+    ax.set_xscale("log")
+    ax.set_xticks(budgets); ax.set_xticklabels([str(b) for b in budgets])
+    ax.set_xlabel("time budget (s, same for every method)")
+    ax.set_ylabel("objective - compact ILP\n(normalised)")
+    ax.legend()
+    save(fig, "fig_e8_gap_to_ilp")
+
+
+def fig_e8_decomposition(rows) -> None:
+    """The three effects of section 3, kept apart.
+
+    Benders - LBBD is the sum of 'battery coordination' and 'lost SPACES'.
+    Plotting only the sum would hide a case where a real coordination gain is
+    cancelled by a formulation loss, which is the most likely outcome and the
+    most interesting one.
+    """
+    rows = [r for r in rows if r["experiment"] == "E8"]
+    if not rows:
+        return
+    cells = A._by_cell(rows)
+    budgets = sorted({int(r["time_limit"]) for r in rows})
+    effects = [("Benders", "StateLBBD", "battery coordination", CB["red"]),
+               ("StateLBBD", "LBBD", "cost of losing SPACES", CB["orange"]),
+               ("Benders", "LBBD", "end to end", CB["blue"])]
+
+    fig, ax = plt.subplots(figsize=ONE_COL)
+    width = 0.25
+    xs = np.arange(len(budgets))
+    for k, (hi_m, lo_m, label, colour) in enumerate(effects):
+        mu, err = [], []
+        for tl in budgets:
+            d = A._paired_norm_diff(cells, hi_m, lo_m, tl)
+            mu.append(d.mean() if len(d) else np.nan)
+            a, b = _ci(d)
+            err.append((b - a) / 2 if np.isfinite(a) else np.nan)
+        ax.bar(xs + (k - 1) * width, mu, width, yerr=err, capsize=2,
+               color=colour, label=label)
+    ax.axhline(0.0, color="k", lw=0.6)
+    ax.set_xticks(xs); ax.set_xticklabels([f"{b}s" for b in budgets])
+    ax.set_ylabel("normalised objective difference\n(negative = first arm better)")
+    ax.legend()
+    save(fig, "fig_e8_effect_decomposition")
+
+
+def fig_e9_scaling(rows) -> None:
+    """Where each method stops closing instances."""
+    rows = [r for r in rows if r["experiment"] == "E9"]
+    if not rows:
+        return
+    budgets = sorted({int(r["time_limit"]) for r in rows})
+    classes = sorted({int(r["size_class"]) for r in rows})
+    methods = sorted({r["method"] for r in rows})
+    tl = budgets[-1]
+
+    fig, ax = plt.subplots(figsize=ONE_COL)
+    for m in methods:
+        frac = []
+        for sc in classes:
+            sub = [r for r in rows if r["method"] == m
+                   and int(r["size_class"]) == sc and int(r["time_limit"]) == tl]
+            ok = sum(1 for r in sub
+                     if _isnum(str(r.get("gap", ""))) and float(r["gap"]) <= 1e-6
+                     and not (A.dnum(r, "inconclusive") > 0))
+            frac.append(ok / len(sub) if sub else np.nan)
+        ax.plot([c * 32 for c in classes], frac, marker="o",
+                color=METHOD_COLOUR.get(m, CB["green"]), label=m)
+    ax.axhline(0.5, color="k", lw=0.6, ls=":")
+    ax.set_xlabel("tasks")
+    ax.set_ylabel(f"share closed at {tl} s")
+    ax.set_ylim(-0.05, 1.05)
+    ax.legend()
+    save(fig, "fig_e9_scaling_frontier")
+
+
+
 def _isnum(x: str) -> bool:
     try:
         float(x); return True
@@ -357,13 +464,16 @@ def main() -> int:
     print(f"loaded {len(rows)} successful runs")
 
     want = set(args.only.split(",")) if args.only else \
-        {"e0", "e2", "e2npv", "e3", "e4", "e6"}
+        {"e0", "e2", "e2npv", "e3", "e4", "e6", "e8", "e8dec", "e9"}
     if "e0" in want: fig_e0(rows)
     if "e2" in want: fig_e2(rows)
     if "e2npv" in want: fig_e2_npv(rows)
     if "e3" in want: fig_e3(rows)
     if "e4" in want: fig_e4(rows)
     if "e6" in want: fig_e6(rows)
+    if "e8" in want: fig_e8_gap(rows)
+    if "e8dec" in want: fig_e8_decomposition(rows)
+    if "e9" in want: fig_e9_scaling(rows)
     print(f"\nfigures in {FIGS}")
     return 0
 

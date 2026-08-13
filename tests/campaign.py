@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Statistical benchmark campaign: the decomposition methods against GA, with the
 compact MILP as reference, over enough instances per size class to support a
@@ -17,9 +16,15 @@ significance claim.
     python3 tests/campaign.py --report-only campaign.csv
 
 Instances are `instances/<class>_<replicate>.txt`; a class-p instance has 32*p
-tasks. The default design is classes 1,2,3,4,6,8,12,16 (32..512 tasks) with 10
-replicates each, denser at the low end because that is where the MILP still
-proves optimality and the crossover happens.
+tasks. The default design is classes 1,2,3,4,6,8,12,16 (32..512 tasks) with all
+20 replicates each, denser at the low end because that is where the MILP still
+proves optimality and the crossover happens. NoGoodCuts is off by default (see
+DEFAULT_ARMS), which pays for the extra replicates at no net cost.
+
+Solution JSONs can be retained with --keep-json DIR, so that
+tests/verify_solutions.py --from-dir DIR can re-check every returned schedule
+without re-running the campaign. Worth doing: the first campaign's front-runner
+was an arm built only as a control.
 
 SELF-CONTAINED ON PURPOSE
 -------------------------
@@ -82,6 +87,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # ==========================================================================
 # design
@@ -92,7 +98,7 @@ TASKS_PER_CLASS = 32
 E_PROC = 4.0                      # mirrors MachineProfile archetype A2
 
 DEFAULT_SIZES = [1, 2, 3, 4, 6, 8, 12, 16]
-DEFAULT_PER_SIZE = 10
+DEFAULT_PER_SIZE = 20
 
 
 @dataclass(frozen=True)
@@ -123,7 +129,13 @@ ARMS: dict[str, Arm] = {
     "StateLBBD":  Arm("StateLBBD"),
     "Benders":    Arm("Benders"),
 }
-DEFAULT_ARMS = list(ARMS)
+# NoGoodCuts is available but off by default. Its question is settled: it
+# returned an objective identical to LBBD's on every paired instance of the
+# first campaign, because the propagation filter and the precedence
+# constraints already exclude every infeasible placement, so the conflict
+# refiner never changes a verdict. Re-running it costs a seventh of the budget
+# to re-confirm a null. Pass --arms explicitly to include it.
+DEFAULT_ARMS = [a for a in ARMS if a != "NoGoodCuts"]
 
 # Pre-registered comparisons: fixed before the data exists, so the p-values
 # below are not the survivors of an all-pairs fishing trip. Reported as
@@ -131,6 +143,10 @@ DEFAULT_ARMS = list(ARMS)
 COMPARISONS: list[tuple[str, str, str]] = [
     ("LBBD",      "GA",         "does LBBD beat the GA"),
     ("Benders",   "GA",         "does Benders beat the GA"),
+    # Promoted after the first campaign: StateLBBD, built only as a control,
+    # came out ahead of both proposed methods, so how it fares against the
+    # practical baseline is now a question in its own right.
+    ("StateLBBD", "GA",         "does the control beat the GA"),
     ("LBBD-f5",   "LBBD",       "short subproblem TL: does it fix cut starvation"),
     ("LBBD",      "NoGoodCuts", "is conflict refinement worth anything"),
     ("Benders",   "StateLBBD",  "value of battery coordination (master held fixed)"),
@@ -299,7 +315,7 @@ class Run:
 
 def run_pinned(solver: Path, arm: str, instance: Path, battery: int, tl: int,
                seed: int | None, mem_gb: int, cpu: int | None,
-               workdir: Path) -> Run:
+               workdir: Path, keep_json: Path | None = None) -> Run:
     """One solver invocation, pinned to a single core.
 
     Pinning is not a nicety when runs execute in parallel: --thl bounds
@@ -320,7 +336,7 @@ def run_pinned(solver: Path, arm: str, instance: Path, battery: int, tl: int,
         argv = ["taskset", "-c", str(cpu)] + argv
 
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=tl + 300)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=tl + 300, check=False)
     except subprocess.TimeoutExpired:
         return Run(False, -9, f"hard timeout at {tl + 300}s (solver ignored --tl)")
     if proc.returncode != 0 or not out_json.exists():
@@ -334,6 +350,11 @@ def run_pinned(solver: Path, arm: str, instance: Path, battery: int, tl: int,
     except ValueError as exc:
         return Run(False, proc.returncode, f"bad JSON: {exc}")
     finally:
+        if keep_json is not None:
+            # Retained so tests/verify_solutions.py can re-check the schedules
+            # afterwards without paying for the whole campaign again.
+            keep_json.mkdir(parents=True, exist_ok=True)
+            shutil.copy(out_json, keep_json / f"{instance.stem}__{arm}.json")
         out_json.unlink(missing_ok=True)      # a long campaign must not fill /tmp
     return Run(True, 0, "", sol)
 
@@ -382,7 +403,7 @@ class ResultSink:
     def add(self, row: dict) -> None:
         with self.lock:
             self.rows.append(row)
-            if self.writer is not None:
+            if self.writer is not None and self.fh is not None:
                 self.writer.writerow(row)
                 self.fh.flush()
                 os.fsync(self.fh.fileno())
@@ -406,7 +427,7 @@ def load_rows(path: Path) -> list[dict]:
     out: list[dict] = []
     with path.open(newline="") as fh:
         for raw in csv.DictReader(fh):
-            row = dict(raw)
+            row: dict[str, Any] = dict(raw)
             for k in numeric & set(row):
                 try:
                     row[k] = float(row[k]) if row[k] != "" else float("nan")
@@ -425,7 +446,8 @@ def run_job(job: dict, args, pool: CorePool, sink: ResultSink,
     try:
         t0 = time.perf_counter()
         run = run_pinned(args.solver, job["arm"], job["path"], job["battery"],
-                         args.tl, job["seed"], args.mem, core, args.workdir)
+                         args.tl, job["seed"], args.mem, core, args.workdir,
+                         args.keep_json)
         wall = time.perf_counter() - t0
     finally:
         pool.release(core)
@@ -508,7 +530,7 @@ def wilcoxon_signed_rank(diffs: list[float]) -> tuple[float, int]:
     w_minus = sum(r for r, x in zip(ranks, d) if x < 0)
     w = min(w_plus, w_minus)
 
-    scaled = [int(round(2 * r)) for r in ranks]
+    scaled = [round(2 * r) for r in ranks]
     dist: dict[int, int] = {0: 1}
     for s in scaled:
         nxt: dict[int, int] = defaultdict(int)
@@ -516,7 +538,7 @@ def wilcoxon_signed_rank(diffs: list[float]) -> tuple[float, int]:
             nxt[total] += count
             nxt[total + s] += count
         dist = nxt
-    target = int(round(2 * w))
+    target = round(2 * w)
     tail = sum(c for t, c in dist.items() if t <= target)
     return min(1.0, 2.0 * tail / float(2 ** n)), n
 
@@ -873,11 +895,68 @@ def report_compliance(rows: list[dict], tl: int, arms: list[str]) -> None:
             print(f"    {k:4d} x  {arm:12s} {note}")
 
 
-def summarise(rows: list[dict], arms: list[str], tl: int, reps: int) -> int:
+def is_degenerate(r: dict) -> bool:
+    """The run produced no usable optimality cut, so it never really ran.
+
+    Two ways this happens and both must be caught. Either the callback fired
+    and every subproblem came back without a verdict -- `inconclusive` equals
+    `subproblems`, so every cut collapsed to the tardiness floor and was
+    suppressed -- or the callback never fired at all, which shows up as absent
+    diagnostics and means the arm handed back its warm start.
+
+    The second is the more insidious. A master too large to clear its root node
+    returns the warm start and looks like a method that performs badly, rather
+    than a formulation that could not be solved. Pooling those with functioning
+    runs is how a scaling failure gets misread as a modelling trade-off, which
+    is exactly what happened to the first campaign's effect decomposition.
+    """
+    if r["arm"] in ("GA", REFERENCE) or r["ok"] != 1:
+        return False
+    s, i = r["subproblems"], r["inconclusive"]
+    if not math.isfinite(s):
+        return True
+    return s > 0 and math.isfinite(i) and i >= s - 1e-9
+
+
+def report_degenerate(rows: list[dict], arms: list[str], dropped: bool) -> None:
+    section("0. DID THE DECOMPOSITION ACTUALLY RUN?")
+    print("  A degenerate run produced no optimality cut: either every")
+    print("  subproblem came back inconclusive, or the callback never fired and")
+    print("  the arm returned its warm start. Such a run did not execute the")
+    print("  algorithm and its objective measures nothing about the method.\n")
+    classes = sorted({r["size_class"] for r in rows})
+    decomp = [a for a in arms if a not in ("GA", REFERENCE)]
+    if not decomp:
+        print("  no decomposition arm present")
+        return
+    print(f"  {'class':>5s} " + " ".join(f"{a:>12s}" for a in decomp))
+    for c in classes:
+        cells = []
+        for a in decomp:
+            mine = [r for r in rows if r["size_class"] == c and r["arm"] == a]
+            bad = sum(1 for r in mine if is_degenerate(r))
+            cells.append(f"{bad:3d}/{len(mine):<3d}" + ("  !!" if bad and bad == len(mine) else "    "))
+        print(f"  {c:5d} " + " ".join(f"{x:>12s}" for x in cells))
+    total = sum(1 for r in rows if is_degenerate(r))
+    print(f"\n  {total} degenerate run(s), "
+          f"{'EXCLUDED from' if dropped else 'INCLUDED in'} everything below."
+          f"{'' if dropped else '  Pass without --keep-degenerate to exclude.'}")
+
+
+def summarise(rows: list[dict], arms: list[str], tl: int, reps: int,
+              keep_degenerate: bool = False) -> int:
     rows = [r for r in rows if r["arm"] in arms]
     if not rows:
         print("no rows to report", file=sys.stderr)
         return 2
+
+    report_degenerate(rows, arms, dropped=not keep_degenerate)
+    if not keep_degenerate:
+        rows = [r for r in rows if not is_degenerate(r)]
+        if not rows:
+            print("\nevery run was degenerate; nothing to report", file=sys.stderr)
+            return 2
+
     by_inst, meta = build_index(rows)
     report_coverage(by_inst, meta, arms)
     report_per_class(by_inst, meta, arms)
@@ -916,6 +995,12 @@ def main() -> int:
                     help="re-report from an existing CSV without solving")
     ap.add_argument("--bootstrap", type=int, default=10000,
                     help="bootstrap resamples for the CIs (default 10000)")
+    ap.add_argument("--keep-json", type=Path,
+                    help="retain every solution JSON here so "
+                         "tests/verify_solutions.py --from-dir can re-check them")
+    ap.add_argument("--keep-degenerate", action="store_true",
+                    help="include runs that produced no optimality cut (see the "
+                         "DEGENERATE section of the report)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and stop")
     ap.add_argument("--self-test", action="store_true",
                     help="check the statistics against known values and stop")
@@ -932,7 +1017,8 @@ def main() -> int:
         present = [a for a in ARMS if any(r["arm"] == a for r in rows)]
         print(f"re-reporting {len(rows)} run(s) from {args.report_only}")
         print(f"arms present: {', '.join(present)}")
-        return summarise(rows, present, args.tl, args.bootstrap)
+        return summarise(rows, present, args.tl, args.bootstrap,
+                         args.keep_degenerate)
 
     if REFERENCE not in args.arms:
         print(f"FATAL: {REFERENCE} is the reference and must be in --arms",
@@ -1023,7 +1109,8 @@ def main() -> int:
         return 0
     if not jobs:
         print("nothing left to run.")
-        return summarise(load_rows(args.csv), args.arms, args.tl, args.bootstrap) \
+        return summarise(load_rows(args.csv), args.arms, args.tl, args.bootstrap,
+                         args.keep_degenerate) \
             if args.csv and args.csv.exists() else 0
 
     # ---- execute -----------------------------------------------------
@@ -1054,7 +1141,7 @@ def main() -> int:
         print(f"per-run table: {args.csv}")
 
     rows = load_rows(args.csv) if args.csv and args.csv.exists() else sink.rows
-    rc = summarise(rows, args.arms, args.tl, args.bootstrap)
+    rc = summarise(rows, args.arms, args.tl, args.bootstrap, args.keep_degenerate)
     return 130 if interrupted else rc
 
 

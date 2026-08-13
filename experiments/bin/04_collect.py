@@ -145,6 +145,45 @@ def main() -> int:
                     solver_seconds=si.get("computation_time", ""),
                     n_machine_blocks=len(sol.get("machine_blocks", [])),
                     **battery_stats(levels, cap))
+
+        # Per-method measurements, passed through verbatim as diag_* columns.
+        # Deliberately generic: the decomposition methods export cut counts, a
+        # dual bound and the storage-free cost of the same schedule, and none
+        # of those mean anything to H1/GA, so hard-coding them here would put
+        # a wall of empty columns in front of every other experiment. Methods
+        # that export nothing produce no columns at all.
+        for key, value in (sol.get("diagnostics") or {}).items():
+            base[f"diag_{key}"] = float("nan") if value is None else float(value)
+
+        # ---- C7 dual-bound sanity (decomposition methods only) -----------
+        # A bound must not exceed the objective it bounds -- but *which*
+        # objective depends on the method, and this is the easy thing to get
+        # wrong. Only Benders' theta bounds the battery-aware cost. LBBD,
+        # NoGoodCuts and StateLBBD price energy at the raw tariff, so their
+        # master bounds the battery-FREE problem; checking them against the
+        # post-processed objective flags every run in which the battery saved
+        # anything, i.e. almost all of them.
+        bound = base.get("diag_bound")
+        aware = base.get("diag_bound_is_battery_aware")
+        no_batt = base.get("diag_energy_cost_no_battery")
+        if bound is not None and math.isfinite(bound):
+            if aware is not None and aware > 0.5:
+                reference = obj
+            elif no_batt is not None and math.isfinite(no_batt) and math.isfinite(tc):
+                reference = no_batt + tc
+            else:
+                reference = None
+            if (reference is not None and math.isfinite(reference)
+                    and bound > reference + max(TOL_ABS, TOL_REL * abs(reference))):
+                fails["C7_bound_above_objective"].append(rid)
+
+        # ---- C8 storage never hurts --------------------------------------
+        # The post-processed cost cannot exceed the storage-free cost of the
+        # same schedule: the battery LP can always choose to do nothing.
+        if (no_batt is not None and math.isfinite(no_batt) and math.isfinite(ec)
+                and ec > no_batt + max(TOL_ABS, TOL_REL * abs(no_batt))):
+            fails["C8_battery_increased_cost"].append(rid)
+
         rows.append(base)
         n_ok += 1
 
@@ -218,6 +257,7 @@ def main() -> int:
     checks = ["C1_objective_decomposition", "C2_battery_bounds",
               "C3_zero_battery_nonzero_level", "C4_negative_tardiness",
               "C6_schedule_window", "C6_precedence",
+              "C7_bound_above_objective", "C8_battery_increased_cost",
               "orphan_result", "unparseable_json"]
     for c in checks:
         bad = fails.get(c, [])

@@ -22,6 +22,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include <algorithm>
 #include <cmath>
+#include <ranges>
 
 #include <fmt/format.h>
 
@@ -182,9 +183,12 @@ void MachineStateModel::requireProcWhile(GRBModel& model, const std::vector<GRBL
 
 GRBLinExpr MachineStateModel::rawEnergyCost() const
 {
-   GRBLinExpr total = 0;
-   Loop(i, h) total += ins->costs[i] * energy[i];
-   return total;
+   return std::ranges::fold_left(
+         std::views::iota(0, h)
+      |  std::views::transform([&](const int i) { return ins->costs[i] * energy[i]; })
+      , GRBLinExpr{}
+      , std::plus<>()
+   );
 }
 
 double MachineStateModel::energyCostLowerBound() const

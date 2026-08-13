@@ -261,10 +261,74 @@ def main() -> int:
                                            "restart_level": "", "roundtrip_eff": eff,
                                            "c_rate": crate_tag})
 
+    # ---- E8 / E9: decomposition ------------------------------------------
+    # Paired by construction: every method sees the identical instance at the
+    # identical budget, and none of them is stochastic, so a difference between
+    # two rows sharing (instance, battery_ratio, time_limit) is a difference
+    # between the methods and nothing else.
+    def decomp_pool(rows: list[dict], size_ok, regimes, exp: str) -> list[dict]:
+        """Stratified subset: DECOMP_SHOPS_PER_CELL shops per (size, regime)."""
+        by_cell: dict[tuple, list[dict]] = {}
+        for r in rows:
+            if not size_ok(int(r["size_class"])) or r["price_regime"] not in regimes:
+                continue
+            if not series_ok(r, exp):
+                continue
+            by_cell.setdefault((r["size_class"], r["price_regime"]), []).append(r)
+        picked = []
+        for cell, members in sorted(by_cell.items()):
+            # Sort by instance name, then take a prefix. Deterministic, and
+            # stable when the manifest grows: adding instances never reshuffles
+            # the ones already chosen, so results on disk stay addressable.
+            members.sort(key=lambda r: r["instance"])
+            seen_shops, chosen = set(), []
+            for r in members:
+                if r["shop_id"] in seen_shops:
+                    continue
+                seen_shops.add(r["shop_id"])
+                chosen.append(r)
+                if len(chosen) >= design.DECOMP_SHOPS_PER_CELL:
+                    break
+            picked.extend(chosen)
+        return picked
+
+    def decomp_add(exp: str, rows: list[dict], methods: list[str],
+                   ratios: list[float]) -> None:
+        for r in rows:
+            for method in methods:
+                need = design.DECOMP_METHOD_REQUIRES.get(method)
+                if need and need not in flags:
+                    blocked.append({"experiment": exp, "instance": r["instance"],
+                                    "method": method, "state_policy": "sigma3",
+                                    "reason": f"solver lacks {need} (Benders arm not built)"})
+                    continue
+                for ratio in ratios:
+                    for tl in design.DECOMP_TL_PROFILE:
+                        extra = ([] if method == "MILP"
+                                 else design.decomp_subproblem_args(tl))
+                        add(exp, r, method, ratio, "exact", "sigma3", None, extra,
+                            extra_cols={"decomp_family":
+                                        "monolithic" if method == "MILP" else "decomposition"},
+                            tl_override=tl)
+
+    if design.ENABLED.get("E8"):
+        pool8 = decomp_pool(core, lambda s: s <= design.E8_MAX_SIZE_CLASS,
+                            design.E8_REGIMES, "E8")
+        decomp_add("E8", pool8, design.DECOMP_METHODS, design.E8_BATTERY_RATIOS)
+
+    if design.ENABLED.get("E9"):
+        pool9 = decomp_pool(core, lambda s: s in design.E9_SIZE_CLASSES,
+                            [design.E9_REGIME], "E9")
+        decomp_add("E9", pool9, design.E9_METHODS, design.E9_BATTERY_RATIOS)
+
     # ---- budget ----------------------------------------------------------
     # Deterministic constructive methods finish far below their time limit;
     # only the metaheuristics and the MILP actually consume their budget.
-    est_frac = {"H1": 0.05, "H1P": 0.08, "GA": 1.0, "GAP": 1.0, "MILP": 0.9}
+    # The decomposition methods are branch-and-check: they either prove
+    # optimality early or run out the clock, and on the sizes E8/E9 use the
+    # second is much more common, hence the near-1.0 fractions.
+    est_frac = {"H1": 0.05, "H1P": 0.08, "GA": 1.0, "GAP": 1.0, "MILP": 0.9,
+                "LBBD": 0.85, "NoGoodCuts": 0.95, "StateLBBD": 0.9, "Benders": 0.9}
     # Use each run's own time_limit, not the method default: with TL_PROFILE
     # the same method appears at several budgets and the default would
     # under-count the 600 s cells by an order of magnitude.

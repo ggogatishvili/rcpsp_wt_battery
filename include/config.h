@@ -30,7 +30,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // Callers that use the returned reference must include <gurobi_c++.h> themselves.
 class GRBEnv;
 
-#define VERSION "1.2.0"
+#define VERSION "1.2.1"
 
 class Config
 {
