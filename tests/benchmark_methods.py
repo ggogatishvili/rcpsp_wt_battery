@@ -285,7 +285,31 @@ def summarise(rows: list[dict], args) -> int:
               f"{'time mean':>10s} {'vs ref':>8s} {'better':>7s}")
 
         for c in sorted({size_of[i] for i in chosen}):
-            members = [i for i in chosen if size_of[i] == c]
+            all_members = [i for i in chosen if size_of[i] == c]
+
+            # Restrict to instances where EVERY method produced a usable run.
+            # Without this the rows of one table are computed over different
+            # instance sets whenever a method fails somewhere, and comparing
+            # them is comparing different problems -- the mean for a method
+            # that only survived the easy instance looks artificially good.
+            def usable(inst: str, method: str) -> bool:
+                return any(r["ok"] and math.isfinite(r["objective"])
+                           for r in by_inst[inst].get(method, []))
+
+            members = [i for i in all_members
+                       if all(usable(i, m) for m in args.methods)]
+            dropped = [i for i in all_members if i not in members]
+            if dropped:
+                missing = sorted({m for i in dropped for m in args.methods
+                                  if not usable(i, m)})
+                print(f"  class {c}: {len(dropped)} instance(s) excluded so the rows stay "
+                      f"comparable (no usable run for {', '.join(missing)}): "
+                      f"{', '.join(sorted(dropped))}")
+            if not members:
+                print(f"  class {c}: no instance has every method -- nothing comparable "
+                      f"to report")
+                continue
+
             ref_times = [by_inst[i][REFERENCE][0]["wall_s"] for i in members
                          if REFERENCE in by_inst[i]]
             for method in args.methods:
