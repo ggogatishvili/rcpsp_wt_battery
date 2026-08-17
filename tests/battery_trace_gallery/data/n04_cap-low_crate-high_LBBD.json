@@ -1,0 +1,3167 @@
+{
+    "battery_levels": [
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        5.736842105263158,
+        0.4736842105263168,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        6.7894736842105265,
+        2.578947368421053,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        6.7894736842105265,
+        2.578947368421053,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        8.421052631578947,
+        4.2105263157894735,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        6.7894736842105265,
+        2.578947368421053,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        8.421052631578947,
+        4.2105263157894735,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        8.421052631578947,
+        4.2105263157894735,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        6.7894736842105265,
+        2.578947368421053,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        6.7894736842105265,
+        2.578947368421053,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        8.421052631578947,
+        4.2105263157894735,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        8.421052631578947,
+        4.2105263157894735,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
+    "config": {
+        "alpha": 0.5,
+        "battery_capacity": 11,
+        "c_rate": null,
+        "charging_efficiency": 0.95,
+        "discharging_efficiency": 0.95,
+        "e_idle": 2.0,
+        "e_off": 0.0,
+        "e_proc": 4.0,
+        "lambda": 1.0,
+        "machine_profile": "default",
+        "method": "LBBD",
+        "time_limit": 180
+    },
+    "diagnostics": {
+        "battery_cuts": 0.0,
+        "battery_lp_ok": 1.0,
+        "battery_node_cuts": 0.0,
+        "battery_saving": 9748.058789473711,
+        "bound": 68310.61455769849,
+        "bound_is_battery_aware": 0.0,
+        "cumul_mifs": 0.0,
+        "energy_cost_no_battery": 63074.240000000034,
+        "feasibility_cuts": 0.0,
+        "inconclusive": 10.0,
+        "optimality_cuts": 10.0,
+        "subproblems": 10.0
+    },
+    "instance_summary": {
+        "energy_costs": [
+            94.62,
+            91.27,
+            92.03,
+            91.57,
+            96.57,
+            100.54,
+            122.73,
+            204.07,
+            195.24,
+            148.74,
+            127.45,
+            113.19,
+            95.92,
+            91.31,
+            94.34,
+            104.46,
+            111.58,
+            165.0,
+            287.83,
+            287.51,
+            167.91,
+            124.82,
+            122.0,
+            111.66,
+            109.86,
+            103.77,
+            100.41,
+            100.32,
+            101.8,
+            107.57,
+            128.3,
+            169.18,
+            197.16,
+            159.02,
+            134.08,
+            121.54,
+            109.67,
+            106.57,
+            113.28,
+            130.91,
+            157.9,
+            221.54,
+            391.95,
+            400.62,
+            217.31,
+            150.0,
+            126.38,
+            114.46,
+            117.0,
+            113.79,
+            109.43,
+            105.67,
+            108.85,
+            115.33,
+            155.0,
+            282.83,
+            275.88,
+            180.05,
+            141.56,
+            128.26,
+            121.83,
+            115.58,
+            119.14,
+            126.81,
+            141.78,
+            155.09,
+            201.75,
+            205.73,
+            136.19,
+            110.61,
+            90.04,
+            70.91,
+            87.81,
+            86.49,
+            90.82,
+            88.61,
+            91.01,
+            89.36,
+            107.52,
+            115.79,
+            132.85,
+            120.2,
+            93.13,
+            88.46,
+            84.0,
+            82.62,
+            85.14,
+            86.88,
+            105.01,
+            121.62,
+            134.02,
+            139.96,
+            123.61,
+            107.79,
+            103.02,
+            93.95,
+            89.51,
+            82.6,
+            84.41,
+            82.75,
+            88.54,
+            97.49,
+            116.38,
+            137.75,
+            146.31,
+            129.02,
+            118.2,
+            99.84,
+            89.74,
+            89.4,
+            92.13,
+            99.68,
+            113.94,
+            129.65,
+            139.1,
+            140.0,
+            120.66,
+            106.09,
+            99.82,
+            92.82,
+            77.35,
+            75.11,
+            78.62,
+            79.9,
+            82.95,
+            80.55,
+            87.76,
+            104.61,
+            112.37,
+            106.97,
+            96.1,
+            84.02,
+            76.34,
+            71.35,
+            76.08,
+            86.26,
+            93.82,
+            117.8,
+            126.58,
+            117.8,
+            107.59,
+            95.43,
+            97.57,
+            94.57,
+            92.63,
+            84.81,
+            78.82,
+            79.33,
+            81.1,
+            85.62,
+            90.42,
+            93.03,
+            91.2,
+            80.7,
+            72.1,
+            62.21,
+            34.88,
+            20.62,
+            37.12,
+            69.7,
+            92.01,
+            120.93,
+            124.31,
+            109.1,
+            94.36,
+            89.44,
+            80.7,
+            65.11,
+            73.92,
+            69.83,
+            67.28,
+            66.54,
+            67.52,
+            81.68,
+            120.0,
+            132.61,
+            124.43,
+            107.51,
+            94.45,
+            84.44,
+            91.11,
+            94.06,
+            88.14,
+            104.04,
+            113.17,
+            113.73,
+            99.95,
+            86.25,
+            75.7,
+            72.22,
+            73.7,
+            63.18,
+            70.02,
+            56.22,
+            53.26,
+            46.12,
+            51.19,
+            65.08,
+            78.53,
+            120.0,
+            116.48,
+            91.74,
+            96.15,
+            100.05,
+            99.28,
+            93.19,
+            78.84,
+            72.71,
+            82.18,
+            112.85,
+            117.66,
+            115.47,
+            105.11,
+            93.96,
+            88.83,
+            80.7,
+            92.42,
+            92.04,
+            91.57,
+            92.72,
+            92.57,
+            93.64,
+            112.83,
+            129.89,
+            130.37,
+            125.9,
+            105.42,
+            90.41,
+            86.16,
+            85.05,
+            92.98,
+            113.66,
+            147.49,
+            203.85,
+            293.73,
+            274.02,
+            185.28,
+            137.43,
+            125.98,
+            111.72,
+            105.01,
+            103.21,
+            98.46,
+            87.42,
+            82.86,
+            93.34,
+            116.33,
+            126.62,
+            120.97,
+            105.38,
+            85.2,
+            71.54,
+            68.8,
+            67.05,
+            75.55,
+            92.32,
+            106.66,
+            114.91,
+            118.8,
+            116.56,
+            105.0,
+            89.52,
+            82.75,
+            70.74,
+            38.87,
+            30.2,
+            24.41,
+            23.04,
+            30.06,
+            44.4,
+            82.0,
+            168.7
+        ],
+        "resource_capacities": [
+            1,
+            26,
+            32,
+            32,
+            28
+        ],
+        "resource_count": 5,
+        "task_count": 128
+    },
+    "machine_blocks": [
+        {
+            "description": "Off",
+            "end_time": 7,
+            "start_time": 0
+        },
+        {
+            "description": "Off -> Proc",
+            "end_time": 9,
+            "start_time": 8
+        },
+        {
+            "description": "Proc",
+            "end_time": 131,
+            "start_time": 10
+        },
+        {
+            "description": "Proc -> Off",
+            "end_time": 132,
+            "start_time": 132
+        },
+        {
+            "description": "Off",
+            "end_time": 271,
+            "start_time": 133
+        }
+    ],
+    "solution_info": {
+        "computation_time": 200.938829,
+        "energy_cost": 53326.18121052632,
+        "gap": 0.13292003581837075,
+        "objective_value": 69301.43121052632,
+        "tardiness_cost": 15975.250000000002
+    },
+    "task_assignments": [
+        {
+            "due_date": 42,
+            "duration": 1,
+            "end_time": 0,
+            "release_date": 0,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 0,
+            "successors": [
+                1,
+                2,
+                3
+            ],
+            "task_id": 0,
+            "weight": 6.23
+        },
+        {
+            "due_date": 56,
+            "duration": 10,
+            "end_time": 59,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                8,
+                1,
+                10,
+                6
+            ],
+            "start_time": 50,
+            "successors": [
+                26
+            ],
+            "task_id": 1,
+            "weight": 5.38
+        },
+        {
+            "due_date": 38,
+            "duration": 9,
+            "end_time": 9,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                4,
+                6,
+                2,
+                9
+            ],
+            "start_time": 1,
+            "successors": [
+                8,
+                9
+            ],
+            "task_id": 2,
+            "weight": 7.28
+        },
+        {
+            "due_date": 39,
+            "duration": 5,
+            "end_time": 9,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                2,
+                4,
+                10,
+                10
+            ],
+            "start_time": 5,
+            "successors": [
+                4,
+                6,
+                7
+            ],
+            "task_id": 3,
+            "weight": 9.97
+        },
+        {
+            "due_date": 56,
+            "duration": 1,
+            "end_time": 18,
+            "release_date": 6,
+            "resource_requests": [
+                0,
+                4,
+                1,
+                5,
+                3
+            ],
+            "start_time": 18,
+            "successors": [
+                5,
+                14,
+                22
+            ],
+            "task_id": 4,
+            "weight": 6.52
+        },
+        {
+            "due_date": 57,
+            "duration": 1,
+            "end_time": 20,
+            "release_date": 7,
+            "resource_requests": [
+                0,
+                4,
+                1,
+                3,
+                9
+            ],
+            "start_time": 20,
+            "successors": [
+                13,
+                29
+            ],
+            "task_id": 5,
+            "weight": 7.85
+        },
+        {
+            "due_date": 61,
+            "duration": 9,
+            "end_time": 19,
+            "release_date": 6,
+            "resource_requests": [
+                0,
+                9,
+                7,
+                2,
+                4
+            ],
+            "start_time": 11,
+            "successors": [
+                10,
+                11
+            ],
+            "task_id": 6,
+            "weight": 6.25
+        },
+        {
+            "due_date": 42,
+            "duration": 5,
+            "end_time": 25,
+            "release_date": 6,
+            "resource_requests": [
+                0,
+                6,
+                5,
+                1,
+                8
+            ],
+            "start_time": 21,
+            "successors": [
+                17
+            ],
+            "task_id": 7,
+            "weight": 9.83
+        },
+        {
+            "due_date": 56,
+            "duration": 9,
+            "end_time": 18,
+            "release_date": 10,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 10,
+            "successors": [
+                18
+            ],
+            "task_id": 8,
+            "weight": 7.46
+        },
+        {
+            "due_date": 58,
+            "duration": 4,
+            "end_time": 32,
+            "release_date": 10,
+            "resource_requests": [
+                0,
+                9,
+                2,
+                9,
+                5
+            ],
+            "start_time": 29,
+            "successors": [
+                12,
+                19
+            ],
+            "task_id": 9,
+            "weight": 7.26
+        },
+        {
+            "due_date": 59,
+            "duration": 8,
+            "end_time": 52,
+            "release_date": 15,
+            "resource_requests": [
+                0,
+                10,
+                10,
+                2,
+                9
+            ],
+            "start_time": 45,
+            "successors": [
+                13,
+                21,
+                24
+            ],
+            "task_id": 10,
+            "weight": 8.41
+        },
+        {
+            "due_date": 55,
+            "duration": 7,
+            "end_time": 39,
+            "release_date": 15,
+            "resource_requests": [
+                0,
+                9,
+                6,
+                10,
+                3
+            ],
+            "start_time": 33,
+            "successors": [
+                13,
+                15,
+                23
+            ],
+            "task_id": 11,
+            "weight": 8.64
+        },
+        {
+            "due_date": 61,
+            "duration": 2,
+            "end_time": 53,
+            "release_date": 14,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 52,
+            "successors": [
+                25
+            ],
+            "task_id": 12,
+            "weight": 5.73
+        },
+        {
+            "due_date": 70,
+            "duration": 3,
+            "end_time": 105,
+            "release_date": 23,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 103,
+            "successors": [
+                20
+            ],
+            "task_id": 13,
+            "weight": 9.11
+        },
+        {
+            "due_date": 59,
+            "duration": 1,
+            "end_time": 19,
+            "release_date": 7,
+            "resource_requests": [
+                0,
+                8,
+                7,
+                2,
+                2
+            ],
+            "start_time": 19,
+            "successors": [
+                18,
+                29
+            ],
+            "task_id": 14,
+            "weight": 5.76
+        },
+        {
+            "due_date": 76,
+            "duration": 8,
+            "end_time": 65,
+            "release_date": 22,
+            "resource_requests": [
+                0,
+                9,
+                10,
+                1,
+                5
+            ],
+            "start_time": 58,
+            "successors": [
+                16
+            ],
+            "task_id": 15,
+            "weight": 8.29
+        },
+        {
+            "due_date": 82,
+            "duration": 9,
+            "end_time": 74,
+            "release_date": 30,
+            "resource_requests": [
+                0,
+                8,
+                9,
+                2,
+                10
+            ],
+            "start_time": 66,
+            "successors": [
+                26
+            ],
+            "task_id": 16,
+            "weight": 10.38
+        },
+        {
+            "due_date": 53,
+            "duration": 8,
+            "end_time": 49,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                7,
+                3,
+                1,
+                4
+            ],
+            "start_time": 42,
+            "successors": [
+                26,
+                27
+            ],
+            "task_id": 17,
+            "weight": 5.51
+        },
+        {
+            "due_date": 67,
+            "duration": 4,
+            "end_time": 64,
+            "release_date": 19,
+            "resource_requests": [
+                0,
+                4,
+                10,
+                5,
+                2
+            ],
+            "start_time": 61,
+            "successors": [
+                30
+            ],
+            "task_id": 18,
+            "weight": 8.51
+        },
+        {
+            "due_date": 45,
+            "duration": 5,
+            "end_time": 51,
+            "release_date": 14,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 47,
+            "successors": [
+                23
+            ],
+            "task_id": 19,
+            "weight": 6.56
+        },
+        {
+            "due_date": 61,
+            "duration": 2,
+            "end_time": 107,
+            "release_date": 26,
+            "resource_requests": [
+                0,
+                1,
+                10,
+                1,
+                6
+            ],
+            "start_time": 106,
+            "successors": [
+                25
+            ],
+            "task_id": 20,
+            "weight": 6.64
+        },
+        {
+            "due_date": 63,
+            "duration": 10,
+            "end_time": 70,
+            "release_date": 23,
+            "resource_requests": [
+                0,
+                10,
+                2,
+                6,
+                2
+            ],
+            "start_time": 61,
+            "successors": [
+                25
+            ],
+            "task_id": 21,
+            "weight": 6.82
+        },
+        {
+            "due_date": 58,
+            "duration": 2,
+            "end_time": 30,
+            "release_date": 7,
+            "resource_requests": [
+                0,
+                2,
+                8,
+                1,
+                3
+            ],
+            "start_time": 29,
+            "successors": [
+                28
+            ],
+            "task_id": 22,
+            "weight": 10.52
+        },
+        {
+            "due_date": 55,
+            "duration": 4,
+            "end_time": 55,
+            "release_date": 22,
+            "resource_requests": [
+                0,
+                3,
+                3,
+                2,
+                3
+            ],
+            "start_time": 52,
+            "successors": [
+                29
+            ],
+            "task_id": 23,
+            "weight": 6.54
+        },
+        {
+            "due_date": 65,
+            "duration": 1,
+            "end_time": 53,
+            "release_date": 23,
+            "resource_requests": [
+                0,
+                2,
+                2,
+                1,
+                4
+            ],
+            "start_time": 53,
+            "successors": [
+                30
+            ],
+            "task_id": 24,
+            "weight": 8.36
+        },
+        {
+            "due_date": 69,
+            "duration": 6,
+            "end_time": 113,
+            "release_date": 33,
+            "resource_requests": [
+                0,
+                10,
+                1,
+                7,
+                5
+            ],
+            "start_time": 108,
+            "successors": [
+                27,
+                28
+            ],
+            "task_id": 25,
+            "weight": 10.09
+        },
+        {
+            "due_date": 66,
+            "duration": 2,
+            "end_time": 76,
+            "release_date": 39,
+            "resource_requests": [
+                0,
+                9,
+                6,
+                5,
+                5
+            ],
+            "start_time": 75,
+            "successors": [
+                28
+            ],
+            "task_id": 26,
+            "weight": 9.41
+        },
+        {
+            "due_date": 79,
+            "duration": 4,
+            "end_time": 117,
+            "release_date": 39,
+            "resource_requests": [
+                0,
+                3,
+                1,
+                5,
+                8
+            ],
+            "start_time": 114,
+            "successors": [
+                30
+            ],
+            "task_id": 27,
+            "weight": 5.96
+        },
+        {
+            "due_date": 85,
+            "duration": 1,
+            "end_time": 114,
+            "release_date": 41,
+            "resource_requests": [
+                0,
+                6,
+                6,
+                10,
+                4
+            ],
+            "start_time": 114,
+            "successors": [
+                31
+            ],
+            "task_id": 28,
+            "weight": 9.6
+        },
+        {
+            "due_date": 53,
+            "duration": 2,
+            "end_time": 57,
+            "release_date": 26,
+            "resource_requests": [
+                0,
+                7,
+                10,
+                7,
+                3
+            ],
+            "start_time": 56,
+            "successors": [
+                31
+            ],
+            "task_id": 29,
+            "weight": 8.58
+        },
+        {
+            "due_date": 70,
+            "duration": 2,
+            "end_time": 119,
+            "release_date": 43,
+            "resource_requests": [
+                0,
+                5,
+                4,
+                5,
+                7
+            ],
+            "start_time": 118,
+            "successors": [
+                31
+            ],
+            "task_id": 30,
+            "weight": 8.79
+        },
+        {
+            "due_date": 70,
+            "duration": 1,
+            "end_time": 120,
+            "release_date": 45,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 120,
+            "successors": [],
+            "task_id": 31,
+            "weight": 8.87
+        },
+        {
+            "due_date": 28,
+            "duration": 1,
+            "end_time": 0,
+            "release_date": 0,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 0,
+            "successors": [
+                33,
+                34,
+                35
+            ],
+            "task_id": 32,
+            "weight": 8.04
+        },
+        {
+            "due_date": 44,
+            "duration": 10,
+            "end_time": 10,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                0,
+                8,
+                0,
+                0
+            ],
+            "start_time": 1,
+            "successors": [
+                40,
+                45,
+                58
+            ],
+            "task_id": 33,
+            "weight": 8.92
+        },
+        {
+            "due_date": 31,
+            "duration": 3,
+            "end_time": 3,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                3
+            ],
+            "start_time": 1,
+            "successors": [
+                37,
+                42,
+                61
+            ],
+            "task_id": 34,
+            "weight": 8.77
+        },
+        {
+            "due_date": 52,
+            "duration": 7,
+            "end_time": 7,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                5
+            ],
+            "start_time": 1,
+            "successors": [
+                36,
+                38,
+                41
+            ],
+            "task_id": 35,
+            "weight": 8.17
+        },
+        {
+            "due_date": 62,
+            "duration": 5,
+            "end_time": 19,
+            "release_date": 8,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                7
+            ],
+            "start_time": 15,
+            "successors": [
+                50,
+                55
+            ],
+            "task_id": 36,
+            "weight": 5.86
+        },
+        {
+            "due_date": 49,
+            "duration": 5,
+            "end_time": 14,
+            "release_date": 4,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                7
+            ],
+            "start_time": 10,
+            "successors": [
+                39,
+                46,
+                50
+            ],
+            "task_id": 37,
+            "weight": 10.0
+        },
+        {
+            "due_date": 55,
+            "duration": 10,
+            "end_time": 17,
+            "release_date": 8,
+            "resource_requests": [
+                0,
+                2,
+                0,
+                0,
+                0
+            ],
+            "start_time": 8,
+            "successors": [
+                51
+            ],
+            "task_id": 38,
+            "weight": 9.72
+        },
+        {
+            "due_date": 45,
+            "duration": 5,
+            "end_time": 19,
+            "release_date": 9,
+            "resource_requests": [
+                0,
+                3,
+                0,
+                0,
+                0
+            ],
+            "start_time": 15,
+            "successors": [
+                43,
+                44,
+                49
+            ],
+            "task_id": 39,
+            "weight": 5.91
+        },
+        {
+            "due_date": 61,
+            "duration": 9,
+            "end_time": 19,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                6,
+                0
+            ],
+            "start_time": 11,
+            "successors": [
+                44,
+                46,
+                47
+            ],
+            "task_id": 40,
+            "weight": 9.04
+        },
+        {
+            "due_date": 43,
+            "duration": 4,
+            "end_time": 21,
+            "release_date": 8,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                2
+            ],
+            "start_time": 18,
+            "successors": [
+                48,
+                49,
+                56
+            ],
+            "task_id": 41,
+            "weight": 5.79
+        },
+        {
+            "due_date": 49,
+            "duration": 7,
+            "end_time": 10,
+            "release_date": 4,
+            "resource_requests": [
+                0,
+                9,
+                0,
+                0,
+                0
+            ],
+            "start_time": 4,
+            "successors": [
+                55,
+                57
+            ],
+            "task_id": 42,
+            "weight": 9.83
+        },
+        {
+            "due_date": 69,
+            "duration": 10,
+            "end_time": 29,
+            "release_date": 14,
+            "resource_requests": [
+                0,
+                2,
+                0,
+                0,
+                0
+            ],
+            "start_time": 20,
+            "successors": [
+                52,
+                57
+            ],
+            "task_id": 43,
+            "weight": 10.24
+        },
+        {
+            "due_date": 72,
+            "duration": 7,
+            "end_time": 112,
+            "release_date": 20,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 106,
+            "successors": [
+                52,
+                56
+            ],
+            "task_id": 44,
+            "weight": 5.67
+        },
+        {
+            "due_date": 64,
+            "duration": 8,
+            "end_time": 18,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                0,
+                7,
+                0,
+                0
+            ],
+            "start_time": 11,
+            "successors": [
+                52,
+                54,
+                56
+            ],
+            "task_id": 45,
+            "weight": 7.69
+        },
+        {
+            "due_date": 73,
+            "duration": 10,
+            "end_time": 122,
+            "release_date": 20,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 113,
+            "successors": [
+                54,
+                60
+            ],
+            "task_id": 46,
+            "weight": 10.24
+        },
+        {
+            "due_date": 49,
+            "duration": 5,
+            "end_time": 29,
+            "release_date": 20,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 25,
+            "successors": [
+                48,
+                49,
+                50
+            ],
+            "task_id": 47,
+            "weight": 8.77
+        },
+        {
+            "due_date": 76,
+            "duration": 7,
+            "end_time": 129,
+            "release_date": 25,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 123,
+            "successors": [
+                59
+            ],
+            "task_id": 48,
+            "weight": 6.49
+        },
+        {
+            "due_date": 58,
+            "duration": 3,
+            "end_time": 32,
+            "release_date": 25,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 30,
+            "successors": [
+                53,
+                57,
+                59
+            ],
+            "task_id": 49,
+            "weight": 6.53
+        },
+        {
+            "due_date": 76,
+            "duration": 9,
+            "end_time": 38,
+            "release_date": 25,
+            "resource_requests": [
+                0,
+                0,
+                3,
+                0,
+                0
+            ],
+            "start_time": 30,
+            "successors": [
+                60
+            ],
+            "task_id": 50,
+            "weight": 8.54
+        },
+        {
+            "due_date": 57,
+            "duration": 6,
+            "end_time": 24,
+            "release_date": 18,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 19,
+            "successors": [
+                54
+            ],
+            "task_id": 51,
+            "weight": 7.49
+        },
+        {
+            "due_date": 58,
+            "duration": 5,
+            "end_time": 117,
+            "release_date": 27,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                3
+            ],
+            "start_time": 113,
+            "successors": [
+                53
+            ],
+            "task_id": 52,
+            "weight": 6.47
+        },
+        {
+            "due_date": 73,
+            "duration": 8,
+            "end_time": 125,
+            "release_date": 32,
+            "resource_requests": [
+                0,
+                0,
+                10,
+                0,
+                0
+            ],
+            "start_time": 118,
+            "successors": [
+                55
+            ],
+            "task_id": 53,
+            "weight": 6.46
+        },
+        {
+            "due_date": 67,
+            "duration": 9,
+            "end_time": 131,
+            "release_date": 30,
+            "resource_requests": [
+                0,
+                0,
+                3,
+                0,
+                0
+            ],
+            "start_time": 123,
+            "successors": [
+                59
+            ],
+            "task_id": 54,
+            "weight": 10.52
+        },
+        {
+            "due_date": 84,
+            "duration": 2,
+            "end_time": 127,
+            "release_date": 40,
+            "resource_requests": [
+                0,
+                0,
+                6,
+                0,
+                0
+            ],
+            "start_time": 126,
+            "successors": [
+                62
+            ],
+            "task_id": 55,
+            "weight": 6.56
+        },
+        {
+            "due_date": 67,
+            "duration": 6,
+            "end_time": 118,
+            "release_date": 27,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                6,
+                0
+            ],
+            "start_time": 113,
+            "successors": [
+                62
+            ],
+            "task_id": 56,
+            "weight": 7.29
+        },
+        {
+            "due_date": 74,
+            "duration": 8,
+            "end_time": 41,
+            "release_date": 28,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                8,
+                0
+            ],
+            "start_time": 34,
+            "successors": [
+                60
+            ],
+            "task_id": 57,
+            "weight": 5.81
+        },
+        {
+            "due_date": 52,
+            "duration": 2,
+            "end_time": 12,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                1,
+                0,
+                0,
+                0
+            ],
+            "start_time": 11,
+            "successors": [
+                61
+            ],
+            "task_id": 58,
+            "weight": 9.37
+        },
+        {
+            "due_date": 70,
+            "duration": 4,
+            "end_time": 135,
+            "release_date": 39,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                1,
+                0
+            ],
+            "start_time": 132,
+            "successors": [
+                62
+            ],
+            "task_id": 59,
+            "weight": 5.7
+        },
+        {
+            "due_date": 85,
+            "duration": 4,
+            "end_time": 126,
+            "release_date": 36,
+            "resource_requests": [
+                0,
+                0,
+                2,
+                0,
+                0
+            ],
+            "start_time": 123,
+            "successors": [
+                63
+            ],
+            "task_id": 60,
+            "weight": 6.38
+        },
+        {
+            "due_date": 57,
+            "duration": 8,
+            "end_time": 25,
+            "release_date": 13,
+            "resource_requests": [
+                0,
+                0,
+                4,
+                0,
+                0
+            ],
+            "start_time": 18,
+            "successors": [
+                63
+            ],
+            "task_id": 61,
+            "weight": 6.06
+        },
+        {
+            "due_date": 73,
+            "duration": 7,
+            "end_time": 142,
+            "release_date": 43,
+            "resource_requests": [
+                0,
+                1,
+                0,
+                0,
+                0
+            ],
+            "start_time": 136,
+            "successors": [
+                63
+            ],
+            "task_id": 62,
+            "weight": 7.86
+        },
+        {
+            "due_date": 81,
+            "duration": 1,
+            "end_time": 143,
+            "release_date": 50,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 143,
+            "successors": [],
+            "task_id": 63,
+            "weight": 6.8
+        },
+        {
+            "due_date": 48,
+            "duration": 1,
+            "end_time": 0,
+            "release_date": 0,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 0,
+            "successors": [
+                65,
+                66,
+                67
+            ],
+            "task_id": 64,
+            "weight": 8.34
+        },
+        {
+            "due_date": 49,
+            "duration": 7,
+            "end_time": 7,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                4,
+                1,
+                10,
+                1
+            ],
+            "start_time": 1,
+            "successors": [
+                72,
+                81,
+                84
+            ],
+            "task_id": 65,
+            "weight": 5.37
+        },
+        {
+            "due_date": 33,
+            "duration": 4,
+            "end_time": 4,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                5,
+                3,
+                5,
+                5
+            ],
+            "start_time": 1,
+            "successors": [
+                70,
+                71,
+                73
+            ],
+            "task_id": 66,
+            "weight": 8.61
+        },
+        {
+            "due_date": 33,
+            "duration": 1,
+            "end_time": 1,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                3,
+                9,
+                5,
+                5
+            ],
+            "start_time": 1,
+            "successors": [
+                68,
+                69,
+                88
+            ],
+            "task_id": 67,
+            "weight": 5.72
+        },
+        {
+            "due_date": 46,
+            "duration": 3,
+            "end_time": 4,
+            "release_date": 2,
+            "resource_requests": [
+                0,
+                1,
+                9,
+                10,
+                1
+            ],
+            "start_time": 2,
+            "successors": [
+                72,
+                74,
+                75
+            ],
+            "task_id": 68,
+            "weight": 5.51
+        },
+        {
+            "due_date": 51,
+            "duration": 6,
+            "end_time": 7,
+            "release_date": 2,
+            "resource_requests": [
+                0,
+                3,
+                5,
+                3,
+                1
+            ],
+            "start_time": 2,
+            "successors": [
+                75,
+                77
+            ],
+            "task_id": 69,
+            "weight": 7.93
+        },
+        {
+            "due_date": 39,
+            "duration": 8,
+            "end_time": 17,
+            "release_date": 5,
+            "resource_requests": [
+                0,
+                2,
+                2,
+                5,
+                10
+            ],
+            "start_time": 10,
+            "successors": [
+                77,
+                83,
+                87
+            ],
+            "task_id": 70,
+            "weight": 7.75
+        },
+        {
+            "due_date": 58,
+            "duration": 9,
+            "end_time": 49,
+            "release_date": 5,
+            "resource_requests": [
+                0,
+                6,
+                5,
+                10,
+                6
+            ],
+            "start_time": 41,
+            "successors": [
+                84,
+                89,
+                91
+            ],
+            "task_id": 71,
+            "weight": 5.62
+        },
+        {
+            "due_date": 44,
+            "duration": 5,
+            "end_time": 24,
+            "release_date": 8,
+            "resource_requests": [
+                0,
+                6,
+                3,
+                1,
+                9
+            ],
+            "start_time": 20,
+            "successors": [
+                80,
+                85,
+                87
+            ],
+            "task_id": 72,
+            "weight": 9.53
+        },
+        {
+            "due_date": 56,
+            "duration": 8,
+            "end_time": 41,
+            "release_date": 5,
+            "resource_requests": [
+                0,
+                7,
+                9,
+                8,
+                8
+            ],
+            "start_time": 34,
+            "successors": [
+                78,
+                84,
+                86
+            ],
+            "task_id": 73,
+            "weight": 9.56
+        },
+        {
+            "due_date": 37,
+            "duration": 3,
+            "end_time": 10,
+            "release_date": 5,
+            "resource_requests": [
+                0,
+                4,
+                9,
+                6,
+                5
+            ],
+            "start_time": 8,
+            "successors": [
+                76,
+                77,
+                87
+            ],
+            "task_id": 74,
+            "weight": 5.38
+        },
+        {
+            "due_date": 55,
+            "duration": 3,
+            "end_time": 10,
+            "release_date": 8,
+            "resource_requests": [
+                0,
+                3,
+                2,
+                7,
+                2
+            ],
+            "start_time": 8,
+            "successors": [
+                76,
+                78,
+                79
+            ],
+            "task_id": 75,
+            "weight": 8.15
+        },
+        {
+            "due_date": 51,
+            "duration": 9,
+            "end_time": 33,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                4,
+                9,
+                10,
+                1
+            ],
+            "start_time": 25,
+            "successors": [
+                80,
+                82,
+                89
+            ],
+            "task_id": 76,
+            "weight": 8.08
+        },
+        {
+            "due_date": 58,
+            "duration": 5,
+            "end_time": 24,
+            "release_date": 13,
+            "resource_requests": [
+                0,
+                1,
+                3,
+                5,
+                1
+            ],
+            "start_time": 20,
+            "successors": [
+                79,
+                81,
+                90
+            ],
+            "task_id": 77,
+            "weight": 6.94
+        },
+        {
+            "due_date": 56,
+            "duration": 7,
+            "end_time": 56,
+            "release_date": 13,
+            "resource_requests": [
+                0,
+                2,
+                7,
+                2,
+                6
+            ],
+            "start_time": 50,
+            "successors": [
+                81,
+                83,
+                90
+            ],
+            "task_id": 78,
+            "weight": 8.56
+        },
+        {
+            "due_date": 58,
+            "duration": 2,
+            "end_time": 34,
+            "release_date": 18,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 33,
+            "successors": [
+                82,
+                85,
+                86
+            ],
+            "task_id": 79,
+            "weight": 9.4
+        },
+        {
+            "due_date": 61,
+            "duration": 7,
+            "end_time": 41,
+            "release_date": 20,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 35,
+            "successors": [
+                83,
+                86
+            ],
+            "task_id": 80,
+            "weight": 8.68
+        },
+        {
+            "due_date": 65,
+            "duration": 10,
+            "end_time": 94,
+            "release_date": 20,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 85,
+            "successors": [
+                82,
+                85
+            ],
+            "task_id": 81,
+            "weight": 5.33
+        },
+        {
+            "due_date": 57,
+            "duration": 2,
+            "end_time": 96,
+            "release_date": 30,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 95,
+            "successors": [
+                93
+            ],
+            "task_id": 82,
+            "weight": 5.94
+        },
+        {
+            "due_date": 70,
+            "duration": 2,
+            "end_time": 66,
+            "release_date": 27,
+            "resource_requests": [
+                0,
+                4,
+                2,
+                1,
+                7
+            ],
+            "start_time": 65,
+            "successors": [
+                92
+            ],
+            "task_id": 83,
+            "weight": 10.47
+        },
+        {
+            "due_date": 62,
+            "duration": 8,
+            "end_time": 61,
+            "release_date": 14,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 54,
+            "successors": [
+                88,
+                94
+            ],
+            "task_id": 84,
+            "weight": 9.6
+        },
+        {
+            "due_date": 65,
+            "duration": 7,
+            "end_time": 101,
+            "release_date": 30,
+            "resource_requests": [
+                0,
+                2,
+                2,
+                8,
+                6
+            ],
+            "start_time": 95,
+            "successors": [
+                89,
+                91
+            ],
+            "task_id": 85,
+            "weight": 8.3
+        },
+        {
+            "due_date": 61,
+            "duration": 8,
+            "end_time": 60,
+            "release_date": 27,
+            "resource_requests": [
+                0,
+                8,
+                4,
+                6,
+                6
+            ],
+            "start_time": 53,
+            "successors": [
+                91,
+                93
+            ],
+            "task_id": 86,
+            "weight": 9.24
+        },
+        {
+            "due_date": 52,
+            "duration": 6,
+            "end_time": 31,
+            "release_date": 13,
+            "resource_requests": [
+                0,
+                6,
+                8,
+                2,
+                2
+            ],
+            "start_time": 26,
+            "successors": [
+                90,
+                94
+            ],
+            "task_id": 87,
+            "weight": 10.45
+        },
+        {
+            "due_date": 76,
+            "duration": 6,
+            "end_time": 72,
+            "release_date": 22,
+            "resource_requests": [
+                0,
+                1,
+                1,
+                9,
+                10
+            ],
+            "start_time": 67,
+            "successors": [
+                92
+            ],
+            "task_id": 88,
+            "weight": 5.61
+        },
+        {
+            "due_date": 78,
+            "duration": 10,
+            "end_time": 111,
+            "release_date": 37,
+            "resource_requests": [
+                0,
+                7,
+                7,
+                6,
+                2
+            ],
+            "start_time": 102,
+            "successors": [
+                94
+            ],
+            "task_id": 89,
+            "weight": 6.35
+        },
+        {
+            "due_date": 62,
+            "duration": 5,
+            "end_time": 84,
+            "release_date": 20,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 80,
+            "successors": [
+                93
+            ],
+            "task_id": 90,
+            "weight": 7.83
+        },
+        {
+            "due_date": 73,
+            "duration": 1,
+            "end_time": 102,
+            "release_date": 37,
+            "resource_requests": [
+                0,
+                1,
+                1,
+                2,
+                4
+            ],
+            "start_time": 102,
+            "successors": [
+                92
+            ],
+            "task_id": 91,
+            "weight": 8.91
+        },
+        {
+            "due_date": 74,
+            "duration": 9,
+            "end_time": 111,
+            "release_date": 38,
+            "resource_requests": [
+                0,
+                7,
+                1,
+                9,
+                4
+            ],
+            "start_time": 103,
+            "successors": [
+                95
+            ],
+            "task_id": 92,
+            "weight": 5.47
+        },
+        {
+            "due_date": 80,
+            "duration": 3,
+            "end_time": 99,
+            "release_date": 35,
+            "resource_requests": [
+                0,
+                9,
+                4,
+                5,
+                10
+            ],
+            "start_time": 97,
+            "successors": [
+                95
+            ],
+            "task_id": 93,
+            "weight": 5.72
+        },
+        {
+            "due_date": 92,
+            "duration": 2,
+            "end_time": 113,
+            "release_date": 47,
+            "resource_requests": [
+                0,
+                2,
+                7,
+                3,
+                9
+            ],
+            "start_time": 112,
+            "successors": [
+                95
+            ],
+            "task_id": 94,
+            "weight": 6.95
+        },
+        {
+            "due_date": 88,
+            "duration": 1,
+            "end_time": 114,
+            "release_date": 49,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 114,
+            "successors": [],
+            "task_id": 95,
+            "weight": 8.99
+        },
+        {
+            "due_date": 52,
+            "duration": 1,
+            "end_time": 0,
+            "release_date": 0,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 0,
+            "successors": [
+                97,
+                98,
+                99
+            ],
+            "task_id": 96,
+            "weight": 5.4
+        },
+        {
+            "due_date": 47,
+            "duration": 8,
+            "end_time": 18,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                7,
+                9,
+                9,
+                5
+            ],
+            "start_time": 11,
+            "successors": [
+                100,
+                101
+            ],
+            "task_id": 97,
+            "weight": 6.21
+        },
+        {
+            "due_date": 42,
+            "duration": 9,
+            "end_time": 18,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                3,
+                4,
+                8,
+                1
+            ],
+            "start_time": 10,
+            "successors": [
+                104,
+                117,
+                119
+            ],
+            "task_id": 98,
+            "weight": 6.07
+        },
+        {
+            "due_date": 58,
+            "duration": 7,
+            "end_time": 25,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                1,
+                3,
+                10,
+                3
+            ],
+            "start_time": 19,
+            "successors": [
+                100,
+                104,
+                108
+            ],
+            "task_id": 99,
+            "weight": 7.67
+        },
+        {
+            "due_date": 66,
+            "duration": 6,
+            "end_time": 31,
+            "release_date": 9,
+            "resource_requests": [
+                0,
+                1,
+                1,
+                10,
+                10
+            ],
+            "start_time": 26,
+            "successors": [
+                102,
+                105,
+                110
+            ],
+            "task_id": 100,
+            "weight": 6.75
+        },
+        {
+            "due_date": 47,
+            "duration": 9,
+            "end_time": 28,
+            "release_date": 9,
+            "resource_requests": [
+                0,
+                10,
+                6,
+                10,
+                1
+            ],
+            "start_time": 20,
+            "successors": [
+                102,
+                104
+            ],
+            "task_id": 101,
+            "weight": 7.09
+        },
+        {
+            "due_date": 64,
+            "duration": 4,
+            "end_time": 44,
+            "release_date": 18,
+            "resource_requests": [
+                0,
+                6,
+                2,
+                1,
+                4
+            ],
+            "start_time": 41,
+            "successors": [
+                103,
+                107,
+                111
+            ],
+            "task_id": 102,
+            "weight": 9.19
+        },
+        {
+            "due_date": 56,
+            "duration": 10,
+            "end_time": 71,
+            "release_date": 22,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 62,
+            "successors": [
+                106,
+                109,
+                112
+            ],
+            "task_id": 103,
+            "weight": 5.33
+        },
+        {
+            "due_date": 62,
+            "duration": 5,
+            "end_time": 46,
+            "release_date": 18,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 42,
+            "successors": [
+                113,
+                114,
+                120
+            ],
+            "task_id": 104,
+            "weight": 7.71
+        },
+        {
+            "due_date": 56,
+            "duration": 2,
+            "end_time": 33,
+            "release_date": 15,
+            "resource_requests": [
+                0,
+                1,
+                2,
+                7,
+                9
+            ],
+            "start_time": 32,
+            "successors": [
+                118,
+                121,
+                122
+            ],
+            "task_id": 105,
+            "weight": 6.97
+        },
+        {
+            "due_date": 75,
+            "duration": 1,
+            "end_time": 72,
+            "release_date": 32,
+            "resource_requests": [
+                0,
+                6,
+                3,
+                1,
+                5
+            ],
+            "start_time": 72,
+            "successors": [
+                114,
+                116,
+                117
+            ],
+            "task_id": 106,
+            "weight": 9.56
+        },
+        {
+            "due_date": 59,
+            "duration": 8,
+            "end_time": 79,
+            "release_date": 22,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 72,
+            "successors": [
+                109,
+                116
+            ],
+            "task_id": 107,
+            "weight": 7.81
+        },
+        {
+            "due_date": 59,
+            "duration": 5,
+            "end_time": 44,
+            "release_date": 8,
+            "resource_requests": [
+                0,
+                7,
+                1,
+                2,
+                10
+            ],
+            "start_time": 40,
+            "successors": [
+                109,
+                111,
+                120
+            ],
+            "task_id": 108,
+            "weight": 9.95
+        },
+        {
+            "due_date": 80,
+            "duration": 1,
+            "end_time": 130,
+            "release_date": 32,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 130,
+            "successors": [
+                113,
+                114,
+                119
+            ],
+            "task_id": 109,
+            "weight": 5.3
+        },
+        {
+            "due_date": 50,
+            "duration": 9,
+            "end_time": 40,
+            "release_date": 15,
+            "resource_requests": [
+                0,
+                10,
+                5,
+                2,
+                9
+            ],
+            "start_time": 32,
+            "successors": [
+                111,
+                115,
+                125
+            ],
+            "task_id": 110,
+            "weight": 7.74
+        },
+        {
+            "due_date": 58,
+            "duration": 10,
+            "end_time": 54,
+            "release_date": 24,
+            "resource_requests": [
+                0,
+                3,
+                8,
+                4,
+                1
+            ],
+            "start_time": 45,
+            "successors": [
+                121
+            ],
+            "task_id": 111,
+            "weight": 7.5
+        },
+        {
+            "due_date": 66,
+            "duration": 6,
+            "end_time": 102,
+            "release_date": 32,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 97,
+            "successors": [
+                113,
+                115,
+                116
+            ],
+            "task_id": 112,
+            "weight": 6.24
+        },
+        {
+            "due_date": 84,
+            "duration": 5,
+            "end_time": 135,
+            "release_date": 38,
+            "resource_requests": [
+                0,
+                4,
+                1,
+                7,
+                7
+            ],
+            "start_time": 131,
+            "successors": [
+                122
+            ],
+            "task_id": 113,
+            "weight": 5.34
+        },
+        {
+            "due_date": 74,
+            "duration": 1,
+            "end_time": 131,
+            "release_date": 33,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 131,
+            "successors": [
+                122,
+                123
+            ],
+            "task_id": 114,
+            "weight": 5.56
+        },
+        {
+            "due_date": 76,
+            "duration": 3,
+            "end_time": 105,
+            "release_date": 38,
+            "resource_requests": [
+                0,
+                1,
+                7,
+                8,
+                6
+            ],
+            "start_time": 103,
+            "successors": [
+                117,
+                120
+            ],
+            "task_id": 115,
+            "weight": 9.43
+        },
+        {
+            "due_date": 75,
+            "duration": 4,
+            "end_time": 106,
+            "release_date": 38,
+            "resource_requests": [
+                0,
+                1,
+                7,
+                8,
+                6
+            ],
+            "start_time": 103,
+            "successors": [
+                118,
+                119
+            ],
+            "task_id": 116,
+            "weight": 9.67
+        },
+        {
+            "due_date": 87,
+            "duration": 4,
+            "end_time": 115,
+            "release_date": 41,
+            "resource_requests": [
+                0,
+                7,
+                7,
+                9,
+                10
+            ],
+            "start_time": 112,
+            "successors": [
+                118,
+                123
+            ],
+            "task_id": 117,
+            "weight": 6.22
+        },
+        {
+            "due_date": 88,
+            "duration": 7,
+            "end_time": 122,
+            "release_date": 45,
+            "resource_requests": [
+                0,
+                9,
+                8,
+                9,
+                3
+            ],
+            "start_time": 116,
+            "successors": [
+                126
+            ],
+            "task_id": 118,
+            "weight": 8.0
+        },
+        {
+            "due_date": 72,
+            "duration": 3,
+            "end_time": 133,
+            "release_date": 42,
+            "resource_requests": [
+                0,
+                5,
+                3,
+                3,
+                1
+            ],
+            "start_time": 131,
+            "successors": [
+                121,
+                125
+            ],
+            "task_id": 119,
+            "weight": 9.38
+        },
+        {
+            "due_date": 74,
+            "duration": 4,
+            "end_time": 118,
+            "release_date": 41,
+            "resource_requests": [
+                0,
+                9,
+                9,
+                8,
+                7
+            ],
+            "start_time": 115,
+            "successors": [
+                124
+            ],
+            "task_id": 120,
+            "weight": 7.94
+        },
+        {
+            "due_date": 87,
+            "duration": 1,
+            "end_time": 134,
+            "release_date": 45,
+            "resource_requests": [
+                0,
+                7,
+                8,
+                6,
+                7
+            ],
+            "start_time": 134,
+            "successors": [
+                123,
+                126
+            ],
+            "task_id": 121,
+            "weight": 7.66
+        },
+        {
+            "due_date": 84,
+            "duration": 6,
+            "end_time": 141,
+            "release_date": 43,
+            "resource_requests": [
+                0,
+                8,
+                4,
+                4,
+                4
+            ],
+            "start_time": 136,
+            "successors": [
+                124,
+                125,
+                126
+            ],
+            "task_id": 122,
+            "weight": 9.0
+        },
+        {
+            "due_date": 90,
+            "duration": 5,
+            "end_time": 139,
+            "release_date": 46,
+            "resource_requests": [
+                0,
+                9,
+                6,
+                2,
+                9
+            ],
+            "start_time": 135,
+            "successors": [
+                124
+            ],
+            "task_id": 123,
+            "weight": 9.66
+        },
+        {
+            "due_date": 80,
+            "duration": 1,
+            "end_time": 142,
+            "release_date": 51,
+            "resource_requests": [
+                0,
+                9,
+                1,
+                3,
+                8
+            ],
+            "start_time": 142,
+            "successors": [
+                127
+            ],
+            "task_id": 124,
+            "weight": 7.52
+        },
+        {
+            "due_date": 95,
+            "duration": 3,
+            "end_time": 144,
+            "release_date": 49,
+            "resource_requests": [
+                0,
+                6,
+                5,
+                3,
+                6
+            ],
+            "start_time": 142,
+            "successors": [
+                127
+            ],
+            "task_id": 125,
+            "weight": 10.5
+        },
+        {
+            "due_date": 101,
+            "duration": 7,
+            "end_time": 148,
+            "release_date": 52,
+            "resource_requests": [
+                0,
+                3,
+                4,
+                1,
+                1
+            ],
+            "start_time": 142,
+            "successors": [
+                127
+            ],
+            "task_id": 126,
+            "weight": 9.12
+        },
+        {
+            "due_date": 92,
+            "duration": 1,
+            "end_time": 149,
+            "release_date": 59,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 149,
+            "successors": [],
+            "task_id": 127,
+            "weight": 9.74
+        }
+    ]
+}

@@ -30,7 +30,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // Callers that use the returned reference must include <gurobi_c++.h> themselves.
 class GRBEnv;
 
-#define VERSION "1.2.1"
+#define VERSION "1.2.2"
 
 class Config
 {
@@ -48,11 +48,6 @@ public:
         // energy-intensive task placement + machine states, RCPSP subproblem on
         // everything else, battery applied as a post-processing step.
         LBBD,
-        // The same algorithm with conflict refinement switched off, i.e. plain
-        // no-good cuts over the whole fixing. This is the baseline the
-        // "logic-based" part of LBBD is meant to beat, so it is a method in its
-        // own right rather than a flag.
-        NoGoodCuts,
         // Explicit-state master + battery LP contributing classical Benders
         // optimality cuts, so the EI placement becomes battery-aware.
         // docs/BENDERS_BATTERY.md.
@@ -76,7 +71,6 @@ public:
             case ResolutionMethod::GAP:        return "GAP";
             case ResolutionMethod::MatH:       return "MatH";
             case ResolutionMethod::LBBD:       return "LBBD";
-            case ResolutionMethod::NoGoodCuts: return "NoGoodCuts";
             case ResolutionMethod::Benders:    return "Benders";
             case ResolutionMethod::StateLBBD:  return "StateLBBD";
             default:                           return "Undefined";
@@ -237,7 +231,7 @@ public:
     // --phase3-lp: replace greedy battery peak-shaving with an exact Gurobi LP
     inline static bool phase3LP = true;
 
-    // LBBD / NoGoodCuts Parameters
+    // LBBD Parameters
     // Per-call time limit of the RCPSP subproblem, in seconds. The subproblem
     // is re-solved at every master incumbent, so this is the single most
     // important knob: too tight and the optimality cuts fall back to weak
@@ -255,6 +249,20 @@ public:
     // longest precedence paths keeps the master small without measurably
     // weakening it, since the optimality cuts close the rest.
     inline static int lbbdTardinessBoundsPerTask = 3;
+    // Model the machine timeline with the interval-partition constraint of
+    // Juvigny et al. (2026) instead of the unit-flow reformulation.
+    //
+    // The two describe exactly the same set of integral solutions. The flow
+    // form is asymptotically smaller -- O(#arcs) nonzeros against O(h * #arcs)
+    // -- and its polytope is integral, so on paper it should dominate. That
+    // reasoning is worth distrusting: a flow formulation replaces one
+    // constraint per interval with one per boundary node, which changes what
+    // the LP relaxation says about *partial* assignments, and it removes the
+    // per-interval rows that Gurobi's cut separators and its presolve reduction
+    // to a set-partitioning structure may both have been exploiting. This flag
+    // exists so the claim can be measured on the same instances rather than
+    // argued, since the arc master is where LBBD collapses at scale.
+    inline static bool lbbdIntervalPartition = false;
 
     // Benders Parameters
     // Separate battery cuts at fractional nodes as well as at incumbents. The
@@ -301,7 +309,6 @@ struct fmt::formatter<Config::ResolutionMethod> : formatter<string_view>
             case Config::ResolutionMethod::GAP:        name = "GAP";        break;
             case Config::ResolutionMethod::MatH:       name = "MatH";       break;
             case Config::ResolutionMethod::LBBD:       name = "LBBD";       break;
-            case Config::ResolutionMethod::NoGoodCuts: name = "NoGoodCuts"; break;
             case Config::ResolutionMethod::Benders:    name = "Benders";    break;
             case Config::ResolutionMethod::StateLBBD:  name = "StateLBBD";  break;
             default: break;

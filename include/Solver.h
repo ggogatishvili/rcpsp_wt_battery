@@ -34,7 +34,6 @@ namespace solver
     * The method parameter determines which approach to use:
     *
     * - CompactILP uses an ILP model that includes the original instance as well as all its extensions.
-    * - NoGoodCuts uses a MIP model without no good cuts.
     * - LogicBenders uses a Benders decomposition with no good cuts.
     * - FreeCP uses a constraint programming model without any cuts.
     *

@@ -105,10 +105,8 @@ class RcpspSubproblem
       /**
        * @param eiAssignment    (task, start time) for every EI task.
        * @param refineInfeasibility  when true and the fixing is infeasible,
-       *        spend extra time isolating a small conflicting subset. Set it
-       *        for ResolutionMethod::LBBD and clear it for
-       *        ResolutionMethod::NoGoodCuts, which is exactly the difference
-       *        between the two methods.
+       *        spend extra time isolating a small conflicting subset instead
+       *        of cutting the whole assignment.
        */
       SubproblemResult solve(const std::vector<std::pair<int, int>>& eiAssignment,
                              const bool refineInfeasibility) const;

@@ -49,10 +49,7 @@ Solution solver::solve(const Instance* ins, const Config::ResolutionMethod metho
             case Config::ResolutionMethod::MatH:
                 return SolverMatH(ins)();
             case Config::ResolutionMethod::LBBD:
-            case Config::ResolutionMethod::NoGoodCuts:
-                // Same solver; the method decides whether infeasible fixings
-                // get a refined conflict or a plain no-good cut.
-                return SolverLBBD(ins, method)();
+                return SolverLBBD(ins)();
             case Config::ResolutionMethod::Benders:
             case Config::ResolutionMethod::StateLBBD:
                 // Same solver; the method decides whether the battery enters as

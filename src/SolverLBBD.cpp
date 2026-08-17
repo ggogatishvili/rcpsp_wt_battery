@@ -45,9 +45,8 @@ namespace
    };
 }
 
-SolverLBBD::SolverLBBD(const Instance* instance, const Config::ResolutionMethod method)
+SolverLBBD::SolverLBBD(const Instance* instance)
    : ins(instance)
-   , method(method)
    , H(instance->maxDuration())
 { }
 
@@ -64,11 +63,7 @@ void SolverLBBD::Callback::callback()
 
       stats.subproblems.fetch_add(1, std::memory_order_relaxed);
 
-      // Conflict refinement is exactly what separates the two methods: LBBD
-      // asks for a small conflicting subset, NoGoodCuts does not and pays for
-      // it with a cut that only excludes one point of the search space.
-      const bool refine = (method == Config::ResolutionMethod::LBBD);
-      const lbbd::SubproblemResult result = subproblem->solve(assignment, refine);
+      const lbbd::SubproblemResult result = subproblem->solve(assignment, /*refineInfeasibility=*/true);
 
       const auto noGood = [&](const std::vector<std::pair<int, int>>& subset) {
          GRBLinExpr expr = 0;
@@ -236,47 +231,90 @@ Solution SolverLBBD::_solve()
    GRBVar q = model.addVar(closure.unavoidableTardiness(), GRB_INFINITY, 1.0, GRB_CONTINUOUS, "q");
    model.update();
 
-   // ── Machine timeline as a unit flow ──────────────────────────────────────
+   // ── Machine timeline ─────────────────────────────────────────────────────
    //
-   // The original master states "every interval is covered by exactly one EI
-   // task or exactly one switching arc", which costs O(h^3) terms to write down
-   // and is the practical size limit of that formulation. The same set of
-   // solutions is described by a unit flow through the boundary graph: leave
-   // boundary 0, arrive at boundary H, and at every boundary in between what
-   // comes in goes out. Arcs are the switching arcs and the EI task blocks, and
-   // because both cover contiguous interval ranges that meet at boundaries, a
-   // 0-to-H path tiles [0, H) exactly once. Writing it costs O(#arcs) instead,
-   // and the flow structure is far stronger in the LP relaxation.
+   // Two formulations of the same requirement -- every interval of [0, H) is
+   // covered by exactly one EI task block or exactly one switching arc -- which
+   // admit exactly the same integral solutions. Which one is faster is an
+   // empirical question, and Config::lbbdIntervalPartition exists to answer it
+   // rather than assume it; see the note on that flag in config.h.
 
+   if ( Config::lbbdIntervalPartition )
    {
-      // No EI task can start at boundary 0: instance.cpp rejects transition
-      // durations below 1, so the earliest Proc interval is at least 2.
-      GRBLinExpr out = 0;
-      for (const int idx : arcsOut[0]) out += arcs[idx].var;
-      model.addConstr(out == 1.0, "flow_source");
+      // Interval partition, as in Juvigny et al. (2026) eq. (5.10). One row per
+      // interval. An arc (a, b) covers interval t iff a <= t < b; an EI task j
+      // starting at s covers t iff t - p_j < s <= t.
+      //
+      // Cost: O(h) rows, each listing every arc that spans the interval, so up
+      // to O(h * #arcs) nonzeros in total. That is the size the flow form was
+      // introduced to avoid, and on the largest instances it is expected to be
+      // the slower of the two -- but "expected" is the word this flag is meant
+      // to remove.
+      // Count first. The rows are cheap to describe and expensive to build, and
+      // a campaign that discovers the size by exhausting memory has learned
+      // nothing it could not have been told.
+      long long nnz = 0;
+      for (const auto& arc : arcs)
+         nnz += std::max(0, std::min(H, arc.b) - std::max(0, arc.a));
+      for (const auto& [j, range] : placement.windows())
+         nnz += static_cast<long long>(range.second - range.first + 1)
+              * ins->getProcessingTime(j);
 
-      GRBLinExpr in = 0;
-      for (const int idx : arcsIn[H]) in += arcs[idx].var;
-      model.addConstr(in == 1.0, "flow_sink");
-   }
+      fmt::println("LBBD: interval-partition timeline, {} rows, {} nonzeros "
+                   "({} arcs)", H, nnz, arcs.size());
 
-   std::set<int> boundaries;
-   boundaries.insert(gapStartSet.cbegin(), gapStartSet.cend());
-   boundaries.insert(gapEndSet.cbegin(), gapEndSet.cend());
-   for (const int t : boundaries)
-   {
-      if ( t == 0 || t == H ) continue;
+      std::vector<GRBLinExpr> cover(H, GRBLinExpr());
 
-      GRBLinExpr in = 0, out = 0;
-      for (const int idx : arcsIn[t])  in  += arcs[idx].var;
-      for (const int idx : arcsOut[t]) out += arcs[idx].var;
+      for (const auto& arc : arcs)
+         LoopFrom(t, std::max(0, arc.a), std::min(H, arc.b)) cover[t] += arc.var;
+
       for (const auto& [j, range] : placement.windows())
       {
-         const int endBoundary = t - ins->getProcessingTime(j);
-         if ( placement.contains(j, endBoundary) ) in  += placement.var(j, endBoundary);
-         if ( placement.contains(j, t) )           out += placement.var(j, t);
+         const int p = ins->getProcessingTime(j);
+         LoopFrom(s, range.first, range.second + 1)
+            LoopFrom(t, std::max(0, s), std::min(H, s + p)) cover[t] += placement.var(j, s);
       }
-      model.addConstr(in == out, fmt::format("flow_{}", t));
+
+      Loop(t, H) model.addConstr(cover[t] == 1.0, fmt::format("cover_{}", t));
+   }
+   else
+   {
+      // Unit flow through the boundary graph: leave boundary 0, arrive at
+      // boundary H, and at every boundary in between what comes in goes out.
+      // Arcs are the switching arcs and the EI task blocks, and because both
+      // cover contiguous interval ranges that meet at boundaries, a 0-to-H path
+      // tiles [0, H) exactly once. Writing it costs O(#arcs) rather than
+      // O(h * #arcs), and the flow polytope is integral.
+      {
+         // No EI task can start at boundary 0: instance.cpp rejects transition
+         // durations below 1, so the earliest Proc interval is at least 2.
+         GRBLinExpr out = 0;
+         for (const int idx : arcsOut[0]) out += arcs[idx].var;
+         model.addConstr(out == 1.0, "flow_source");
+
+         GRBLinExpr in = 0;
+         for (const int idx : arcsIn[H]) in += arcs[idx].var;
+         model.addConstr(in == 1.0, "flow_sink");
+      }
+
+      std::set<int> boundaries;
+      boundaries.insert(gapStartSet.cbegin(), gapStartSet.cend());
+      boundaries.insert(gapEndSet.cbegin(), gapEndSet.cend());
+      for (const int t : boundaries)
+      {
+         if ( t == 0 || t == H ) continue;
+
+         GRBLinExpr in = 0, out = 0;
+         for (const int idx : arcsIn[t])  in  += arcs[idx].var;
+         for (const int idx : arcsOut[t]) out += arcs[idx].var;
+         for (const auto& [j, range] : placement.windows())
+         {
+            const int endBoundary = t - ins->getProcessingTime(j);
+            if ( placement.contains(j, endBoundary) ) in  += placement.var(j, endBoundary);
+            if ( placement.contains(j, t) )           out += placement.var(j, t);
+         }
+         model.addConstr(in == out, fmt::format("flow_{}", t));
+      }
    }
 
    placement.addStructuralConstraints(model);
@@ -326,7 +364,7 @@ Solution SolverLBBD::_solve()
 
    // ── Solve ────────────────────────────────────────────────────────────────
 
-   Callback cb{ins, &closure, &subproblem, &placement, &q, method};
+   Callback cb{ins, &closure, &subproblem, &placement, &q};
    model.setCallback(&cb);
 
    model.set(GRB_IntParam_LazyConstraints, 1);

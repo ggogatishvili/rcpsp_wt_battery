@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Bring-up tests for the decomposition methods (LBBD / NoGoodCuts / StateLBBD /
-Benders).
+Bring-up tests for the decomposition methods (LBBD / StateLBBD / Benders).
 
 This is the sequence from docs/LBBD_REVIEW.md §4, automated. It is not a unit
 test suite -- it drives the real binary on real instances and checks properties
@@ -20,9 +19,9 @@ WHAT MAKES THIS MORE THAN A SMOKE TEST
 Three properties give real oracles rather than "it didn't crash":
 
   * With `-b 0` there is no battery, so the battery-free problem IS the
-    problem. Every method here is exact for it, so MILP, LBBD, NoGoodCuts,
-    StateLBBD and Benders must all reach the SAME optimum. Any disagreement is
-    a bug in exactly one of them and the others tell you which.
+    problem. Every method here is exact for it, so MILP, LBBD, StateLBBD and
+    Benders must all reach the SAME optimum. Any disagreement is a bug in
+    exactly one of them and the others tell you which.
 
   * With a battery, Benders is still exact (its theta is the true battery cost
     for the chosen machine schedule), so Benders must equal MILP. LBBD and
@@ -75,7 +74,7 @@ TOL_REL = 1e-6
 # MIPGap is 1e-4, so two methods can legitimately stop 0.01 % apart.
 TOL_OPT_REL = 2e-3
 
-DECOMP_METHODS = ("LBBD", "NoGoodCuts", "StateLBBD", "Benders")
+DECOMP_METHODS = ("LBBD", "StateLBBD", "Benders")
 ALL_METHODS = ("MILP",) + DECOMP_METHODS
 
 
@@ -506,7 +505,7 @@ def check_bound(run: Run, rep: Report, label: str) -> None:
 
     Which objective the bound applies to depends on the method, and getting
     this wrong is easy: only Benders' theta is a lower bound on the
-    battery-AWARE cost. LBBD, NoGoodCuts and StateLBBD price energy at the raw
+    battery-AWARE cost. LBBD and StateLBBD price energy at the raw
     tariff, so their master bounds the battery-FREE problem, and comparing it
     against the post-processed objective is comparing two different problems --
     it will exceed it whenever the battery saves anything, which is most of the
@@ -592,30 +591,6 @@ def compare_no_better_than_exact(runs: dict[str, Run], rep: Report, label: str,
               "; ".join(bad) + "  (an accounting bug, not a better schedule)")
 
 
-def check_refiner(runs: dict[str, Run], rep: Report, label: str) -> None:
-    """T13 - is the conflict refiner producing smaller cuts than no-good?"""
-    lbbd, ngc = runs.get("LBBD"), runs.get("NoGoodCuts")
-    if not (lbbd and ngc and lbbd.ok and ngc.ok):
-        rep.skip(f"T13 conflict refiner/{label}", "need both LBBD and NoGoodCuts")
-        return
-
-    def mean_mis(r: Run) -> float:
-        cuts = r.dnum("feasibility_cuts")
-        return r.dnum("cumul_mifs") / cuts if math.isfinite(cuts) and cuts > 0 else float("nan")
-
-    a, b = mean_mis(lbbd), mean_mis(ngc)
-    if not (math.isfinite(a) and math.isfinite(b)):
-        rep.info(f"T13 conflict refiner/{label}",
-                 "no feasibility cuts were generated -- the master never proposed an "
-                 "infeasible EI placement here, so the refiner is UNTESTED. Retry on a "
-                 "higher EI-density instance (1_5 and 1_12 have 9 EI tasks at n=32) or "
-                 "on a tight-due-date instance from experiments/data/instances/core")
-        return
-    rep.check(f"T13 conflict refiner/{label}", a <= b + TOL_ABS,
-              f"mean infeasibility set: LBBD={a:.2f} > NoGoodCuts={b:.2f}; "
-              f"the refiner is producing LARGER cuts than plain no-good")
-
-
 def check_flat_tariff(solver: Path, inst: Instance, src: Path, tl: int,
                       battery: int, rep: Report, workdir: Path) -> None:
     """T11 - under a constant price, Benders must equal StateLBBD.
@@ -693,9 +668,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     root = Path(__file__).resolve().parents[1]
     ap.add_argument("--solver", type=Path, default=root / "build" / "rcpsp_wt_battery")
-    # 1_1 has only 2 EI tasks, so its master is never handed an infeasible
-    # placement and T13 cannot exercise the conflict refiner. 1_5 is the same
-    # size class with 9 EI tasks (28 % density) and does put pressure on it.
+    # 1_5 is the same size class as 1_1 but with 9 EI tasks (28 % density), so
+    # the master is more likely to be handed an infeasible EI placement.
     ap.add_argument("--instances", type=Path, nargs="+",
                     default=[root / "instances" / "1_1.txt",
                              root / "instances" / "1_5.txt"])
@@ -765,9 +739,7 @@ def main() -> int:
                 # With storage only MILP and Benders remain exact.
                 compare_optima(runs, rep, tag, ["MILP", "Benders"],
                                "T10 Benders == MILP (exact with storage)")
-                compare_no_better_than_exact(runs, rep, tag, ["LBBD", "StateLBBD",
-                                                              "NoGoodCuts"])
-            check_refiner(runs, rep, tag)
+                compare_no_better_than_exact(runs, rep, tag, ["LBBD", "StateLBBD"])
 
         if not args.no_flat:
             print("\n-- flat tariff --")

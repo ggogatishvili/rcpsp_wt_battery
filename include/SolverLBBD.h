@@ -70,15 +70,11 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  * for the battery-free problem only. For a bound that is valid with storage,
  * see SolverBenders, and docs/BENDERS_BATTERY.md for why it costs the SPACES
  * pre-processing to get one.
- *
- * `ResolutionMethod::NoGoodCuts` selects the same algorithm with conflict
- * refinement off — plain no-good cuts over the whole fixing — which is the
- * baseline the "logic-based" part is meant to beat.
  */
 class SolverLBBD
 {
    public:
-      SolverLBBD(const Instance* instance, const Config::ResolutionMethod method);
+      SolverLBBD(const Instance* instance);
 
       Solution solve() { return _solve(); }
       Solution operator()() { return solve(); }
@@ -92,10 +88,9 @@ class SolverLBBD
                      const lbbd::PrecedenceClosure* closure,
                      const lbbd::RcpspSubproblem* subproblem,
                      const lbbd::EiPlacement* placement,
-                     GRBVar* q,
-                     const Config::ResolutionMethod method)
+                     GRBVar* q)
                : ins(ins), closure(closure), subproblem(subproblem)
-               , placement(placement), q(q), method(method)
+               , placement(placement), q(q)
             { }
 
             const lbbd::CutStatistics& statistics() const & { return stats; }
@@ -109,12 +104,10 @@ class SolverLBBD
             const lbbd::RcpspSubproblem* subproblem;
             const lbbd::EiPlacement* placement;
             GRBVar* q;
-            Config::ResolutionMethod method;
             lbbd::CutStatistics stats;
       };
 
       const Instance* ins;
-      const Config::ResolutionMethod method;
       const int H;
 
       Solution _solve();

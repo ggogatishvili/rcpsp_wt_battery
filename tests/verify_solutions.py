@@ -343,6 +343,71 @@ def verify_one(inst: Instance, arm: str, sol: dict, battery: int, rep: Report):
                       f"{tag}: bound {bound:.4f} > battery-free {ceiling:.4f}")
 
 
+def explain(inst: Instance, sols: dict[str, dict], battery: int) -> None:
+    """Decompose one instance's costs, to separate Proposition 4 from a bug.
+
+    When a post-processing arm certifies optimality and is still beaten, there
+    are exactly two explanations and they are distinguishable:
+
+      Proposition 4.  The arm found the battery-FREE optimum, and the winner
+      found a schedule that is battery-free WORSE but responds better to
+      storage. Then raw(arm) <= raw(winner), and the whole difference sits in
+      the battery saving. This is correct behaviour and is the paper's point.
+
+      A bug.  The arm did not find the battery-free optimum after all, i.e.
+      raw(arm) > raw(winner). Then its exactness claim is false and the cuts,
+      the master, or the post-processing write-back are wrong.
+
+    The raw column is recomputed here from the machine blocks and the tariff,
+    so it does not depend on the solver agreeing with itself.
+    """
+    print(f"\n{'=' * 84}")
+    print(f"COST DECOMPOSITION  --  {inst.path.name}")
+    print(f"{'=' * 84}")
+    print(f"  horizon {inst.horizon}, battery {battery}, "
+          f"{sum(1 for t in inst.tasks if t.is_ei)} EI task(s), "
+          f"prices {min(inst.prices):.1f}..{max(inst.prices):.1f}")
+    print(f"\n  {'arm':11s} {'raw energy':>12s} {'with battery':>13s} "
+          f"{'saving':>9s} {'tardiness':>10s} {'objective':>12s} {'proved':>7s}")
+
+    table = {}
+    for arm, sol in sorted(sols.items()):
+        info = sol.get("solution_info", {}) or {}
+        diag = sol.get("diagnostics", {}) or {}
+        demand, _state, problem = timeline(inst, sol)
+        raw = (sum(inst.prices[u] * demand[u] for u in range(inst.horizon))
+               if demand else float("nan"))
+        e = float(info.get("energy_cost", float("nan")))
+        t = float(info.get("tardiness_cost", float("nan")))
+        o = float(info.get("objective_value", float("nan")))
+        gap = info.get("gap")
+        inc = diag.get("inconclusive")
+        proved = (gap is not None and float(gap) <= 1e-6
+                  and not (inc is not None and float(inc) > 0))
+        table[arm] = (raw, e, o, proved)
+        note = "" if not problem else f"  <- {problem}"
+        print(f"  {arm:11s} {raw:12.2f} {e:13.2f} {raw - e:9.2f} "
+              f"{t:10.2f} {o:12.2f} {str(proved):>7s}{note}")
+
+    winner = min((v[2], k) for k, v in table.items() if math.isfinite(v[2]))[1]
+    print(f"\n  best objective: {winner}")
+    for arm, (raw, _e, o, proved) in sorted(table.items()):
+        if arm == winner or not proved or not math.isfinite(raw):
+            continue
+        rawv = table[winner][0]
+        if not math.isfinite(rawv):
+            continue
+        if raw <= rawv + ABS_TOL:
+            print(f"  {arm}: raw {raw:.2f} <= {winner}'s raw {rawv:.2f}. It DID "
+                  f"find the battery-free\n      optimum; the entire "
+                  f"{o - table[winner][2]:.2f} gap is battery coordination. "
+                  f"Proposition 4, not a bug.")
+        else:
+            print(f"  {arm}: raw {raw:.2f} > {winner}'s raw {rawv:.2f}. It certifies "
+                  f"optimality of the\n      battery-free problem but is NOT "
+                  f"battery-free optimal. THIS IS A BUG.")
+
+
 def cross_check(results: dict, rep: Report):
     """V15 -- the check the whole script exists for.
 
@@ -422,6 +487,9 @@ def main() -> int:
     ap.add_argument("--from-dir", type=Path,
                     help="verify saved JSONs instead of running the solver; "
                          "files must be named <instance>__<arm>.json")
+    ap.add_argument("--explain", action="store_true",
+                    help="print a raw/battery/tardiness cost decomposition per "
+                         "instance, which separates Proposition 4 from a bug")
     args = ap.parse_args()
 
     if args.instances:
@@ -439,6 +507,7 @@ def main() -> int:
 
     rep = Report()
     results: dict[str, dict[str, dict]] = defaultdict(dict)
+    kept: dict[str, tuple] = {}
     workdir = Path(tempfile.mkdtemp(prefix="rcpsp_verify_"))
     lock = threading.Lock()
     done = [0]
@@ -473,6 +542,7 @@ def main() -> int:
             results[path.name][arm] = {
                 "objective": float("nan") if obj is None else float(obj),
                 "proved": proved}
+            kept.setdefault(path.name, (inst, batt, {}))[2][arm] = sol
         verify_one(inst, arm, sol, batt, rep)
         print(head + f"  obj={float(obj):13.2f}" if obj is not None else head,
               flush=True)
@@ -483,6 +553,11 @@ def main() -> int:
         for path in paths:
             for arm in args.arms:
                 pex.submit(job, path, arm)
+
+    if args.explain:
+        for name in sorted(kept):
+            inst, batt, sols = kept[name]
+            explain(inst, sols, batt)
 
     cross_check(results, rep)
     shutil.rmtree(workdir, ignore_errors=True)

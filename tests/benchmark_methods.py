@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Head-to-head benchmark across instance sizes: the decomposition methods against
 GA, with the compact MILP as the reference.
@@ -82,7 +81,7 @@ if _MISSING:
         f"Copy the current test_decomposition.py alongside this script.")
 
 REFERENCE = "MILP"
-DEFAULT_METHODS = ["MILP", "GA", "LBBD", "NoGoodCuts", "StateLBBD", "Benders"]
+DEFAULT_METHODS = ["MILP", "GA", "LBBD", "StateLBBD", "Benders"]
 STOCHASTIC = {"GA", "GAP"}
 TASKS_PER_CLASS = 32
 
@@ -90,7 +89,7 @@ TASKS_PER_CLASS = 32
 # estimate only. The decomposition methods and the MILP either prove optimality
 # early or run out the clock; on anything above the smallest class the second
 # dominates. GA always uses its full budget by construction.
-BUDGET_USE = {"MILP": 0.95, "GA": 1.0, "LBBD": 0.85, "NoGoodCuts": 0.95,
+BUDGET_USE = {"MILP": 0.95, "GA": 1.0, "LBBD": 0.85,
               "StateLBBD": 0.9, "Benders": 0.9}
 
 
@@ -148,7 +147,7 @@ def run_pinned(solver: Path, method: str, instance: Path, battery: int, tl: int,
         argv = ["taskset", "-c", str(cpu)] + argv
 
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=tl + 180)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=tl + 180, check=False)
     except subprocess.TimeoutExpired:
         return td.Run(method, instance, battery, False, -9,
                       f"hard timeout after {tl + 180}s (the solver ignored --tl)")
@@ -362,8 +361,7 @@ def summarise(rows: list[dict], args) -> int:
 
     print("\n  'vs ref'  reference wall time / method wall time; >1 means faster "
           "than the MILP.")
-    print("  'proved'  share of runs that certified optimality. For LBBD, "
-          "NoGoodCuts and")
+    print("  'proved'  share of runs that certified optimality. For LBBD and")
     print("            StateLBBD that certifies the battery-FREE problem only "
           "(docs/LBBD_REVIEW.md);")
     print("            at --battery-ratio 0 the two coincide and the column "

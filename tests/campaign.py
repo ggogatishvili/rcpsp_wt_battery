@@ -18,8 +18,7 @@ significance claim.
 Instances are `instances/<class>_<replicate>.txt`; a class-p instance has 32*p
 tasks. The default design is classes 1,2,3,4,6,8,12,16 (32..512 tasks) with all
 20 replicates each, denser at the low end because that is where the MILP still
-proves optimality and the crossover happens. NoGoodCuts is off by default (see
-DEFAULT_ARMS), which pays for the extra replicates at no net cost.
+proves optimality and the crossover happens.
 
 Solution JSONs can be retained with --keep-json DIR, so that
 tests/verify_solutions.py --from-dir DIR can re-check every returned schedule
@@ -125,17 +124,18 @@ ARMS: dict[str, Arm] = {
     # above class 1, this arm beats plain LBBD and the fix is a one-line
     # default change. If it does not, the master relaxation is the problem.
     "LBBD-f5":    Arm("LBBD", ("--sub-tl", "5")),
-    "NoGoodCuts": Arm("NoGoodCuts"),
+    # The timeline-formulation arm. Identical to LBBD except that the machine
+    # timeline is written as the interval-partition constraint of
+    # Juvigny et al. (2026) rather than as a unit flow. The two admit the same
+    # integral solutions, so any difference in quality or in solve time is
+    # attributable to the formulation alone -- which is the cleanest possible
+    # test of whether the flow reformulation is what makes the arc master
+    # collapse at scale. Pair it with LBBD, never with anything else.
+    "LBBD-part":  Arm("LBBD", ("--lbbd-partition",)),
     "StateLBBD":  Arm("StateLBBD"),
     "Benders":    Arm("Benders"),
 }
-# NoGoodCuts is available but off by default. Its question is settled: it
-# returned an objective identical to LBBD's on every paired instance of the
-# first campaign, because the propagation filter and the precedence
-# constraints already exclude every infeasible placement, so the conflict
-# refiner never changes a verdict. Re-running it costs a seventh of the budget
-# to re-confirm a null. Pass --arms explicitly to include it.
-DEFAULT_ARMS = [a for a in ARMS if a != "NoGoodCuts"]
+DEFAULT_ARMS = list(ARMS)
 
 # Pre-registered comparisons: fixed before the data exists, so the p-values
 # below are not the survivors of an all-pairs fishing trip. Reported as
@@ -148,7 +148,7 @@ COMPARISONS: list[tuple[str, str, str]] = [
     # practical baseline is now a question in its own right.
     ("StateLBBD", "GA",         "does the control beat the GA"),
     ("LBBD-f5",   "LBBD",       "short subproblem TL: does it fix cut starvation"),
-    ("LBBD",      "NoGoodCuts", "is conflict refinement worth anything"),
+    ("LBBD-part", "LBBD",       "interval partition vs unit flow, same solution set"),
     ("Benders",   "StateLBBD",  "value of battery coordination (master held fixed)"),
     ("StateLBBD", "LBBD",       "cost of losing the SPACES pre-processing"),
 ]
@@ -157,12 +157,15 @@ COMPARISONS: list[tuple[str, str, str]] = [
 # only. This is an UPPER bound in practice: on small classes the MILP and the
 # decompositions prove optimality in seconds and never reach --tl.
 BUDGET_USE = {"MILP": 0.95, "GA": 1.0, "LBBD": 0.85, "LBBD-f5": 0.9,
-              "NoGoodCuts": 0.95, "StateLBBD": 0.9, "Benders": 0.9}
+              "LBBD-part": 0.95, "StateLBBD": 0.9,
+              "Benders": 0.9}
 
 CSV_FIELDS = ["instance", "size_class", "replicate", "n", "ei", "horizon",
               "battery", "scale", "arm", "method", "seed", "ok", "objective",
               "energy", "tardiness", "wall_s", "solver_s", "overhead_s", "gap",
-              "proved", "subproblems", "inconclusive", "returncode", "note"]
+              "proved", "subproblems", "inconclusive", "optimality_cuts",
+              "feasibility_cuts", "battery_cuts", "battery_node_cuts",
+              "returncode", "note"]
 
 
 # ==========================================================================
@@ -423,7 +426,8 @@ def load_rows(path: Path) -> list[dict]:
     numeric = {"size_class", "replicate", "n", "ei", "horizon", "battery",
                "scale", "ok", "objective", "energy", "tardiness", "wall_s",
                "solver_s", "overhead_s", "gap", "proved", "subproblems",
-               "inconclusive", "returncode"}
+               "inconclusive", "optimality_cuts", "feasibility_cuts",
+               "battery_cuts", "battery_node_cuts", "returncode"}
     out: list[dict] = []
     with path.open(newline="") as fh:
         for raw in csv.DictReader(fh):
@@ -470,6 +474,13 @@ def run_job(job: dict, args, pool: CorePool, sink: ResultSink,
         "proved": int(run.ok and run.proved_optimal),
         "subproblems": run.dnum("subproblems") if run.ok else float("nan"),
         "inconclusive": run.dnum("inconclusive") if run.ok else float("nan"),
+        # Recorded separately because Benders has two independent cut
+        # families and collapsing them hides which half of the
+        # decomposition was working -- see is_degenerate().
+        "optimality_cuts": run.dnum("optimality_cuts") if run.ok else float("nan"),
+        "feasibility_cuts": run.dnum("feasibility_cuts") if run.ok else float("nan"),
+        "battery_cuts": run.dnum("battery_cuts") if run.ok else float("nan"),
+        "battery_node_cuts": run.dnum("battery_node_cuts") if run.ok else float("nan"),
         "returncode": run.returncode, "note": run.note.replace("\n", " ")[:200],
     }
     sink.add(row)
@@ -518,8 +529,8 @@ def wilcoxon_signed_rank(diffs: list[float]) -> tuple[float, int]:
     integral under tied (half-integer) ranks.
 
     Zero differences are dropped (Wilcoxon's original handling). That is
-    conservative here: identical arms -- LBBD vs NoGoodCuts, say -- yield no
-    usable pairs at all rather than a spuriously tiny p.
+    conservative here: two arms that happen to agree on every instance yield
+    no usable pairs at all rather than a spuriously tiny p.
     """
     d = [x for x in diffs if math.isfinite(x) and x != 0.0]
     n = len(d)
@@ -798,9 +809,7 @@ def report_pairwise(by_inst, meta, arms: list[str], reps: int) -> None:
             if cell["n_used"] == 0:
                 # Every paired difference is exactly zero. Wilcoxon drops zeros
                 # and has nothing left to test, but "identical on all N" is a
-                # far stronger statement than the nan it would otherwise print
-                # -- and for LBBD vs NoGoodCuts it IS the finding: the conflict
-                # refiner never changed a single answer.
+                # far stronger statement than the nan it would otherwise print.
                 print(f"    {label:26s} {len(d):3d}    IDENTICAL on all "
                       f"{len(d)} paired instance(s)")
                 continue
@@ -895,52 +904,93 @@ def report_compliance(rows: list[dict], tl: int, arms: list[str]) -> None:
             print(f"    {k:4d} x  {arm:12s} {note}")
 
 
-def is_degenerate(r: dict) -> bool:
-    """The run produced no usable optimality cut, so it never really ran.
+def is_silent(r: dict) -> bool:
+    """The callback never fired, so the run produced no cut of any kind.
 
-    Two ways this happens and both must be caught. Either the callback fired
-    and every subproblem came back without a verdict -- `inconclusive` equals
-    `subproblems`, so every cut collapsed to the tardiness floor and was
-    suppressed -- or the callback never fired at all, which shows up as absent
-    diagnostics and means the arm handed back its warm start.
-
-    The second is the more insidious. A master too large to clear its root node
-    returns the warm start and looks like a method that performs badly, rather
-    than a formulation that could not be solved. Pooling those with functioning
-    runs is how a scaling failure gets misread as a modelling trade-off, which
-    is exactly what happened to the first campaign's effect decomposition.
+    Shows up as diagnostics absent entirely -- and, as the 1800 s campaign
+    confirmed, with no reported gap either. A master too large to clear its
+    root node ends here, handing back its warm-start schedule; that looks like
+    a method performing badly rather than a formulation that could not be
+    solved, which is why it must be separated out.
     """
     if r["arm"] in ("GA", REFERENCE) or r["ok"] != 1:
         return False
+    return not math.isfinite(r["subproblems"])
+
+
+def is_tardiness_blind(r: dict) -> bool:
+    """Every RCPSP subproblem call came back without a verdict.
+
+    Then `inconclusive` equals `subproblems`, every optimality cut collapsed to
+    the tardiness floor and was suppressed, and `q` never rose above
+    lb_TWT. The master chose placements while blind to tardiness.
+    """
+    if r["arm"] in ("GA", REFERENCE) or r["ok"] != 1 or is_silent(r):
+        return False
     s, i = r["subproblems"], r["inconclusive"]
-    if not math.isfinite(s):
-        return True
     return s > 0 and math.isfinite(i) and i >= s - 1e-9
+
+
+def is_degenerate(r: dict) -> bool:
+    """The run contributed no usable cut at all, so it never really ran.
+
+    Silence always qualifies. Tardiness-blindness qualifies only for the arms
+    whose *sole* cut family is the RCPSP one. Benders is the exception and the
+    distinction matters: its battery subproblem is an LP that is never
+    infeasible (\\Cref{prop:phi}), so every incumbent yields exactly one cut on
+    theta whatever the CP solver did. A Benders run with every RCPSP call
+    inconclusive was still tightening the energy half of its bound -- it was
+    blind to tardiness, not idle -- and calling that "produced no cut" is
+    simply wrong. It was, in the first version of this function.
+
+    When the CSV predates the battery-cut columns the count is inferred rather
+    than read: MIPSOL fired at least `subproblems` times and each firing emits
+    a battery cut, so battery cuts are positive whenever subproblems is.
+    """
+    if not (is_silent(r) or is_tardiness_blind(r)):
+        return False
+    if is_silent(r):
+        return True
+    b = r.get("battery_cuts", float("nan"))
+    if r["arm"] == "Benders" and (not math.isfinite(b) or b > 0):
+        return False
+    return True
 
 
 def report_degenerate(rows: list[dict], arms: list[str], dropped: bool) -> None:
     section("0. DID THE DECOMPOSITION ACTUALLY RUN?")
-    print("  A degenerate run produced no optimality cut: either every")
-    print("  subproblem came back inconclusive, or the callback never fired and")
-    print("  the arm returned its warm start. Such a run did not execute the")
-    print("  algorithm and its objective measures nothing about the method.\n")
+    print("  Two distinct failures, reported separately because they mean")
+    print("  different things:\n")
+    print("    silent    the callback never fired -- no cut of any kind, and the")
+    print("              arm handed back its warm start")
+    print("    blind     every RCPSP call was inconclusive, so q never rose above")
+    print("              the tardiness floor. For LBBD and StateLBBD that is the")
+    print("              whole algorithm. For Benders it is half of it: the")
+    print("              battery LP is never infeasible, so cuts on theta kept")
+    print("              coming. Blind Benders runs are therefore NOT excluded.\n")
     classes = sorted({r["size_class"] for r in rows})
     decomp = [a for a in arms if a not in ("GA", REFERENCE)]
     if not decomp:
         print("  no decomposition arm present")
         return
-    print(f"  {'class':>5s} " + " ".join(f"{a:>12s}" for a in decomp))
+    print(f"  {'class':>5s} " + " ".join(f"{a:>14s}" for a in decomp))
     for c in classes:
         cells = []
         for a in decomp:
             mine = [r for r in rows if r["size_class"] == c and r["arm"] == a]
-            bad = sum(1 for r in mine if is_degenerate(r))
-            cells.append(f"{bad:3d}/{len(mine):<3d}" + ("  !!" if bad and bad == len(mine) else "    "))
-        print(f"  {c:5d} " + " ".join(f"{x:>12s}" for x in cells))
-    total = sum(1 for r in rows if is_degenerate(r))
-    print(f"\n  {total} degenerate run(s), "
+            si = sum(1 for r in mine if is_silent(r))
+            bl = sum(1 for r in mine if is_tardiness_blind(r))
+            cells.append(f"{si:2d}s {bl:2d}b /{len(mine):<3d}")
+        print(f"  {c:5d} " + " ".join(f"{x:>14s}" for x in cells))
+    ns = sum(1 for r in rows if is_silent(r))
+    nb = sum(1 for r in rows if is_tardiness_blind(r))
+    nd = sum(1 for r in rows if is_degenerate(r))
+    print(f"\n  {ns} silent, {nb} tardiness-blind; {nd} counted as degenerate and "
           f"{'EXCLUDED from' if dropped else 'INCLUDED in'} everything below."
-          f"{'' if dropped else '  Pass without --keep-degenerate to exclude.'}")
+          f"{'' if dropped else '  Omit --keep-degenerate to exclude.'}")
+    if not any("battery_cuts" in r for r in rows):
+        print("  (this CSV predates the battery-cut columns, so Benders' cuts on "
+              "theta are\n   inferred from the subproblem count rather than read)")
 
 
 def summarise(rows: list[dict], arms: list[str], tl: int, reps: int,
@@ -1092,8 +1142,8 @@ def main() -> int:
         print(f"           !! --workers {args.workers} exceeds {cpus} cores; "
               f"timings will be inflated.")
     try:
-        gb = int([l for l in Path("/proc/meminfo").read_text().splitlines()
-                  if l.startswith("MemTotal")][0].split()[1]) / 1048576.0
+        gb = int(next(l for l in Path("/proc/meminfo").read_text().splitlines()
+                  if l.startswith("MemTotal")).split()[1]) / 1048576.0
         if workers * args.mem > 0.9 * gb:
             print(f"           !! {workers} x {args.mem} GB exceeds 90 % of "
                   f"{gb:.0f} GB RAM; lower --mem or --workers.")

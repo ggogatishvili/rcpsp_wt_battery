@@ -26,9 +26,7 @@ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // model, with the makespan objective replaced by total weighted tardiness and
 // release dates added. Its conflict refiner is also what makes the "logic-
 // based" part of the decomposition worth anything -- it returns a small
-// conflicting subset of the fixing instead of the whole assignment, which is
-// precisely the difference between ResolutionMethod::LBBD and
-// ResolutionMethod::NoGoodCuts.
+// conflicting subset of the fixing instead of the whole assignment.
 //
 // Compiled only when the build is configured with -DWITH_CPOPTIMIZER=ON.
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,970 @@
+{
+    "battery_levels": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        32.0,
+        26.736842105263158,
+        21.473684210526315,
+        17.263157894736842,
+        13.052631578947366,
+        8.84210526315789,
+        4.631578947368414,
+        0.421052631578938,
+        0.421052631578938,
+        13.684210526315795,
+        13.684210526315795,
+        9.473684210526319,
+        5.263157894736842,
+        1.0526315789473684,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
+    "config": {
+        "alpha": 0.5,
+        "battery_capacity": 32,
+        "c_rate": null,
+        "charging_efficiency": 0.95,
+        "discharging_efficiency": 0.95,
+        "e_idle": 2.0,
+        "e_off": 0.0,
+        "e_proc": 4.0,
+        "lambda": 1.0,
+        "machine_profile": "default",
+        "method": "MILP",
+        "time_limit": 180
+    },
+    "instance_summary": {
+        "energy_costs": [
+            84.42,
+            86.67,
+            85.85,
+            84.8,
+            86.32,
+            98.33,
+            123.46,
+            149.8,
+            125.0,
+            101.94,
+            85.83,
+            76.73,
+            65.92,
+            61.47,
+            70.56,
+            79.89,
+            101.44,
+            132.42,
+            210.51,
+            413.66,
+            308.52,
+            150.28,
+            119.37,
+            108.69,
+            108.12,
+            109.21,
+            106.31,
+            104.25,
+            104.21,
+            107.35,
+            182.39,
+            294.59,
+            193.65,
+            125.7,
+            102.57,
+            96.01,
+            84.74,
+            84.27,
+            87.45,
+            94.85,
+            105.81,
+            131.17,
+            192.68,
+            386.4,
+            210.0,
+            130.02,
+            112.62,
+            105.9,
+            104.86,
+            103.61,
+            100.57,
+            101.42,
+            100.87,
+            110.31,
+            133.35,
+            216.33,
+            165.29,
+            122.31,
+            113.97,
+            114.82,
+            103.58,
+            96.03,
+            86.56,
+            95.58,
+            110.26,
+            126.54,
+            170.59,
+            276.46,
+            172.73,
+            117.57,
+            98.94,
+            84.59,
+            85.95,
+            83.19,
+            75.65,
+            67.14,
+            66.2,
+            71.23,
+            105.95,
+            123.07,
+            121.14,
+            104.81,
+            76.01,
+            38.73,
+            51.48,
+            49.23,
+            57.64,
+            54.03,
+            46.92,
+            89.09,
+            126.33,
+            188.92,
+            151.12,
+            116.25,
+            92.43,
+            81.94,
+            48.33,
+            42.49,
+            35.11,
+            33.23,
+            41.42,
+            73.44,
+            114.49,
+            123.43,
+            109.04,
+            92.68,
+            58.95,
+            49.64,
+            47.43,
+            46.93,
+            59.75,
+            76.99,
+            92.55,
+            97.99,
+            130.14,
+            200.52,
+            165.0,
+            119.39,
+            104.84,
+            98.65,
+            94.3,
+            79.39,
+            72.93,
+            73.75,
+            79.32,
+            82.83,
+            86.36,
+            78.23,
+            72.18,
+            54.48
+        ],
+        "resource_capacities": [
+            1,
+            35,
+            33,
+            38,
+            38
+        ],
+        "resource_count": 5,
+        "task_count": 32
+    },
+    "machine_blocks": [
+        {
+            "description": "Off",
+            "end_time": 28,
+            "start_time": 0
+        },
+        {
+            "description": "Off -> Proc",
+            "end_time": 30,
+            "start_time": 29
+        },
+        {
+            "description": "Proc",
+            "end_time": 41,
+            "start_time": 31
+        },
+        {
+            "description": "Proc -> Off",
+            "end_time": 42,
+            "start_time": 42
+        },
+        {
+            "description": "Off",
+            "end_time": 129,
+            "start_time": 43
+        }
+    ],
+    "solution_info": {
+        "computation_time": 0.479452,
+        "energy_cost": 4272.9203324099735,
+        "gap": 0.0,
+        "objective_value": 4272.9203324099735,
+        "tardiness_cost": 0.0
+    },
+    "task_assignments": [
+        {
+            "due_date": 22,
+            "duration": 1,
+            "end_time": 0,
+            "release_date": 0,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 0,
+            "successors": [
+                1,
+                2,
+                3
+            ],
+            "task_id": 0,
+            "weight": 9.69
+        },
+        {
+            "due_date": 30,
+            "duration": 5,
+            "end_time": 5,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                8,
+                2,
+                4,
+                9
+            ],
+            "start_time": 1,
+            "successors": [
+                5,
+                6,
+                15
+            ],
+            "task_id": 1,
+            "weight": 6.7
+        },
+        {
+            "due_date": 19,
+            "duration": 5,
+            "end_time": 5,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                10,
+                6,
+                4,
+                7
+            ],
+            "start_time": 1,
+            "successors": [
+                10,
+                14,
+                28
+            ],
+            "task_id": 2,
+            "weight": 6.4
+        },
+        {
+            "due_date": 25,
+            "duration": 10,
+            "end_time": 10,
+            "release_date": 1,
+            "resource_requests": [
+                0,
+                8,
+                10,
+                10,
+                9
+            ],
+            "start_time": 1,
+            "successors": [
+                4,
+                7,
+                9
+            ],
+            "task_id": 3,
+            "weight": 5.59
+        },
+        {
+            "due_date": 28,
+            "duration": 4,
+            "end_time": 14,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                5,
+                3,
+                5,
+                3
+            ],
+            "start_time": 11,
+            "successors": [
+                21,
+                27
+            ],
+            "task_id": 4,
+            "weight": 8.12
+        },
+        {
+            "due_date": 34,
+            "duration": 4,
+            "end_time": 9,
+            "release_date": 6,
+            "resource_requests": [
+                0,
+                6,
+                6,
+                10,
+                9
+            ],
+            "start_time": 6,
+            "successors": [
+                8,
+                14,
+                28
+            ],
+            "task_id": 5,
+            "weight": 6.57
+        },
+        {
+            "due_date": 29,
+            "duration": 8,
+            "end_time": 13,
+            "release_date": 6,
+            "resource_requests": [
+                0,
+                6,
+                5,
+                8,
+                10
+            ],
+            "start_time": 6,
+            "successors": [
+                9,
+                11,
+                16
+            ],
+            "task_id": 6,
+            "weight": 7.44
+        },
+        {
+            "due_date": 23,
+            "duration": 1,
+            "end_time": 11,
+            "release_date": 11,
+            "resource_requests": [
+                0,
+                7,
+                9,
+                2,
+                1
+            ],
+            "start_time": 11,
+            "successors": [
+                10,
+                20,
+                21
+            ],
+            "task_id": 7,
+            "weight": 9.97
+        },
+        {
+            "due_date": 35,
+            "duration": 9,
+            "end_time": 18,
+            "release_date": 10,
+            "resource_requests": [
+                0,
+                9,
+                10,
+                9,
+                6
+            ],
+            "start_time": 10,
+            "successors": [
+                10,
+                11,
+                24
+            ],
+            "task_id": 8,
+            "weight": 5.29
+        },
+        {
+            "due_date": 33,
+            "duration": 1,
+            "end_time": 16,
+            "release_date": 14,
+            "resource_requests": [
+                0,
+                1,
+                8,
+                7,
+                1
+            ],
+            "start_time": 16,
+            "successors": [
+                17,
+                18,
+                19
+            ],
+            "task_id": 9,
+            "weight": 7.57
+        },
+        {
+            "due_date": 45,
+            "duration": 6,
+            "end_time": 24,
+            "release_date": 19,
+            "resource_requests": [
+                0,
+                8,
+                5,
+                8,
+                3
+            ],
+            "start_time": 19,
+            "successors": [
+                17,
+                23
+            ],
+            "task_id": 10,
+            "weight": 9.76
+        },
+        {
+            "due_date": 31,
+            "duration": 2,
+            "end_time": 20,
+            "release_date": 19,
+            "resource_requests": [
+                0,
+                6,
+                4,
+                4,
+                8
+            ],
+            "start_time": 19,
+            "successors": [
+                12
+            ],
+            "task_id": 11,
+            "weight": 6.57
+        },
+        {
+            "due_date": 39,
+            "duration": 6,
+            "end_time": 26,
+            "release_date": 21,
+            "resource_requests": [
+                0,
+                5,
+                10,
+                1,
+                5
+            ],
+            "start_time": 21,
+            "successors": [
+                13,
+                19
+            ],
+            "task_id": 12,
+            "weight": 8.76
+        },
+        {
+            "due_date": 47,
+            "duration": 10,
+            "end_time": 40,
+            "release_date": 27,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 31,
+            "successors": [
+                18,
+                20,
+                23
+            ],
+            "task_id": 13,
+            "weight": 6.01
+        },
+        {
+            "due_date": 40,
+            "duration": 8,
+            "end_time": 17,
+            "release_date": 10,
+            "resource_requests": [
+                0,
+                8,
+                3,
+                7,
+                3
+            ],
+            "start_time": 10,
+            "successors": [
+                16,
+                17,
+                21
+            ],
+            "task_id": 14,
+            "weight": 6.07
+        },
+        {
+            "due_date": 28,
+            "duration": 1,
+            "end_time": 6,
+            "release_date": 6,
+            "resource_requests": [
+                0,
+                4,
+                9,
+                10,
+                10
+            ],
+            "start_time": 6,
+            "successors": [
+                16,
+                23,
+                28
+            ],
+            "task_id": 15,
+            "weight": 9.03
+        },
+        {
+            "due_date": 34,
+            "duration": 1,
+            "end_time": 18,
+            "release_date": 18,
+            "resource_requests": [
+                0,
+                3,
+                9,
+                10,
+                9
+            ],
+            "start_time": 18,
+            "successors": [
+                18,
+                19,
+                24
+            ],
+            "task_id": 16,
+            "weight": 6.94
+        },
+        {
+            "due_date": 43,
+            "duration": 1,
+            "end_time": 41,
+            "release_date": 25,
+            "resource_requests": [
+                1,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 41,
+            "successors": [
+                22,
+                26
+            ],
+            "task_id": 17,
+            "weight": 7.65
+        },
+        {
+            "due_date": 60,
+            "duration": 10,
+            "end_time": 51,
+            "release_date": 37,
+            "resource_requests": [
+                0,
+                7,
+                3,
+                5,
+                5
+            ],
+            "start_time": 42,
+            "successors": [
+                22,
+                27
+            ],
+            "task_id": 18,
+            "weight": 9.19
+        },
+        {
+            "due_date": 47,
+            "duration": 4,
+            "end_time": 30,
+            "release_date": 27,
+            "resource_requests": [
+                0,
+                10,
+                9,
+                10,
+                10
+            ],
+            "start_time": 27,
+            "successors": [
+                20,
+                22
+            ],
+            "task_id": 19,
+            "weight": 8.87
+        },
+        {
+            "due_date": 56,
+            "duration": 9,
+            "end_time": 52,
+            "release_date": 37,
+            "resource_requests": [
+                0,
+                4,
+                9,
+                6,
+                10
+            ],
+            "start_time": 44,
+            "successors": [
+                25,
+                26
+            ],
+            "task_id": 20,
+            "weight": 7.21
+        },
+        {
+            "due_date": 42,
+            "duration": 2,
+            "end_time": 19,
+            "release_date": 18,
+            "resource_requests": [
+                0,
+                5,
+                3,
+                9,
+                1
+            ],
+            "start_time": 18,
+            "successors": [
+                24,
+                25,
+                30
+            ],
+            "task_id": 21,
+            "weight": 7.82
+        },
+        {
+            "due_date": 63,
+            "duration": 1,
+            "end_time": 55,
+            "release_date": 47,
+            "resource_requests": [
+                0,
+                6,
+                8,
+                3,
+                3
+            ],
+            "start_time": 55,
+            "successors": [
+                25,
+                30
+            ],
+            "task_id": 22,
+            "weight": 7.61
+        },
+        {
+            "due_date": 60,
+            "duration": 9,
+            "end_time": 52,
+            "release_date": 37,
+            "resource_requests": [
+                0,
+                1,
+                8,
+                8,
+                1
+            ],
+            "start_time": 44,
+            "successors": [
+                26
+            ],
+            "task_id": 23,
+            "weight": 9.75
+        },
+        {
+            "due_date": 38,
+            "duration": 2,
+            "end_time": 21,
+            "release_date": 20,
+            "resource_requests": [
+                0,
+                2,
+                1,
+                3,
+                3
+            ],
+            "start_time": 20,
+            "successors": [
+                29
+            ],
+            "task_id": 24,
+            "weight": 9.63
+        },
+        {
+            "due_date": 63,
+            "duration": 3,
+            "end_time": 63,
+            "release_date": 48,
+            "resource_requests": [
+                0,
+                6,
+                4,
+                8,
+                3
+            ],
+            "start_time": 61,
+            "successors": [
+                29
+            ],
+            "task_id": 25,
+            "weight": 6.94
+        },
+        {
+            "due_date": 60,
+            "duration": 6,
+            "end_time": 58,
+            "release_date": 46,
+            "resource_requests": [
+                0,
+                4,
+                4,
+                8,
+                9
+            ],
+            "start_time": 53,
+            "successors": [
+                27
+            ],
+            "task_id": 26,
+            "weight": 5.44
+        },
+        {
+            "due_date": 74,
+            "duration": 8,
+            "end_time": 66,
+            "release_date": 52,
+            "resource_requests": [
+                0,
+                8,
+                6,
+                8,
+                9
+            ],
+            "start_time": 59,
+            "successors": [
+                29,
+                30
+            ],
+            "task_id": 27,
+            "weight": 9.31
+        },
+        {
+            "due_date": 32,
+            "duration": 1,
+            "end_time": 10,
+            "release_date": 10,
+            "resource_requests": [
+                0,
+                2,
+                5,
+                3,
+                8
+            ],
+            "start_time": 10,
+            "successors": [
+                31
+            ],
+            "task_id": 28,
+            "weight": 5.19
+        },
+        {
+            "due_date": 70,
+            "duration": 4,
+            "end_time": 70,
+            "release_date": 60,
+            "resource_requests": [
+                0,
+                9,
+                8,
+                4,
+                3
+            ],
+            "start_time": 67,
+            "successors": [
+                31
+            ],
+            "task_id": 29,
+            "weight": 9.17
+        },
+        {
+            "due_date": 68,
+            "duration": 1,
+            "end_time": 68,
+            "release_date": 60,
+            "resource_requests": [
+                0,
+                10,
+                2,
+                1,
+                10
+            ],
+            "start_time": 68,
+            "successors": [
+                31
+            ],
+            "task_id": 30,
+            "weight": 8.64
+        },
+        {
+            "due_date": 74,
+            "duration": 1,
+            "end_time": 74,
+            "release_date": 64,
+            "resource_requests": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "start_time": 74,
+            "successors": [],
+            "task_id": 31,
+            "weight": 6.82
+        }
+    ]
+}
