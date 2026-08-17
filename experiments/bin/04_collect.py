@@ -158,8 +158,8 @@ def main() -> int:
         # ---- C7 dual-bound sanity (decomposition methods only) -----------
         # A bound must not exceed the objective it bounds -- but *which*
         # objective depends on the method, and this is the easy thing to get
-        # wrong. Only Benders' theta bounds the battery-aware cost. LBBD,
-        # NoGoodCuts and StateLBBD price energy at the raw tariff, so their
+        # wrong. Only Benders' theta bounds the battery-aware cost. LBBD and
+        # StateLBBD price energy at the raw tariff, so their
         # master bounds the battery-FREE problem; checking them against the
         # post-processed objective flags every run in which the battery saved
         # anything, i.e. almost all of them.

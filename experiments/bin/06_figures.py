@@ -339,7 +339,7 @@ def fig_e6(rows) -> None:
 
 # ---------------------------------------------------------------------------
 
-METHOD_COLOUR = {"MILP": CB["grey"], "LBBD": CB["blue"], "NoGoodCuts": CB["skyblue"],
+METHOD_COLOUR = {"MILP": CB["grey"], "LBBD": CB["blue"],
                  "StateLBBD": CB["orange"], "Benders": CB["red"]}
 
 
@@ -355,7 +355,7 @@ def fig_e8_gap(rows) -> None:
         return
     cells = A._by_cell(rows)
     budgets = sorted({int(r["time_limit"]) for r in rows})
-    methods = [m for m in ("LBBD", "NoGoodCuts", "StateLBBD", "Benders")
+    methods = [m for m in ("LBBD", "StateLBBD", "Benders")
                if any(r["method"] == m for r in rows)]
 
     fig, ax = plt.subplots(figsize=ONE_COL)

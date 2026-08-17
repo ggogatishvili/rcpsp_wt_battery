@@ -328,7 +328,7 @@ def main() -> int:
     # optimality early or run out the clock, and on the sizes E8/E9 use the
     # second is much more common, hence the near-1.0 fractions.
     est_frac = {"H1": 0.05, "H1P": 0.08, "GA": 1.0, "GAP": 1.0, "MILP": 0.9,
-                "LBBD": 0.85, "NoGoodCuts": 0.95, "StateLBBD": 0.9, "Benders": 0.9}
+                "LBBD": 0.85, "StateLBBD": 0.9, "Benders": 0.9}
     # Use each run's own time_limit, not the method default: with TL_PROFILE
     # the same method appears at several budgets and the default would
     # under-count the 600 s cells by an order of magnitude.

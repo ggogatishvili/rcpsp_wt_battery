@@ -71,7 +71,7 @@ def main() -> int:
                     # Fabricated ordering, and deliberately so: the mock exists
                     # to prove the plumbing carries a difference between these
                     # arms, not to predict one. Do not read anything into it.
-                    "NoGoodCuts": 0.04, "LBBD": 0.055, "StateLBBD": 0.05,
+                    "LBBD": 0.055, "StateLBBD": 0.05,
                     "Benders": 0.06}.get(a.method, 0.0)
     energy = e_base * (1 - relief - method_bonus) * rng.uniform(0.99, 1.01)
 
@@ -110,18 +110,17 @@ def main() -> int:
     # Decomposition methods export diagnostics; the analysis for E8/E9 reads
     # them, so the mock has to emit the same shape or the dry run cannot
     # exercise those code paths at all.
-    if a.method in ("LBBD", "NoGoodCuts", "StateLBBD", "Benders"):
+    if a.method in ("LBBD", "StateLBBD", "Benders"):
         battery_aware = a.method == "Benders"
         no_batt = energy * (1.0 + 0.6 * relief)      # storage-free price of the same schedule
         subproblems = rng.randint(5, 200)
-        mis = (1 if a.method == "NoGoodCuts" else 0)
         out["diagnostics"] = dict(
             subproblems=subproblems,
             feasibility_cuts=rng.randint(0, subproblems),
             optimality_cuts=rng.randint(0, subproblems),
             battery_cuts=(rng.randint(10, 500) if battery_aware else 0),
             battery_node_cuts=(rng.randint(0, 300) if battery_aware else 0),
-            cumul_mifs=rng.randint(0, subproblems) * (len(inst.ei_ids) if mis else 2),
+            cumul_mifs=rng.randint(0, subproblems) * 2,
             inconclusive=0,
             energy_cost_no_battery=round(no_batt, 5),
             battery_saving=round(no_batt - energy, 5),

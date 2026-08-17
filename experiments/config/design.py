@@ -117,7 +117,11 @@ E3_DRAWS_PER_REGIME = P["e3_draws"]
 
 # Spot windows actually *used* per experiment (contractual tariffs always
 # contribute exactly one series each). Must be <= CORE_DRAWS_PER_REGIME.
-SPOT_SERIES_PER_EXP = {"E0": 1, "E1": 3, "E2": 3, "E4": 1, "E6": 1}
+SPOT_SERIES_PER_EXP = {"E0": 1, "E1": 3, "E2": 3, "E4": 1, "E6": 1,
+                       # E8/E9 compare methods, not tariffs: one spot window is
+                       # enough, and the tariff variation they do need comes
+                       # from E8_REGIMES (flat / tou2 / spot) instead.
+                       "E8": 1, "E9": 1}
 
 # Seeds per experiment for the stochastic methods. E2 sweeps seven capacities
 # and is the most expensive cell, so it runs fewer seeds; its quantity of
@@ -253,6 +257,15 @@ TL = {
     "H1P":  120,
     "GA":    60,     # budget-derived, NOT principled -- see note above
     "GAP":   60,
+    # The decomposition methods never run at a default budget: E8/E9 always
+    # pass an explicit tl_override from DECOMP_TL_PROFILE, because comparing
+    # them at *equal* wall clock is the entire experiment. These entries exist
+    # only so the runlist generator's tag logic has something to compare
+    # against, and are set to the middle of the profile so the tag is omitted
+    # there and appears on the other two.
+    "LBBD":       300,
+    "StateLBBD":  300,
+    "Benders":    300,
 }
 
 # Time budgets at which E0 additionally re-runs the metaheuristics, to turn the
@@ -282,6 +295,8 @@ ENABLED = {
     "E4": True,    # service-energy frontier
     "E6": True,    # machine profile / battery efficiency / C-rate (needs C2/C3/C4)
     "E7": False,   # BLOCKED: needs C7 (re-costing mode) and C8 (baseline policies)
+    "E8": True,    # decomposition head-to-head against the compact ILP
+    "E9": True,    # decomposition scaling, beyond where the compact ILP survives
 }
 
 # ----------------------------------------------------------------------------
@@ -323,6 +338,91 @@ RESTART_LEVELS = {                        # Off->Proc transition {time, cost}
 # separate parameters, not one round-trip figure.
 ROUNDTRIP_EFFICIENCY_LEVELS = [0.75, 0.85, 0.95, 1.0]
 C_RATE_LEVELS = [0.25, 0.5, 1.0, float("inf")]   # infinity = uncapped (--c-rate omitted)
+
+
+# ----------------------------------------------------------------------------
+# 8. E8 / E9 — decomposition experiments
+# ----------------------------------------------------------------------------
+# THE QUESTION. Three things, in order, and the design keeps them separable:
+#
+#   Q1  How far from the compact ILP is the decomposition, at equal wall clock?
+#   Q2  How much of that distance does the battery post-processing recover?
+#   Q3  Does folding the battery LP into the master (Benders) beat
+#       post-processing it afterwards?
+#
+# WHY Q2 COSTS NO EXTRA RUNS. "LBBD without post-processing" and "LBBD with it"
+# are the same schedule: the master ignores storage either way, so the two
+# differ only in how that one schedule is priced. The solver therefore exports
+# BOTH numbers from a single run (diagnostics.energy_cost_no_battery alongside
+# the reported energy_cost) and the analysis differences them. Running it as
+# two arms would have doubled the cost to produce two identical schedules.
+#
+# WHY THE StateLBBD ARM EXISTS. Benders cannot use the SPACES switching
+# pre-processing (docs/BENDERS_BATTERY.md §2), so it necessarily also changes
+# the master. Comparing Benders directly against LBBD would move two things at
+# once — battery coordination AND the loss of SPACES — and the result would be
+# uninterpretable. StateLBBD is the same explicit-state master with the battery
+# still post-processed, which holds the master fixed and isolates the battery
+# coordination. The design is a 2x2 with one cell that cannot exist:
+#
+#                       | battery post-processed | battery in the master
+#     SPACES z master   | LBBD                   | not implementable
+#     explicit-state    | StateLBBD              | Benders
+
+# Every method in E8 gets the SAME budget at each point of the profile. That is
+# the whole point of the comparison and there is no per-method override.
+DECOMP_METHODS = ["MILP", "LBBD", "StateLBBD", "Benders"]
+
+# Methods that need solver features beyond the LBBD pair. The runlist generator
+# probes --help and blocks these cells (rather than failing) if the binary
+# predates them, exactly as it does for --states.
+DECOMP_METHOD_REQUIRES = {
+    "Benders":   "--no-benders-node-cuts",
+    "StateLBBD": "--no-benders-node-cuts",
+}
+
+# Anytime profile. A single budget picks a winner by accident: decomposition
+# and monolithic models routinely cross over, and design.py already warns about
+# exactly this confound for GA vs GAP. 900 s is the ceiling because E8 is
+# paired and small; do not raise it without recomputing the budget.
+DECOMP_TL_PROFILE = [60, 300, 900]
+
+# Per-call subproblem budget, as a fraction of the run's total budget. Fixed
+# fractions rather than fixed seconds so that the subproblem does not eat the
+# entire 60 s run while being a rounding error in the 900 s one.
+DECOMP_SUB_TL_FRACTION = 0.10
+DECOMP_REFINE_TL_FRACTION = 0.02
+
+# --- E8: head-to-head against the compact ILP --------------------------------
+# Only sizes where the compact ILP can plausibly prove something. Above this it
+# returns an incumbent with a large gap and stops being a reference point.
+E8_MAX_SIZE_CLASS = MILP_MAX_SIZE_CLASS       # n <= 64
+E8_REGIMES = ["flat", "tou2", "spot_midvol"]  # flat is the falsification control
+E8_BATTERY_RATIOS = [0.0, BATTERY_ON_RATIO]   # storage off / on
+
+# --- E9: scaling tier ---------------------------------------------------------
+# No MILP: the reference here is the best decomposition incumbent, so the
+# question changes from "how far from optimal" to "which method degrades
+# first". Battery on only — with storage off the Benders arm has nothing to
+# coordinate and collapses onto StateLBBD by construction.
+E9_SIZE_CLASSES = [s for s in SIZE_CLASSES if s > E8_MAX_SIZE_CLASS]
+E9_METHODS = ["LBBD", "StateLBBD", "Benders"]
+E9_REGIME = "spot_midvol"
+E9_BATTERY_RATIOS = [BATTERY_ON_RATIO]
+
+# Shops per (size class, regime) cell. E8/E9 are paired within instance, so the
+# variance that matters is between instances and this controls it directly.
+DECOMP_SHOPS_PER_CELL = {"pilot": 4, "moderate": 12, "full": 30}[PROFILE]
+
+# Deterministic methods, all of them here: no seed dimension. Any residual
+# nondeterminism (Gurobi thread scheduling) is a threat to validity, not a
+# factor, and 04_collect's integrity checks are where it should surface.
+
+
+def decomp_subproblem_args(time_limit: int) -> list[str]:
+    """Subproblem and conflict-refiner budgets for one E8/E9 run."""
+    return ["--sub-tl", f"{max(1.0, DECOMP_SUB_TL_FRACTION * time_limit):.1f}",
+            "--refine-tl", f"{max(1.0, DECOMP_REFINE_TL_FRACTION * time_limit):.1f}"]
 
 
 def machine_profile_args(rho: float, restart: str) -> list[str]:

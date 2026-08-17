@@ -27,13 +27,18 @@ b  Effect decomposition (docs/BENDERS_BATTERY.md section 5). Benders differs
    StateLBBD is the control that separates them, so the two curves sum to the
    net one. That sum is checked and the script refuses to plot if it fails.
 
-c  Validity, which panel a cannot show. A run is DEGENERATE when it produced
-   no usable optimality cut: either every subproblem call came back
-   inconclusive, so each cut collapsed to the tardiness floor and was
-   suppressed, or the callback never fired at all and the arm returned its
-   warm start. Such a run did not execute the algorithm, and pooling it with
-   functioning runs is how a formulation that fails to start looks like a
-   formulation that performs badly. Panel a excludes them by default.
+c  What panel a had to drop, and why. Two distinct failures. A run is SILENT
+   when the callback never fired, so no cut was attempted at all and the arm
+   returned its warm-start schedule -- typically a master too large to clear
+   its root node. A run is BLIND when cuts were attempted and every one was
+   vacuous: the CP subproblem returned no verdict, its bound fell back to the
+   tardiness floor, the strengthened cut reduced to `q >= lb_TWT`, and the
+   solver suppressed it because the master already had that bound. Either way
+   the run consumed its budget and constrained nothing, so its objective says
+   nothing about the method and pooling it with functioning runs makes a
+   formulation that fails to start look like one that merely performs badly.
+   Blindness is not fatal for Benders -- its battery cuts are unaffected --
+   so those runs are retained and do not appear here.
 
 WHY THE MILP LINE STOPS
 -----------------------
@@ -57,6 +62,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                                    # noqa: E402
 from matplotlib.lines import Line2D                                # noqa: E402
+from matplotlib.patches import Patch                               # noqa: E402
 
 TASKS_PER_CLASS = 32
 REFERENCE = "MILP"
@@ -69,11 +75,10 @@ STYLE = {
     "MILP":       {"c": "#898781", "ls": (0, (1, 1)), "m": "s", "z": 2},
     "LBBD":       {"c": "#2a78d6", "ls": "--",  "m": "^", "z": 4},
     "LBBD-f5":    {"c": "#85b7eb", "ls": (0, (4, 1, 1, 1)), "m": "v", "z": 3},
-    "NoGoodCuts": {"c": "#4a3aa7", "ls": (0, (6, 2)), "m": "P", "z": 3},
     "StateLBBD":  {"c": "#eb6834", "ls": "-.",  "m": "D", "z": 4},
     "Benders":    {"c": "#e34948", "ls": (0, (3, 1, 1, 1, 1, 1)), "m": "*", "z": 4},
 }
-ORDER = ["GA", "StateLBBD", "Benders", "LBBD", "LBBD-f5", "NoGoodCuts", "MILP"]
+ORDER = ["GA", "StateLBBD", "Benders", "LBBD", "LBBD-f5", "MILP"]
 
 
 # ==========================================================================
@@ -83,7 +88,8 @@ ORDER = ["GA", "StateLBBD", "Benders", "LBBD", "LBBD-f5", "NoGoodCuts", "MILP"]
 def load(path: Path) -> list[dict]:
     num = ("size_class", "replicate", "n", "ei", "horizon", "battery", "scale",
            "ok", "objective", "energy", "tardiness", "wall_s", "solver_s",
-           "overhead_s", "gap", "proved", "subproblems", "inconclusive")
+           "overhead_s", "gap", "proved", "subproblems", "inconclusive", "battery_cuts",
+           "battery_node_cuts", "optimality_cuts", "feasibility_cuts")
     rows = []
     with path.open(newline="") as fh:
         for raw in csv.DictReader(fh):
@@ -106,22 +112,31 @@ def usable(r: dict) -> bool:
 
 
 def degenerate(r: dict) -> bool:
-    """The run produced no usable optimality cut, so it never really ran.
+    """The run contributed no cut at all, so its objective measures nothing.
 
-    Two ways this happens, and both must be caught. Either the callback fired
-    and every subproblem came back without a verdict -- `inconclusive` equals
-    `subproblems`, each cut collapsed to the tardiness floor and was suppressed
-    -- or the callback never fired at all, which the solver reports as absent
-    diagnostics. The second is the more insidious: the arm returns its warm
-    start and looks like a merely poor result rather than a formulation that
-    could not be solved.
+    Two failures, and only one of them applies to every arm. A run is SILENT
+    when the callback never fired -- diagnostics absent, and in practice no
+    reported gap either -- which means a master too large to clear its root
+    node handed back its warm start. A run is TARDINESS-BLIND when every RCPSP
+    call came back inconclusive, so `q` never rose above the tardiness floor.
+
+    Blindness is fatal for LBBD and StateLBBD, whose only cut family is that
+    one. It is not fatal for Benders: its battery subproblem is an LP that is
+    never infeasible, so every incumbent still yields a cut on theta and the
+    energy half of the bound kept tightening. Counting those as "no cut" was
+    wrong in the first version of this script.
     """
     if r["arm"] in ("GA", REFERENCE):
         return False
-    s, i = r["subproblems"], r["inconclusive"]
-    if not math.isfinite(s):
-        return True
-    return s > 0 and math.isfinite(i) and i >= s - 1e-9
+    s_, i_ = r["subproblems"], r["inconclusive"]
+    if not math.isfinite(s_):
+        return True                       # silent: nothing of any kind
+    if not (s_ > 0 and math.isfinite(i_) and i_ >= s_ - 1e-9):
+        return False                      # at least one verdict -> a cut on q
+    b = r.get("battery_cuts", float("nan"))
+    if r["arm"] == "Benders" and (not math.isfinite(b) or b > 0):
+        return False                      # blind, but still cutting on theta
+    return True
 
 
 def per_instance(rows: list[dict], drop_degenerate: bool):
@@ -150,23 +165,56 @@ def per_instance(rows: list[dict], drop_degenerate: bool):
     return obj, meta, dead
 
 
-def gaps(obj, meta, arms):
-    """Normalised gap to the best solution found on each instance.
+def common_subset(obj, meta, arms, classes):
+    """Instances, per class, on which EVERY compared arm has a usable value.
 
-    The reference is the best value ANY arm produced, not the MILP's, because
-    above a certain size the MILP produces nothing and a gap to a missing
-    number is not defined.
+    Without this each line of panel (a) is an average over whatever instances
+    that arm happened to survive, and the arms that fail most are scored only
+    on the instances they found easy. That flatters them and penalises the arms
+    that returned something everywhere -- the comparison then measures which
+    method fails more gracefully, not which method is better.
+
+    The price is sample size, and it is paid honestly: the retained count is
+    printed on the figure and the losses are itemised in panel (c).
+    """
+    out: dict[int, list[str]] = {}
+    for c in classes:
+        members = [i for i in obj if meta[i]["class"] == c]
+        out[c] = [i for i in members
+                  if all(a in obj[i] and math.isfinite(obj[i][a]) for a in arms)]
+    return out
+
+
+def gaps(obj, meta, arms, common, also=()):
+    """Normalised gap to the best value found on each retained instance.
+
+    `arms` are the methods the comparison is *about*. They must all be present
+    on a retained instance, and the per-instance reference is the best value
+    among them -- so the reference is drawn from an identical set for every one
+    of them and cannot shift with which method happened to answer.
+
+    `also` are methods plotted for context without being held to that standard,
+    which in practice means the reference model. It is allowed to be missing:
+    requiring it would empty the subset above the size where it stops returning
+    anything, and that behaviour is precisely what panel (c) is for. Its gap is
+    measured against the same reference as everyone else, so it can go negative
+    where it beats them all, and it is averaged over fewer instances -- the
+    count is annotated on the panel so the difference is visible rather than
+    implied.
     """
     out: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-    for inst, per in obj.items():
-        vals = [v for v in per.values() if math.isfinite(v)]
-        sc = meta[inst]["scale"]
-        if not vals or not math.isfinite(sc) or sc == 0:
-            continue
-        best = min(vals)
-        for a in arms:
-            if a in per:
-                out[meta[inst]["class"]][a].append((per[a] - best) / sc)
+    for c, insts in common.items():
+        for inst in insts:
+            per = obj[inst]
+            sc = meta[inst]["scale"]
+            if not math.isfinite(sc) or sc == 0:
+                continue
+            best = min(per[a] for a in arms)
+            for a in arms:
+                out[c][a].append((per[a] - best) / sc)
+            for a in also:
+                if a in per and math.isfinite(per[a]):
+                    out[c][a].append((per[a] - best) / sc)
     return out
 
 
@@ -182,11 +230,12 @@ def boot_se(v: list[float], reps: int = 4000, seed: int = 20260813) -> float:
 def merge_identical(obj, arms):
     """Collapse arms that produced the same answer on every shared instance.
 
-    LBBD and NoGoodCuts differ only in conflict refinement, and when the
-    refiner never changes a verdict they are numerically identical. Plotting
-    both then hides one line completely under the other, which reads as a
-    missing series rather than as the finding it actually is. Merging them into
-    a single labelled line states the result instead of concealing it.
+    Two arms that only differ in some internal search heuristic can end up
+    numerically identical when that heuristic never changes the verdict.
+    Plotting both then hides one line completely under the other, which reads
+    as a missing series rather than as the finding it actually is. Merging
+    them into a single labelled line states the result instead of concealing
+    it.
 
     Returns the surviving arms and a label map.
     """
@@ -215,7 +264,7 @@ def merge_identical(obj, arms):
 # panels
 # ==========================================================================
 
-def panel_gap(ax, g, obj, meta, arms, classes, label):
+def panel_gap(ax, g, obj, meta, arms, classes, label, required=None):
     for arm in [a for a in ORDER if a in arms]:
         st = STYLE[arm]
         xs, ys, es = [], [], []
@@ -235,19 +284,26 @@ def panel_gap(ax, g, obj, meta, arms, classes, label):
                         [y + e for y, e in zip(ys, es)],
                         color=st["c"], alpha=0.13, linewidth=0, zorder=1)
 
-    # Where the MILP stopped returning anything, say so rather than let the
-    # line simply end without explanation. Placed in axes coordinates so it
-    # cannot drift when the data changes the limits.
-    empty = [c for c in classes
-             if not g.get(c, {}).get(REFERENCE)
-             and any(meta[i]["class"] == c for i in meta)]
-    if empty:
-        # Upper left: the gap curves rise left-to-right, so this corner is the
-        # one reliably free of data whatever the campaign produces.
-        ax.annotate(f"{REFERENCE}: nothing feasible\nfrom {min(empty) * TASKS_PER_CLASS} tasks",
-                    xy=(0.03, 0.97), xycoords="axes fraction",
-                    fontsize=6.2, color="#898781", ha="left", va="top")
+    # The reference model's coverage is panel (c)'s business now, so this
+    # panel says nothing about it unless it is actually one of the lines.
+    if REFERENCE in arms:
+        empty = [c for c in classes if not g.get(c, {}).get(REFERENCE)]
+        if empty:
+            ax.annotate(f"{REFERENCE}: nothing feasible\nfrom {min(empty) * TASKS_PER_CLASS} tasks",
+                        xy=(0.03, 0.97), xycoords="axes fraction",
+                        fontsize=6.2, color="#898781", ha="left", va="top")
 
+    required = required or arms
+    ns = [len(g.get(c, {}).get(required[0], [])) for c in classes]
+    extra = [a for a in arms if a not in required]
+    if ns:
+        note = "instances retained: " + "/".join(str(k) for k in ns)
+        for a in extra:
+            ks = [len(g.get(c, {}).get(a, [])) for c in classes]
+            note += f"\n{a} present on: " + "/".join(str(k) for k in ks)
+        ax.annotate(note,
+                    xy=(0.03, 0.97 if REFERENCE not in arms else 0.84), xycoords="axes fraction",
+                    fontsize=6.0, color="#898781", ha="left", va="top")
     ax.set_xlabel("tasks")
     ax.set_ylabel("normalised gap to best found")
     ax.set_xscale("log")
@@ -311,30 +367,58 @@ def panel_effect(ax, obj, meta, classes):
     ax.legend(fontsize=6.2, frameon=False, loc="lower left")
 
 
-def panel_validity(ax, rows, dead, meta, arms, classes):
-    decomp = [a for a in ("LBBD", "LBBD-f5", "NoGoodCuts", "StateLBBD", "Benders")
-              if a in arms]
-    width = 0.8 / max(1, len(decomp))
-    for k, arm in enumerate(decomp):
-        xs, ys = [], []
+def is_silent(r: dict) -> bool:
+    """The callback never fired: no cut was even attempted."""
+    return r["arm"] not in ("GA", REFERENCE) and not math.isfinite(r["subproblems"])
+
+
+def panel_coverage(ax, rows, arms, classes):
+    """How often each method returns nothing usable at all.
+
+    Panel (a) can only compare methods on instances where all of them
+    answered, so this is the other half of the picture: what each method costs
+    you in coverage to buy the quality shown there. A method that looks good in
+    (a) while failing here half the time is not a good method.
+
+    Two bars stacked. The lower one is the plain failure: no feasible solution
+    returned, whether because the model produced none in the budget or the run
+    died. The upper one is the softer failure of returning a schedule that no
+    working decomposition produced -- the master never cut, so what came back
+    was the warm start.
+    """
+    order = [a for a in ORDER if a in arms]
+    width = 0.8 / max(1, len(order))
+    for k, arm in enumerate(order):
+        xs, none, warm = [], [], []
         for j, c in enumerate(classes):
-            insts = [i for i in meta if meta[i]["class"] == c]
-            if not insts:
+            mine = [r for r in rows if r["size_class"] == c and r["arm"] == arm]
+            if not mine:
                 continue
-            xs.append(j + (k - (len(decomp) - 1) / 2) * width)
-            ys.append(100.0 * sum(1 for i in insts if arm in dead[i]) / len(insts))
-        ax.bar(xs, ys, width=width, color=STYLE[arm]["c"], label=arm,
-               linewidth=0)
+            insts = {r["instance"] for r in mine}
+            n = len(insts)
+            no_sol = {i for i in insts
+                      if not any(usable(r) for r in mine if r["instance"] == i)}
+            warm_only = {i for i in insts - no_sol
+                         if all(degenerate(r) for r in mine if r["instance"] == i)}
+            xs.append(j + (k - (len(order) - 1) / 2) * width)
+            none.append(100.0 * len(no_sol) / n)
+            warm.append(100.0 * len(warm_only) / n)
+        ax.bar(xs, none, width=width, color=STYLE[arm]["c"], linewidth=0)
+        ax.bar(xs, warm, width=width, bottom=none, color=STYLE[arm]["c"],
+               linewidth=0, alpha=0.4, hatch="////", edgecolor="white")
+
     ax.set_xticks(range(len(classes)))
     ax.set_xticklabels([str(c * TASKS_PER_CLASS) for c in classes])
     ax.set_xlabel("tasks")
-    ax.set_ylabel("degenerate runs (\\%)" if plt.rcParams["text.usetex"]
-                  else "degenerate runs (%)")
-    ax.set_ylim(0, 105)
-    ax.set_title("(c) runs that produced no cut", loc="left", fontsize=8)
-    ax.legend(fontsize=6.0, frameon=False, ncol=2, loc="upper left",
-              borderaxespad=0.2, handlelength=1.2, columnspacing=0.9,
-              handletextpad=0.4)
+    ax.set_ylabel("instances (%)")
+    ax.set_ylim(0, 100)
+    ax.set_title("(c) failure to deliver", loc="left", fontsize=8)
+    ax.legend(handles=[
+        Patch(facecolor="#898781", label="no solution returned"),
+        Patch(facecolor="#898781", alpha=0.4, hatch="////", edgecolor="white",
+              label="warm start only, no cut")],
+        fontsize=6.0, frameon=False, loc="upper left", borderaxespad=0.2,
+        handlelength=1.4, handletextpad=0.5)
 
 
 # ==========================================================================
@@ -354,6 +438,10 @@ def main() -> int:
     ap.add_argument("--height", type=float, default=2.55)
     ap.add_argument("--keep-degenerate", action="store_true",
                     help="include runs that produced no optimality cut")
+    ap.add_argument("--with-milp", action="store_true",
+                    help="require the reference model in the common subset of "
+                         "panel (a); empties it above the size where it returns "
+                         "nothing")
     ap.add_argument("--also-png", action="store_true")
     args = ap.parse_args()
 
@@ -362,7 +450,18 @@ def main() -> int:
     obj, meta, dead = per_instance(rows, drop_degenerate=not args.keep_degenerate)
     classes = sorted({m["class"] for m in meta.values()})
     plot_arms, label, absorbed = merge_identical(obj, arms)
-    g = gaps(obj, meta, arms)
+    # The reference model is excluded from the head-to-head by default: above a
+    # certain size it returns nothing, so requiring it would empty the common
+    # subset exactly where the comparison matters. Its coverage is reported in
+    # panel (c) alongside everyone else's, which is the honest place for it.
+    compare = [a for a in plot_arms if a != REFERENCE or args.with_milp]
+    # The reference is drawn but not required: it is plotted on the same
+    # instances as everyone else wherever it answered, and simply absent where
+    # it did not. Letting it constrain the subset would delete the comparison
+    # at the sizes that matter most.
+    also = [] if args.with_milp else [a for a in plot_arms if a == REFERENCE]
+    common = common_subset(obj, meta, compare, classes)
+    g = gaps(obj, meta, compare, common, also)
 
     plt.rcParams.update({
         "font.family": "serif", "font.size": 8, "axes.labelsize": 8,
@@ -385,14 +484,15 @@ def main() -> int:
 
     for ax, k in zip(axes, keys):
         if k == "a":
-            panel_gap(ax, g, obj, meta, plot_arms, classes, label)
+            panel_gap(ax, g, obj, meta, compare + also, classes, label,
+                      required=compare)
         elif k == "b":
             panel_effect(ax, obj, meta, classes)
         else:
-            panel_validity(ax, rows, dead, meta, arms, classes)
+            panel_coverage(ax, rows, arms, classes)
 
     if "a" in keys:
-        ordered = [a for a in ORDER if a in plot_arms]
+        ordered = [a for a in ORDER if a in compare + also]
         handles = [Line2D([], [], color=STYLE[a]["c"], linestyle=STYLE[a]["ls"],
                           marker=STYLE[a]["m"], markersize=4, markeredgewidth=0,
                           label=label.get(a, a)) for a in ordered]
@@ -416,6 +516,9 @@ def main() -> int:
     for a in plot_arms:
         if label[a] != a:
             print(f"  merged: {label[a]} are identical on every shared instance")
+    for c in classes:
+        print(f"  class {c:2d}: {len(common[c])} instance(s) common to "
+              f"{', '.join(compare)}")
     print(f"  {n_dead} (instance, arm) runs are degenerate "
           f"({'kept' if args.keep_degenerate else 'excluded from panel a'})")
     for c in classes:

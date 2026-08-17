@@ -1078,6 +1078,409 @@ def e0(rows: list[dict], out: Path) -> str:
             lines.append(f"    {meth:6s} " +
                          "  ".join(f"b={k:g}:{v:.3f}%" for k, v in means.items()) +
                          f"   spread {spread:.3f}pp  {flag}")
+    # ---- gap to a single fixed reference method (MILP where it returns a
+    # solution, GA elsewhere) -----------------------------------------------
+    # "best solution found by any method" above answers a different question
+    # in every cell (sometimes MILP, sometimes whichever metaheuristic did
+    # best on that seed); anchoring on one named method instead makes the
+    # comparison paper-reportable (Section~\ref{sec:exp-validation}).
+    mean_obj = defaultdict(list)
+    for r in rows:
+        mean_obj[(r["instance"], r["battery_ratio"], r["method"])].append(r["objective"])
+    mean_obj = {k: float(np.mean(v)) for k, v in mean_obj.items()}
+
+    anchor = {}
+    for (inst, brat, meth), v in mean_obj.items():
+        if meth == "MILP":
+            anchor[(inst, brat)] = v
+    for (inst, brat, meth), v in mean_obj.items():
+        if meth == "GA" and (inst, brat) not in anchor:
+            anchor[(inst, brat)] = v
+
+    lines.append("\n  gap to a fixed reference method (MILP where it returns")
+    lines.append("  a solution, GA elsewhere; 'method' is the reference in")
+    lines.append("  cells where it equals the row's own method):")
+    lines.append(f"  {'method':6s} {'class':>6s} {'n':>6s} {'norm gap':>9s}")
+    agg2 = defaultdict(list)
+    for r in rows:
+        a = anchor.get((r["instance"], r["battery_ratio"]))
+        if a is None:
+            continue
+        sc_ = norm_scale(r)
+        ngap = ((r["objective"] - a) / sc_) if math.isfinite(sc_) else float("nan")
+        agg2[(r["method"], r["size_class"])].append(ngap)
+    for (meth, sc), v in sorted(agg2.items()):
+        arr = np.array([x for x in v if math.isfinite(x)])
+        lines.append(f"  {meth:6s} {sc:>6s} {len(v):6d} "
+                     f"{(arr.mean() if len(arr) else float('nan')):9.4f}")
+
     txt = "\n".join(lines) + "\n"
     (out / "e0_validation.txt").write_text(txt)
+    return txt
+
+
+# ---------------------------------------------------------------------------
+# E8 / E9 - decomposition
+# ---------------------------------------------------------------------------
+#
+# These two answer, in order:
+#
+#   Q1  How far from the compact ILP is the decomposition, at equal wall clock?
+#   Q2  How much of that distance does the battery post-processing recover?
+#   Q3  Does folding the battery LP into the master beat post-processing it?
+#
+# Everything below is paired on (instance, battery_ratio, time_limit). The
+# methods are deterministic and every one of them sees the identical instance
+# at the identical budget, so a paired difference is a difference between
+# methods and nothing else. There is no seed dimension to collapse.
+
+DECOMP_METHODS = ("MILP", "LBBD", "StateLBBD", "Benders")
+
+
+def dnum(row: dict, key: str) -> float:
+    """A diag_* column as a float; nan when the method did not export it."""
+    v = row.get(f"diag_{key}", "")
+    if v is None or v == "":
+        return float("nan")
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def _decomp_key(r: dict) -> tuple:
+    return (r["instance"], r["battery_ratio"], int(r["time_limit"]))
+
+
+def _by_cell(rows: list[dict]) -> dict:
+    """(instance, battery, budget) -> {method: row}. Later rows win, but the
+    runlist is unique per (cell, method) so there are none."""
+    cells: dict[tuple, dict] = defaultdict(dict)
+    for r in rows:
+        cells[_decomp_key(r)][r["method"]] = r
+    return cells
+
+
+def _paired_norm_diff(cells: dict, hi: str, lo: str, budget: int,
+                      value=lambda r: r["objective"], value_lo=None) -> np.ndarray:
+    """(value[hi] - value_lo[lo]) / instance scale, over cells holding both.
+
+    Normalised rather than relative because 64 % of the price series contain
+    negative hours, so an objective can approach zero and a percentage of it is
+    unbounded -- the same reason norm_scale() exists for E0-E4. A value of 0.01
+    means "one hundredth of the naive energy bill".
+
+    `value_lo` defaults to `value`, and exists for the one comparison where the
+    two sides are not measured the same way: the decomposition's objective
+    *before* battery post-processing against the compact ILP's objective, which
+    has no such notion and must stay as it is.
+    """
+    value_lo = value_lo or value
+    out = []
+    for (_inst, _b, tl), d in cells.items():
+        if tl != budget or hi not in d or lo not in d:
+            continue
+        s = norm_scale(d[lo])
+        if not math.isfinite(s):
+            continue
+        a, b = value(d[hi]), value_lo(d[lo])
+        if math.isfinite(a) and math.isfinite(b):
+            out.append((a - b) / s)
+    return np.array(out)
+
+
+def _fmt_effect(lines: list[str], label: str, d: np.ndarray, note: str = "") -> None:
+    if not len(d):
+        lines.append(f"  {label:34s} {'no paired data':>44s}")
+        return
+    lo, hi = boot_ci(d)
+    wins = int(np.sum(d < -1e-12))
+    ties = int(np.sum(np.abs(d) <= 1e-12))
+    lines.append(f"  {label:34s} n={len(d):4d}  mean={d.mean():+9.5f}  "
+                 f"[{lo:+8.5f},{hi:+8.5f}]  better/tie/worse={wins}/{ties}/{len(d)-wins-ties}"
+                 + (f"  {note}" if note else ""))
+
+
+def e8(rows: list[dict], out: Path) -> str:
+    rows = [r for r in rows if r["experiment"] == "E8"]
+    lines = ["E8 - decomposition vs the compact ILP, at equal wall clock", "=" * 74]
+    if not rows:
+        return "E8: no data\n"
+
+    cells = _by_cell(rows)
+    budgets = sorted({int(r["time_limit"]) for r in rows})
+    present = [m for m in DECOMP_METHODS if any(r["method"] == m for r in rows)]
+    lines += [f"  budgets: {budgets}", f"  methods present: {present}", ""]
+
+    # ---- 0. is the reference actually a reference? ------------------------
+    # "Distance to the compact ILP" only means "distance to the optimum" where
+    # the MILP proved optimality. Where it did not, every gap below is a
+    # distance to an incumbent and can legitimately be negative.
+    lines += ["0. Is the compact ILP a valid reference?", "-" * 74]
+    for tl in budgets:
+        milp = [r for r in rows if r["method"] == "MILP" and int(r["time_limit"]) == tl]
+        if not milp:
+            continue
+        gaps = np.array([float(r.get("gap") or "nan") for r in milp])
+        gaps = gaps[np.isfinite(gaps)]
+        proven = int(np.sum(gaps <= 1e-6))
+        lines.append(f"  tl={tl:4d}s  n={len(milp):4d}  proved optimal: {proven:4d} "
+                     f"({100*proven/max(1,len(milp)):5.1f} %)  mean MIP gap={np.mean(gaps) if len(gaps) else float('nan'):8.4f}")
+    lines += ["  Where this is far below 100 %, read the tables below as "
+              "'distance to the best", "  the compact ILP managed in the same "
+              "time', which is the fair comparison", "  but NOT a distance to "
+              "the optimum.", ""]
+
+    # ---- 1. Q1: distance to the compact ILP -------------------------------
+    lines += ["1. Distance to the compact ILP (normalised; negative = decomposition wins)",
+              "-" * 74]
+    for tl in budgets:
+        lines.append(f"  budget {tl} s")
+        for m in present:
+            if m == "MILP":
+                continue
+            _fmt_effect(lines, f"    {m} - MILP", _paired_norm_diff(cells, m, "MILP", tl))
+        lines.append("")
+
+    # ---- 2. Q2: what the battery post-processing recovers ------------------
+    # The decomposition's master ignores storage, so "with" and "without"
+    # post-processing are the SAME schedule priced two ways -- which is why one
+    # run yields both numbers. objective_no_post reconstructs the objective the
+    # method would have reported had it stopped before the battery LP.
+    def obj_no_post(r: dict) -> float:
+        e = dnum(r, "energy_cost_no_battery")
+        return e + r["tardiness_cost"] if math.isfinite(e) else float("nan")
+
+    lines += ["2. Value recovered by the battery post-processing", "-" * 74,
+              "   Same schedule, priced with and without storage. The master "
+              "never saw the",
+              "   battery in either case, so this is the ceiling on what "
+              "post-processing alone",
+              "   can do -- and the benchmark the Benders arm has to beat.", ""]
+    for tl in budgets:
+        lines.append(f"  budget {tl} s")
+        for m in present:
+            if m == "MILP":
+                continue
+            # saving = objective_no_post - objective, per run, normalised
+            vals = []
+            for (_i, b, t), cell in cells.items():
+                if t != tl or m not in cell:
+                    continue
+                r = cell[m]
+                s = norm_scale(r)
+                no_post = obj_no_post(r)
+                if math.isfinite(s) and math.isfinite(no_post):
+                    vals.append((no_post - r["objective"]) / s)
+            arr = np.array(vals)
+            if len(arr):
+                lo, hi = boot_ci(arr)
+                lines.append(f"    {m:12s} n={len(arr):4d}  recovered={arr.mean():+9.5f}  "
+                             f"[{lo:+8.5f},{hi:+8.5f}]")
+        # And the same comparison against the ILP, before post-processing:
+        for m in present:
+            if m == "MILP":
+                continue
+            _fmt_effect(lines, f"    {m} (no post) - MILP",
+                        _paired_norm_diff(cells, m, "MILP", tl, value=obj_no_post,
+                                          value_lo=lambda r: r["objective"]))
+        lines.append("")
+
+    # ---- 3. Q3: is the battery better inside the master? -------------------
+    lines += ["3. Battery inside the master vs post-processed", "-" * 74,
+              "   Benders - StateLBBD isolates the battery coordination: same "
+              "explicit-state",
+              "   master, storage cut in vs storage post-processed.",
+              "   StateLBBD - LBBD isolates the price of dropping the SPACES "
+              "switching",
+              "   pre-processing, which the Benders cut cannot coexist with.",
+              "   Benders - LBBD is the end-to-end question, and is the SUM of "
+              "those two",
+              "   effects -- which is exactly why it must not be reported "
+              "alone.", ""]
+    for tl in budgets:
+        lines.append(f"  budget {tl} s")
+        _fmt_effect(lines, "    Benders - StateLBBD  (battery)",
+                    _paired_norm_diff(cells, "Benders", "StateLBBD", tl))
+        _fmt_effect(lines, "    StateLBBD - LBBD     (lost SPACES)",
+                    _paired_norm_diff(cells, "StateLBBD", "LBBD", tl))
+        _fmt_effect(lines, "    Benders - LBBD       (end to end)",
+                    _paired_norm_diff(cells, "Benders", "LBBD", tl))
+        lines.append("")
+
+    # ---- 4. bound validity -------------------------------------------------
+    lines += ["4. Optimality gaps that can actually be quoted", "-" * 74,
+              "   Only a bound flagged battery-aware bounds the problem being "
+              "solved. LBBD",
+              "   and StateLBBD price energy at the raw tariff, so their "
+              "master",
+              "   bound is an upper bound on the battery-aware cost, not a "
+              "lower one, and no",
+              "   gap can be computed from it. Benders' theta is a genuine "
+              "lower bound.", ""]
+    for m in present:
+        if m == "MILP":
+            lines.append(f"  {m:12s} gap from Gurobi, valid by construction")
+            continue
+        sub = [r for r in rows if r["method"] == m]
+        aware = np.array([dnum(r, "bound_is_battery_aware") for r in sub])
+        aware = aware[np.isfinite(aware)]
+        if len(aware) and np.all(aware > 0.5):
+            g = []
+            for r in sub:
+                b = dnum(r, "bound")
+                s = norm_scale(r)
+                if math.isfinite(b) and math.isfinite(s):
+                    g.append((r["objective"] - b) / s)
+            g = np.array(g)
+            lines.append(f"  {m:12s} battery-aware bound; normalised gap "
+                         f"mean={g.mean() if len(g) else float('nan'):+9.5f} over n={len(g)}")
+        else:
+            lines.append(f"  {m:12s} bound NOT battery-aware -- no gap reported (by design)")
+    lines.append("")
+
+    # ---- 5. cut economy ----------------------------------------------------
+    lines += ["5. Cut economy",
+              "-" * 74,
+              f"  {'method':12s} {'budget':>7s} {'n':>5s} {'subprob':>9s} {'feas':>8s} "
+              f"{'opt':>8s} {'batt':>8s} {'MIS':>7s} {'incon':>7s}"]
+    for m in present:
+        if m == "MILP":
+            continue
+        for tl in budgets:
+            sub = [r for r in rows if r["method"] == m and int(r["time_limit"]) == tl]
+            if not sub:
+                continue
+            def mean_of(key: str) -> float:
+                a = np.array([dnum(r, key) for r in sub])
+                a = a[np.isfinite(a)]
+                return a.mean() if len(a) else float("nan")
+            mis = mean_of("cumul_mifs")
+            feas = mean_of("feasibility_cuts")
+            lines.append(f"  {m:12s} {tl:7d} {len(sub):5d} {mean_of('subproblems'):9.1f} "
+                         f"{feas:8.1f} {mean_of('optimality_cuts'):8.1f} "
+                         f"{mean_of('battery_cuts'):8.1f} "
+                         f"{(mis/feas if feas else float('nan')):7.2f} "
+                         f"{mean_of('inconclusive'):7.2f}")
+    lines += ["  'MIS' is the mean size of an infeasibility set: well below the "
+              "full EI",
+              "  assignment means the conflict refiner is doing useful work.",
+              "  'incon' > 0 means subproblems hit their limit and that run's "
+              "gap no longer",
+              "  certifies anything.", ""]
+
+    # ---- 6. falsification control -----------------------------------------
+    # Under a flat tariff there is no arbitrage, so the battery cannot create
+    # value and Benders cannot differ from StateLBBD. Whatever difference does
+    # appear is the resolution floor of this experiment, and any effect above
+    # that is not reportable.
+    flat_cells = {k: v for k, v in cells.items()
+                  if any(r.get("price_regime") == "flat" for r in v.values())}
+    floor = 0.0
+    for tl in budgets:
+        d = _paired_norm_diff(flat_cells, "Benders", "StateLBBD", tl)
+        if len(d):
+            floor = max(floor, float(np.max(np.abs(d))))
+    lines += ["6. Flat-tariff falsification control", "-" * 74,
+              f"  max |Benders - StateLBBD| under a constant price: {floor:.3e}",
+              "  This is E8's RESOLUTION FLOOR. Any effect in sections 1-3 "
+              "smaller than it",
+              "  is indistinguishable from solver noise and must not be "
+              "reported as a finding.",
+              ""]
+
+    txt = "\n".join(lines) + "\n"
+    (out / "e8_decomposition.txt").write_text(txt)
+    return txt
+
+
+def e9(rows: list[dict], out: Path) -> str:
+    rows = [r for r in rows if r["experiment"] == "E9"]
+    lines = ["E9 - how far the decomposition scales", "=" * 74]
+    if not rows:
+        return "E9: no data\n"
+
+    budgets = sorted({int(r["time_limit"]) for r in rows})
+    present = sorted({r["method"] for r in rows})
+    lines += ["  No compact ILP here: it does not survive these sizes, so the",
+              "  reference is the best incumbent any decomposition found on the",
+              "  same instance at the same budget. The question is therefore",
+              "  'which method degrades first', not 'how far from optimal'.",
+              f"  budgets: {budgets}   methods: {present}", ""]
+
+    best: dict[tuple, float] = defaultdict(lambda: float("inf"))
+    for r in rows:
+        best[_decomp_key(r)] = min(best[_decomp_key(r)], r["objective"])
+
+    lines += ["1. Distance to the best known incumbent, by size class", "-" * 74,
+              f"  {'class':>6s} {'method':12s} {'budget':>7s} {'n':>5s} "
+              f"{'norm gap':>10s} {'p90':>10s} {'wall s':>9s} {'incon %':>8s}"]
+    agg = defaultdict(list)
+    for r in rows:
+        b = best[_decomp_key(r)]
+        s = norm_scale(r)
+        ngap = (r["objective"] - b) / s if math.isfinite(s) else float("nan")
+        inc = dnum(r, "inconclusive")
+        agg[(r["size_class"], r["method"], int(r["time_limit"]))].append(
+            (ngap, r["wall_seconds"], 1.0 if (math.isfinite(inc) and inc > 0) else 0.0))
+    for (sc, m, tl), v in sorted(agg.items(), key=lambda kv: (int(kv[0][0]), kv[0][1], kv[0][2])):
+        g = np.array([x[0] for x in v])
+        g = g[np.isfinite(g)]
+        t = np.array([x[1] for x in v])
+        inc = np.array([x[2] for x in v])
+        lines.append(f"  {sc:>6s} {m:12s} {tl:7d} {len(v):5d} "
+                     f"{(g.mean() if len(g) else float('nan')):10.5f} "
+                     f"{(np.percentile(g, 90) if len(g) else float('nan')):10.5f} "
+                     f"{t.mean():9.1f} {100*inc.mean():8.1f}")
+    lines.append("")
+
+    # ---- 2. where each method stops proving anything ----------------------
+    lines += ["2. Frontier: largest size class where the method still closes",
+              "-" * 74,
+              "   'closes' = returned a solution with a reported gap <= 1e-6 and "
+              "no inconclusive",
+              "   subproblem. For the arms whose bound is not battery-aware this "
+              "is optimality",
+              "   for the battery-free problem only -- see E8 section 4.", ""]
+    closed = defaultdict(lambda: [0, 0])
+    for r in rows:
+        gap = float(r.get("gap") or "nan")
+        inc = dnum(r, "inconclusive")
+        ok = math.isfinite(gap) and gap <= 1e-6 and (not math.isfinite(inc) or inc == 0)
+        cell = closed[(r["method"], int(r["time_limit"]), int(r["size_class"]))]
+        cell[0] += int(ok)
+        cell[1] += 1
+    for m in present:
+        for tl in budgets:
+            frontier = None
+            detail = []
+            for sc in sorted({int(r["size_class"]) for r in rows}):
+                k = (m, tl, sc)
+                if k not in closed:
+                    continue
+                ok, n = closed[k]
+                detail.append(f"{sc}:{ok}/{n}")
+                if n and ok / n >= 0.5:
+                    frontier = sc
+            lines.append(f"  {m:12s} tl={tl:4d}s  frontier class={frontier if frontier else '-':>4}"
+                         f"   [{' '.join(detail)}]")
+    lines += ["", "   'frontier' is the largest class closed on at least half the "
+              "instances. A method",
+              "   whose frontier does not move as the budget grows is limited by "
+              "its formulation,",
+              "   not by time -- which is the finding that decides whether the "
+              "decomposition was",
+              "   worth building.", ""]
+
+    # ---- 3. failure to produce anything -----------------------------------
+    lines += ["3. Runs that produced no solution at all", "-" * 74]
+    lines.append("   (load_results already drops non-finite objectives; this "
+                 "counts what survived)")
+    for m in present:
+        sub = [r for r in rows if r["method"] == m]
+        lines.append(f"  {m:12s} usable runs: {len(sub)}")
+    lines.append("")
+
+    txt = "\n".join(lines) + "\n"
+    (out / "e9_scaling.txt").write_text(txt)
     return txt
