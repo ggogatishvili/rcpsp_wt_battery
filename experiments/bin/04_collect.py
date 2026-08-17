@@ -71,6 +71,16 @@ def battery_stats(levels: list[float], capacity: float) -> dict:
             "batt_used": int(dis > TOL_ABS)}
 
 
+def _flat_percentiles(v: list[float]) -> str:
+    """Percentiles of the flat-tariff energy-cost difference."""
+    if not v:
+        return "no comparable flat-tariff group"
+    v = sorted(v)
+    q = lambda p: v[min(len(v) - 1, int(p * len(v)))]      # noqa: E731
+    return (f"n={len(v)}  p50={q(0.50):.3e}  p90={q(0.90):.3e}  "
+            f"p95={q(0.95):.3e}  p99={q(0.99):.3e}  max={v[-1]:.3e}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--strict", action="store_true",
@@ -194,6 +204,7 @@ def main() -> int:
             key = (r["instance"], r["method"], r["policy"], r["state_policy"], r["seed"])
             flat[key][float(r["battery_ratio"])] = float(r["energy_cost"])
     resolution = 0.0
+    flat_diffs: list[float] = []      # the whole distribution, not just its max
     n_flat = 0
     for key, by_b in flat.items():
         if len(by_b) < 2:
@@ -206,6 +217,7 @@ def main() -> int:
             if b == 0.0:
                 continue
             rel = abs(c - base_c) / abs(base_c) if base_c else 0.0
+            flat_diffs.append(rel)
             resolution = max(resolution, rel)
 
     # ---- C6 schedule sanity (sampled: full re-check is O(runs x n)) -------
@@ -270,6 +282,14 @@ def main() -> int:
         f"  C5 flat-tariff falsification: {n_flat} comparable groups",
         (f"     max relative energy-cost difference across battery levels "
          f"under a constant price: {resolution:.3e}"),
+        # The maximum is a worst-case order statistic over thousands of groups
+        # and does not bound the standard error of a mean over paired
+        # instances, which is what every effect in E1-E4 is. It answers the
+        # single-instance question and is kept for that; the percentiles below
+        # are what a paired mean should be judged against. See the deviations
+        # log in PREREGISTRATION.md.
+        ("C5 flat-tariff difference distribution",
+         _flat_percentiles(flat_diffs)),
         "     -> this is the RESOLUTION FLOOR of the study. Any effect in E1-E4",
         "        smaller than this is indistinguishable from solver noise and",
         "        must not be reported as a finding.",

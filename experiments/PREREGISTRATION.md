@@ -118,7 +118,18 @@ here at submission time is itself a claim, so keep it honest.
 
 | date | deviation | reason |
 |---|---|---|
-| | | |
+| 2026-08-17 | §5 fixed the resolution floor as the **largest** relative energy-cost difference across battery levels under the flat tariff, with a 0.5 % admissibility threshold. The paper instead reads the floor off the **flat-tariff placebo cell** of E1: the estimator applied where no storage×state interaction can exist returns $+0.02$ pp with a 95 % interval of $[-0.01, 0.06]$. | Specification error on our part, not a result we disliked. A maximum over ~9000 groups is a worst-case order statistic; it does not bound the standard error of a *mean over paired instances*, which is what every effect in E1–E4 is. Judged against it, the study would declare almost every effect unresolvable while the same estimator demonstrably detects a true zero to within 0.07 pp. The instance-level maximum (18.0 %) remains reported as the bound on **single-instance** claims, which is the question it does answer. |
+| 2026-08-17 | The collector reports only the maximum of the flat-tariff difference distribution, not a high percentile of it. | The maximum is the statistic §5 asked for. Adding a percentile is a strict improvement in information and does not change any reported effect; it is recorded here because the pre-registered output set changed. Pending. |
+
+**Open item, not yet a deviation.** §6 forbids mixing `BATTERY_ON_RATIO` across
+experiments and requires E1/E3/E4 to be re-run in full if it is revised
+downward after E2. It has not been revised: E1, E3 and E4 are all at
+$B = E_{\mathrm{day}}$ as pre-registered. E2 subsequently showed that capacity
+to be NPV-negative on every instance in every regime, which is a *finding*
+about the asset rather than a departure from protocol. Resolving it by
+annotating the discrepancy in the text is compliant; resolving it by reporting
+E1/E3/E4 at a different ratio than pre-registered, without a full re-run, would
+not be. Record the resolution here when taken.
 
 ---
 

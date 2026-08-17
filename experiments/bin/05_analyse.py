@@ -26,10 +26,23 @@ DATA = Path(os.environ.get("RCPSP_EXP_DATA", ROOT / "data"))
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="", help="comma list, e.g. E1,E4")
+    ap.add_argument("--economics", default="central",
+                    help="comma list of config/economics.py SENSITIVITY keys to "
+                         "run E2 under (central,low,high). NPV is a post-hoc "
+                         "function of the measured saving, so extra corners cost "
+                         "no solver time.")
     ap.add_argument("--seed-aggregation", default="mean", choices=["mean", "best"],
                     help="how to collapse seeds in E1 (default mean; 'best' "
                          "reproduces best-of-run reporting and is biased in k)")
     args = ap.parse_args()
+
+    econ_keys = [k.strip() for k in args.economics.split(',') if k.strip()]
+    bad = [k for k in econ_keys if k not in economics.SENSITIVITY]
+    if bad:
+        print(f'FATAL: unknown economics key(s) {bad}; have '
+              f'{sorted(economics.SENSITIVITY)}', file=sys.stderr)
+        return 2
+    econ = economics.SENSITIVITY[econ_keys[0]]
 
     res = DATA / "results.csv"
     if not res.exists():
@@ -45,14 +58,15 @@ def main() -> int:
     want = (set(args.only.split(",")) if args.only
             else {"E0", "E1", "E2", "E3", "E4", "E5", "E6", "E8", "E9"})
 
-    econ = economics.CENTRAL
     parts = []
     if "E0" in want:
         parts.append(A.e0(rows, out))
     if "E1" in want:
         parts.append(A.e1(rows, out, how=args.seed_aggregation))
     if "E2" in want:
-        parts.append(A.e2(rows, out, econ))
+        for k in econ_keys:
+            txt = A.e2(rows, out, economics.SENSITIVITY[k])
+            parts.append(f'\n=== E2 under economics = {k} ===\n' + txt)
     if "E3" in want:
         parts.append(A.e3(rows, out))
     if "E4" in want:
