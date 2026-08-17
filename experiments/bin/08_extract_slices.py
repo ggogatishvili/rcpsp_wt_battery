@@ -183,9 +183,16 @@ def census(path: Path, out: Path) -> int:
     return 0
 
 
-def slices(path: Path, out: Path, specs: list[tuple[str, str, str]],
-           cap: int) -> int:
-    """Write one CSV per (name, column, value) filter, streaming the source."""
+def slices(path: Path, out: Path, specs: list[tuple[str, list[tuple[str, str]]]],
+           cap: int, columns: list[str] | None) -> int:
+    """Write one CSV per named filter, streaming the source.
+
+    A filter is a conjunction of col=val tests. Conjunctions matter here: the
+    synthetic family alone is 57600 rows, but the neg-share contrast needs only
+    the storage-on and storage-off cells of one method, which is a small
+    fraction of it. Transferring the rest would be paying for rows no analysis
+    reads.
+    """
     if not path.exists():
         print(f"FATAL: {path} not found.", file=sys.stderr)
         return 1
@@ -193,17 +200,19 @@ def slices(path: Path, out: Path, specs: list[tuple[str, str, str]],
 
     with path.open(newline="") as fh:
         header = (csv.DictReader(fh).fieldnames or [])
-    cols = [c for c in KEEP if c in header]
-    missing = [c for c in KEEP if c not in header]
+    want = columns if columns else KEEP
+    cols = [c for c in want if c in header]
+    missing = [c for c in want if c not in header]
     if missing:
         print(f"note: {len(missing)} requested column(s) absent and skipped: "
               f"{', '.join(missing)}")
 
     writers, files, counts, truncated = {}, {}, Counter(), set()
-    for name, col, _val in specs:
-        if col not in header:
-            print(f"WARNING: slice '{name}' filters on '{col}', which is not a "
-                  f"column. Skipped.", file=sys.stderr)
+    for name, conds in specs:
+        bad = [c for c, _v in conds if c not in header]
+        if bad:
+            print(f"WARNING: slice '{name}' filters on {bad}, absent from the "
+                  f"header. Skipped.", file=sys.stderr)
             continue
         f = (out / f"slice_{name}.csv").open("w", newline="")
         files[name] = f
@@ -212,10 +221,10 @@ def slices(path: Path, out: Path, specs: list[tuple[str, str, str]],
 
     with path.open(newline="") as fh:
         for r in csv.DictReader(fh):
-            for name, col, val in specs:
+            for name, conds in specs:
                 if name not in writers:
                     continue
-                if val != "*" and r.get(col, "") != val:
+                if any(v != "*" and r.get(c, "") != v for c, v in conds):
                     continue
                 if counts[name] >= cap:
                     truncated.add(name)
@@ -226,7 +235,7 @@ def slices(path: Path, out: Path, specs: list[tuple[str, str, str]],
     for name, f in files.items():
         f.close()
     print()
-    for name, _col, _val in specs:
+    for name, _conds in specs:
         p = out / f"slice_{name}.csv"
         if not p.exists():
             continue
@@ -234,7 +243,7 @@ def slices(path: Path, out: Path, specs: list[tuple[str, str, str]],
         print(f"  {p.name:28s} {counts[name]:8d} rows  "
               f"{p.stat().st_size / 1e6:7.2f} MB{mark}")
     tot = sum((out / f"slice_{n}.csv").stat().st_size
-              for n, _c, _v in specs if (out / f"slice_{n}.csv").exists())
+              for n, _c in specs if (out / f"slice_{n}.csv").exists())
     print(f"\n  total {tot / 1e6:.2f} MB in {out}")
     if truncated:
         print("  a truncated slice is not a random sample -- raise --cap and "
@@ -251,9 +260,14 @@ def main() -> int:
                     help="enumerate what the table contains, and stop")
     ap.add_argument("--slices", action="store_true",
                     help="write the slices named by --slice (or the defaults)")
-    ap.add_argument("--slice", action="append", default=[], metavar="NAME:COL=VAL",
-                    help="e.g. --slice synth:price_regime=synthetic ; repeatable. "
-                         "VAL may be * to take every row")
+    ap.add_argument("--slice", action="append", default=[],
+                    metavar="NAME:COL=VAL[,COL=VAL...]",
+                    help="conjunction of equality tests, e.g. "
+                         "--slice synth:price_regime=synthetic,battery_ratio=1.0 ; "
+                         "repeatable. VAL may be * to accept any value")
+    ap.add_argument("--columns", default="",
+                    help="comma list overriding the default column set, to cut "
+                         "the transfer further")
     ap.add_argument("--cap", type=int, default=200_000,
                     help="maximum rows per slice, a guard against writing "
                          "something untransferable (default 200000)")
@@ -262,25 +276,31 @@ def main() -> int:
     if args.census or not (args.slices or args.slice):
         return census(args.results, args.out)
 
-    specs: list[tuple[str, str, str]] = []
-    for s in args.slice:
+    specs: list[tuple[str, list[tuple[str, str]]]] = []
+    for spec in args.slice:
         try:
-            name, rest = s.split(":", 1)
-            col, val = rest.split("=", 1)
-            specs.append((name, col, val))
+            name, rest = spec.split(":", 1)
+            conds = []
+            for term in rest.split(","):
+                col, val = term.split("=", 1)
+                conds.append((col.strip(), val.strip()))
+            if not conds:
+                raise ValueError
+            specs.append((name, conds))
         except ValueError:
-            print(f"FATAL: cannot parse --slice '{s}', expected NAME:COL=VAL",
-                  file=sys.stderr)
+            print(f"FATAL: cannot parse --slice '{spec}', expected "
+                  f"NAME:COL=VAL[,COL=VAL...]", file=sys.stderr)
             return 2
     if not specs:
         # Defaults, deliberately conservative: the flat and E0 filters are
         # certain, the synthetic one is a guess the census exists to correct.
-        specs = [("flat", "price_regime", "flat"),
-                 ("e0",   "experiment",   "E0"),
-                 ("e3",   "experiment",   "E3")]
+        specs = [("flat", [("price_regime", "flat")]),
+                 ("e0",   [("experiment", "E0")]),
+                 ("e3",   [("experiment", "E3")])]
         print("no --slice given; using defaults "
               "(check them against the census first)")
-    return slices(args.results, args.out, specs, args.cap)
+    cols = [c.strip() for c in args.columns.split(',') if c.strip()]
+    return slices(args.results, args.out, specs, args.cap, cols or None)
 
 
 if __name__ == "__main__":
