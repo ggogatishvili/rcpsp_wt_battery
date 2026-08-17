@@ -492,6 +492,12 @@ def main() -> int:
                          "instance, which separates Proposition 4 from a bug")
     args = ap.parse_args()
 
+    if not args.from_dir and not args.solver.exists():
+        print(f"FATAL: solver not found at {args.solver}\n"
+              f"       build it first (cmake --build --preset conan-release), "
+              f"or pass --from-dir to check saved JSONs.", file=sys.stderr)
+        return 2
+
     if args.instances:
         paths = args.instances
     else:
@@ -549,10 +555,22 @@ def main() -> int:
 
     print(f"verifying {len(paths)} instance(s) x {len(args.arms)} arm(s)"
           f"{' from ' + str(args.from_dir) if args.from_dir else ''}\n")
+    # Futures are collected and resolved. Submitting without ever calling
+    # result() hides every exception a worker raises: the run silently does
+    # nothing and the report below then announces that no check failed, which
+    # is the most dangerous output this script could produce. It did exactly
+    # that once.
+    futures = []
     with ThreadPoolExecutor(max_workers=args.workers) as pex:
         for path in paths:
             for arm in args.arms:
-                pex.submit(job, path, arm)
+                futures.append((path, arm, pex.submit(job, path, arm)))
+    for path, arm, fut in futures:
+        try:
+            fut.result()
+        except Exception as exc:                                  # noqa: BLE001
+            rep.check("V0 schedule present", False,
+                      f"{path.name}/{arm}: {type(exc).__name__}: {exc}")
 
     if args.explain:
         for name in sorted(kept):
@@ -577,6 +595,11 @@ def main() -> int:
             print(f"    {m}")
         if len(rep.notes) > 15:
             print(f"    ... and {len(rep.notes) - 15} more")
+    if rep.passed == 0 and rep.failed == 0:
+        print("\nFATAL: no check ran at all. Nothing was verified -- this is a "
+              "failure,\nnot a pass. Check the solver path and the instance "
+              "selection above.", file=sys.stderr)
+        return 3
     if not rep.failed:
         print("\nNo check failed. The schedules are feasible, the costs "
               "recompute, and\nnobody beat a proven optimum.")
