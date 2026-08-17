@@ -288,8 +288,7 @@ def main() -> int:
         # single-instance question and is kept for that; the percentiles below
         # are what a paired mean should be judged against. See the deviations
         # log in PREREGISTRATION.md.
-        ("C5 flat-tariff difference distribution",
-         _flat_percentiles(flat_diffs)),
+        f"     distribution of that difference: {_flat_percentiles(flat_diffs)}",
         "     -> this is the RESOLUTION FLOOR of the study. Any effect in E1-E4",
         "        smaller than this is indistinguishable from solver noise and",
         "        must not be reported as a finding.",
