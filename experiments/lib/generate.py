@@ -29,16 +29,24 @@ import math
 from dataclasses import replace
 from pathlib import Path
 
-from config import design
+from config import design, machines
 from .rcpsp_io import (Instance, descriptors, earliest_starts,
                        makespan_lower_bound, read_original, write_instance)
 from .rng import substream
 
 # Energy consumed per interval while the machine is in Proc.
-# HARD-CODED IN include/instance.h (struct Proc { int cost = 4; }). If item C2
-# of EXPERIMENTAL_PLAN.md lands and this becomes instance data, update here and
-# there together, or every battery-capacity ratio silently changes meaning.
-E_PROC = 4.0
+#
+# Single source of truth is config/machines.py, which every machine archetype
+# holds fixed at this value on purpose. Battery capacities are multiples of
+# E_day = E_PROC x sum(EI durations) / days, so if a machine profile were ever
+# allowed to move e_proc, "B = 1.0 E_day" would mean a different physical
+# battery in every cell of the M1 cube and the capacity factor would stop being
+# comparable. Vary e_idle and the transitions; never e_proc.
+#
+# It must also equal include/instance.h's compiled-in default (struct Proc
+# { double cost = 4; }), because instances are generated before any --e-proc
+# flag exists. The preflight checks both.
+E_PROC = machines.E_PROC
 
 
 def shop_id(p: int, rep: int, dens: str, tight: str, lam: float) -> str:
@@ -138,18 +146,36 @@ def materialise(inst: Instance, series_values: list[float], out_path: Path) -> s
     return write_instance(out_path, concrete)
 
 
-def instance_row(inst: Instance, price_name: str, price_regime: str,
-                 price_desc: dict, path: Path, sha: str, subset: str) -> dict:
-    """One manifest row: design factors + structural + price covariates."""
+def instance_row(inst: Instance, series, path: Path, sha: str,
+                 subset: str) -> dict:
+    """One manifest row: design factors + structural + price covariates.
+
+    `series` is a lib.prices.Series. Its family and provenance metadata are
+    flattened into named columns rather than left to be re-parsed out of the
+    series name downstream: campaign v2's central diagnostic is a regression
+    estimated separately on synthetic and on real tariffs, and a grouping key
+    that has to be recovered by string-matching a filename is exactly the kind
+    of thing that silently mis-groups six months later.
+    """
     row = dict(inst.meta)
     row.update(descriptors(inst))
-    row.update(price_desc)
+    row.update(series.descriptors())
+    meta = getattr(series, "meta", None) or {}
     row.update({
         "instance": path.stem,
         "subset": subset,
         "path": str(path),   # relative to the data root; resolve as DATA / path
-        "price_name": price_name,
-        "price_regime": price_regime,
+        "price_name": series.name,
+        "price_regime": series.regime,
+        "tariff_family": getattr(series, "family", "spot"),
+        "price_market": meta.get("market", ""),
+        "price_year": meta.get("year", ""),
+        "price_label": meta.get("label", ""),
+        # Nominal synthetic factors. Empty for every other family. The REALISED
+        # spread is spread_intraday above and is what any threshold is read off.
+        "synth_spread": meta.get("synth_spread", ""),
+        "synth_noise": meta.get("synth_noise", ""),
+        "synth_neg": meta.get("synth_neg", ""),
         "e_day": round(e_day(inst), 4),
         "sha256": sha,
     })

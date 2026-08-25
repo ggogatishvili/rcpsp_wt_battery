@@ -48,6 +48,28 @@ def main() -> int:
     ap.add_argument("--lbbd-tardiness-bounds", type=int, default=3)
     ap.add_argument("--no-benders-node-cuts", action="store_true")
     ap.add_argument("--battery-free-end", action="store_true")
+    # Campaign-v2 flags. They must be ADVERTISED in --help, because
+    # 02_make_runlist.py probes --help to decide whether a machine-profile or a
+    # state-ladder cell is buildable. Without them the dry run silently drops
+    # M1 and M4 -- the two newest and least-tested parts of the pipeline -- and
+    # proves nothing about them.
+    ap.add_argument("--states", default="all")
+    ap.add_argument("--lambda", dest="lam", type=float, default=1.0)
+    ap.add_argument("--e-proc", type=float, default=4.0)
+    ap.add_argument("--e-idle", type=float, default=2.0)
+    ap.add_argument("--e-off", type=float, default=0.0)
+    ap.add_argument("--off-proc-time", type=int, default=2)
+    ap.add_argument("--off-proc-cost", type=float, default=5.0)
+    ap.add_argument("--proc-off-time", type=int, default=1)
+    ap.add_argument("--proc-off-cost", type=float, default=1.0)
+    ap.add_argument("--proc-idle-time", type=int, default=1)
+    ap.add_argument("--proc-idle-cost", type=float, default=2.0)
+    ap.add_argument("--idle-proc-time", type=int, default=1)
+    ap.add_argument("--idle-proc-cost", type=float, default=2.5)
+    ap.add_argument("--machine-profile")
+    ap.add_argument("--charging-efficiency", type=float, default=0.95)
+    ap.add_argument("--discharging-efficiency", type=float, default=0.95)
+    ap.add_argument("--c-rate", type=float, default=float("inf"))
     a, _ = ap.parse_known_args()
     if a.version:
         print("mock solver 0.0.0")
@@ -73,7 +95,50 @@ def main() -> int:
                     # arms, not to predict one. Do not read anything into it.
                     "LBBD": 0.055, "StateLBBD": 0.05,
                     "Benders": 0.06}.get(a.method, 0.0)
-    energy = e_base * (1 - relief - method_bonus) * rng.uniform(0.99, 1.01)
+    # --- fabricated response to the campaign-v2 factors ---------------------
+    # Again: made up, and only monotone in the direction the real model would
+    # plausibly move. The point is that a downstream analysis which cannot see
+    # a planted effect here has a wiring bug, not a scientific finding.
+    #
+    #  * a cheap idle state (low rho) and a cheap restart both give the
+    #    scheduler a way to avoid expensive hours WITHOUT storage, so they eat
+    #    into what storage can add -- the substitution the paper is about;
+    #  * restricting the state set (--states) removes that alternative and
+    #    hands the value back to storage.
+    rho = a.e_idle / a.e_proc if a.e_proc else 0.5
+    restart_penalty = a.off_proc_cost * max(1, a.off_proc_time)
+    # State flexibility in [0, 1]: 1 = free to switch off and idle cheaply.
+    flex = (1.0 - rho) * (1.0 / (1.0 + restart_penalty / 10.0))
+    if a.states == "proc":
+        flex *= 0.15          # sigma1: hot for the whole window
+    elif a.states.replace(" ", "") == "proc,idle":
+        flex *= 0.55          # sigma2: idles, never shuts down
+    # State management has TWO distinct effects, and collapsing them into one
+    # spread-proportional term (as an earlier version of this mock did) makes
+    # the flat tariff look like a placebo for machine states, which it is not.
+    #
+    #   consumption: idling draws less than processing and Off draws nothing, so
+    #     a flexible machine consumes less energy FULL STOP -- at a constant
+    #     price just as much as at a volatile one;
+    #   arbitrage: it can also shift what it does consume into cheap hours,
+    #     which only pays when prices move.
+    #
+    # Keeping them separate is what lets the pilot exercise M4's positive
+    # placebo check (V_sigma must be non-zero under a flat tariff). With the
+    # collapsed version the check could never fail and could never pass.
+    consumption_relief = 0.12 * flex
+    arbitrage_relief = 0.08 * flex * min(1.0, spread)
+    state_relief = consumption_relief + arbitrage_relief
+    # Storage and state flexibility are partial substitutes: the more the
+    # machine can already dodge, the less the battery adds.
+    relief *= (1.0 - 0.45 * flex)
+    eta = (a.charging_efficiency * a.discharging_efficiency) ** 0.5
+    relief *= eta
+    if a.c_rate != float("inf"):
+        relief *= min(1.0, 0.6 + 0.4 * a.c_rate)
+
+    energy = (e_base * (1 - relief - state_relief - method_bonus)
+              * rng.uniform(0.99, 1.01))
 
     tard = sum(t.weight for t in inst.tasks) * rng.uniform(0.0, 0.4) \
         * (1 + 0.5 * relief)          # shifting production costs service

@@ -198,10 +198,19 @@ def main() -> int:
         n_ok += 1
 
     # ---- C5 flat-tariff falsification ------------------------------------
+    # The group key must pin down EVERYTHING that defines a configuration except
+    # the battery ratio, because the check is "holding the configuration fixed,
+    # does adding storage change the bill under a constant price". Campaign v2
+    # dropped the scheduling-policy factor and added the machine profile, the
+    # state ladder and a per-run time limit; leaving any of those out of the key
+    # would compare two different configurations and report their difference as
+    # solver noise, inflating the resolution floor.
+    FLAT_KEY = ("instance", "method", "state_policy", "machine_profile",
+                "time_limit", "seed")
     flat = defaultdict(dict)
     for r in rows:
         if r.get("price_regime") == "flat" and r.get("status") == "ok":
-            key = (r["instance"], r["method"], r["policy"], r["state_policy"], r["seed"])
+            key = tuple(r.get(k, "") for k in FLAT_KEY)
             flat[key][float(r["battery_ratio"])] = float(r["energy_cost"])
     resolution = 0.0
     flat_diffs: list[float] = []      # the whole distribution, not just its max

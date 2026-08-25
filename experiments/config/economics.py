@@ -1,16 +1,22 @@
 """
 Economic parameters for the E2 investment appraisal.
 
-WARNING — THESE ARE PLACEHOLDERS. The central values are consistent with
-publicly reported 2025 European commercial-and-industrial turnkey lithium-iron-
-phosphate prices, but they are NOT yet backed by a citable source. Before any
-NPV or payback number from E2 goes into the paper, replace them with figures
-from a citable reference (an IEA, BNEF or Ember storage-cost report, or a
-peer-reviewed storage-cost review) and record the citation here.
+Source: BloombergNEF, *Energy Storage Systems Cost Survey 2025* (cited in the
+paper as \\cite{bnef2025ess}). The central turnkey figure is the European
+commercial-and-industrial lithium-iron-phosphate installed cost; the LOW and
+HIGH corners bracket it together with the corresponding lifetime, O&M and
+discount-rate assumptions, which move together in practice rather than
+independently.
 
-E2 reports NPV and payback for CENTRAL and for the LOW/HIGH sensitivity
-corners, so a reviewer can see how much of the investment conclusion is driven
-by the cost assumption rather than by the scheduling result.
+E2 reports NPV and payback for CENTRAL and for both corners, and that band is
+not decoration: the share of instances worth investing in at the smallest
+capacity under high volatility moves from 3 % to 55 % to 95 % across HIGH,
+CENTRAL and LOW, on identical physical savings. The cost assumption decides
+the sign of the investment answer, so no point payback figure from this file
+should be quoted without the band.
+
+Run all three with:
+    python3 bin/05_analyse.py --only E2 --economics central,low,high
 """
 
 CENTRAL = dict(

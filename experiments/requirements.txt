@@ -4,3 +4,13 @@ numpy>=1.21
 # Optional, not imported by any script:
 #   matplotlib   if you want to plot from data/results.csv yourself
 #   gurobipy     only for the preflight license check; the solver links C++ Gurobi
+#   scipy        every scipy import in this package is local and guarded, and
+#                every fallback is exact rather than approximate: F and t tail
+#                probabilities come from a Lentz continued fraction on the
+#                regularised incomplete beta, checked against scipy to 1e-9.
+#                The single exception is the exact non-central-t seed
+#                calculation in design.required_seeds_t, which falls back to the
+#                normal approximation -- measured difference under one seed at
+#                every setting this campaign uses. Installing scipy changes no
+#                reported number; not installing it changes none either. That is
+#                the point.

@@ -1,113 +1,96 @@
-# What runs today, and what is blocked
+# What runs today, and what is blocked — campaign v2
 
-The harness expands the **whole** design from `EXPERIMENTAL_PLAN.md`. Cells
-that need solver features which do not exist yet are written to
+The harness expands the whole design in `config/design.py`. Cells needing
+solver features that do not exist in the binary are written to
 `data/runlist_blocked.csv` with a reason and excluded from execution.
 
 `02_make_runlist.py` probes `solver --help` on every invocation. **When a flag
 appears, re-run that script and the corresponding cells activate.** The design
 never needs editing.
 
+**`runlist_blocked.csv` must be empty before the campaign starts.** A blocked
+cell is a hole in a factorial; a cell that runs at a compiled-in default
+instead of the flag it asked for is worse, because it produces a complete,
+balanced, meaningless result. The probe exists to make the first happen rather
+than the second.
+
 ---
 
-## Runs today — no code changes needed
+## Runs today
 
-| Exp. | Status | What you get |
+| Exp. | Needs | Status |
 |---|---|---|
-| **E0** validation | full | gaps and runtimes for MILP/H1/H1P/GA/GAP; gap stability across battery levels; LP overhead |
-| **E1** decomposition | **full** | σ × β decomposition against the always-hot/no-battery baseline: `V_σ`, `V_β`, `V_joint`, `I_σβ`, substitution index, plus the Σ₁→Σ₂ rung. Policy × battery retained as secondary. |
-| **E2** sizing | full | savings curve, marginal value, saturation, NPV, payback, NPV>0 share |
-| **E3** tariffs | full | regression on spread/CV/negative share, screening rule, regime comparison |
-| **E4** frontier | full | Pareto frontiers with and without storage, exchange rates, frontier shift |
-| **E5** structure | full | standardised regression on instance descriptors |
+| **MR** replication | nothing beyond the base solver and the machine-profile flags | full |
+| **M0** validation | nothing beyond the base solver | full |
+| **M1** ROI cube | `--e-proc`, `--e-idle`, `--e-off`, and the eight transition flags (C2) | full |
+| **M2** volatility | nothing in the solver; real market-year CSVs for its real arm | full, degraded without the CSVs |
+| **M3** scaling | nothing | full |
+| **M4** substitution | `--states` (C1) | full |
+| **M5** frontier | nothing — lambda is realised in the instance file | full |
 
-E1, E3, E4 and E5 work today only because every shop-floor factor is realised
-**in the instance file**: EI density, due-date tightness, tardiness scale,
-horizon, and the price vector. No solver flag is required for any of them.
-
----
-
-## Blocked — needs code
-
-Ordered by how much of the paper each unlocks.
-
-### C1 — state-set restriction `--states {proc | proc,idle | all}` — **DONE**
-Implemented. E1's Σ₁/Σ₂/Σ₃ ladder is now measurable.
-
-The restriction is applied per *bridge* inside `SolverH1::findOptimalPath`,
-not when the SPACES graph is built. That matters: `scheduleMachineUsage`
-routes the first bridge **from** Off at t=0 and the last **to** Off at t=h-1
-through the same graph, so filtering Off out of the graph would make both
-infeasible and abort every run. Restricting only the interior bridges gives
-exactly the intended reading — "never re-entered mid-schedule" — while the
-model's mandatory start-up and shut-down are untouched.
-
-Verified on a standalone replica: interior bridge cost is monotone in the
-ladder (690 → 4,060 → 8,040 as states are removed, as a nested relaxation
-must be), boundary bridges stay feasible under all three levels, and applying
-the ladder to a boundary bridge is confirmed to make it infeasible.
-
-The MILP was **not** changed: E1 uses GA/GAP only, so the SPACES graph is the
-only path that needs it.
-
-Cells activated: 45,000 (Σ₁ and Σ₂, GA only — see below). ~12.5 h.
-
-### C0 — make the Phase-3 LP unconditional
-`Config::phase3LP` currently defaults to `false`, but the paper (§4.3) now
-presents Phase 3 *as* the LP. Every run in this harness must use it, or the
-results do not match the method described. Either flip the default or have
-`SolverH1` always call `BatteryLp`.
-
-**This one is silent** — nothing errors, you just measure the greedy
-peak-shaver and write it up as an LP. Land it first.
-
-### C5 — `--lambda` tardiness scale
-Not blocking: the harness realises λ by scaling weights in the instance file
-instead. Listed so nobody implements it twice.
-
-### C2 / C3 / C4 — machine profile, battery efficiency, C-rate
-**Blocks E6 entirely.** `e_proc`, `e_idle`, transition costs and durations are
-hardcoded in `include/instance.h`; efficiencies are hardcoded at 0.95; C-rate
-does not exist in the model.
-
-C4 additionally matters for **credibility of everything else**: a battery that
-can fully charge or discharge in one interval inflates every storage benefit
-this harness will measure. It is two bound changes in the MILP and the same two
-in the Phase-3 LP, both stay linear.
-
-### C7 / C8 — schedule re-costing, baseline policies
-**Blocks E7.** C7 needs a mode that applies a committed schedule to a different
-price series and recomputes cost. C8 needs P1 (Phase 2 only) and P2 (naive
-charge-cheap/discharge-expensive) as reference policies.
-
-### C9 — export per-interval energy flows
-Not blocking. `04_collect.py` recovers charge/discharge from the
-`battery_levels` trace, which is exact up to the efficiency factor. Exporting
-`grid_to_machine`, `grid_to_battery`, `battery_to_machine` directly would
-remove that inference and make degradation accounting exact.
+M2, M3 and M5 work without any solver flag because every shop-floor factor is
+realised **in the instance file**: EI density, due-date tightness, tardiness
+scale, horizon and the price vector.
 
 ---
 
-## Suggested order
+## Outstanding, in order of what it blocks
 
-1. ~~**C0**~~ done. ~~**C1**~~ done — E1's headline is now measurable.
-2. **C4** — before E2 is final, since it will move the sizing result.
-4. **C2 / C3** — unlocks E6.
-5. **C7 / C8** — unlocks E7.
+### 0. MR must run before the runlist is frozen — blocks the seed counts
+Not a gap, a sequencing rule. `design.SEEDS_PER_EXP` currently holds
+placeholders. MR measures sigma_seed at the real budget and its report prints
+the required k per experiment from a formula fixed in `PREREGISTRATION.md` §6.
+Running M1-M5 on the placeholders means reporting effects whose precision
+nobody measured -- and because every one of them is a paired difference, seed
+noise does not cancel there the way instance variability does. Five hours.
 
-After each, re-run `02_make_runlist.py` and diff `budget_report.txt` to see how
-much compute the new cells add before committing to them.
+### 1. irace re-tune at 300 s — blocks the interpretation of every result
+Not a code gap; a calibration gap. The compiled-in GA parameters were tuned at
+600 s, v1 ran them at 60 s, and measured throughput (41.6 s against a 60 s
+limit) showed most runs stopping on **stagnation** rather than on the clock.
+The GA improved 0.3 % between 60 s and 600 s. Raising the budget to 300 s
+without re-tuning buys very little, and M0's anytime profile will show exactly
+that. See `RUNBOOK_SERVER.md` step 2.
+
+### 2. Real price data — blocks M2's headline
+Only the reference year ships with the repository. Without additional
+market-years, M2's central diagnostic — the same regression estimated on
+synthetic and on real tariffs — has one real regime and is vacuous.
+`bin/00b_fetch_prices.py` converts manual ENTSO-E or OTE downloads;
+`--check` reports what is present. This is the campaign's answer to v1's
+largest weakness, so it is worth the hour of manual downloading.
+
+### 3. Machine archetype calibration — blocks quoting M1 magnitudes
+The rho levels and transition penalties in `config/machines.py` are stylised,
+not sourced. The ordering and shape of the machine effect are informative
+without calibration; the magnitudes are not quotable for any named technology
+until they are anchored to published machine energy-profile data.
+
+### 4. C-rate and efficiency, if a reviewer presses
+`--c-rate`, `--charging-efficiency` and `--discharging-efficiency` exist in the
+solver but are **not** factors in v2's design. v1's E6 measured them: capping
+at a four-hour rate cost 1.07 % [−5.6, +2.2], and round-trip efficiency moved
+the saving by −8.0 % [−10.8, −4.8] across the 0.75–1.0 range. That evidence is
+reusable as a defensive appendix. Adding them as a factor here would multiply
+M1 by four for a result already in hand.
+
+### 5. C7 / C8 — forecast re-costing and baseline policies
+Still unimplemented, and still the cheapest remaining managerial angle: if a
+naive charge-cheap/discharge-expensive rule captures most of the benefit, the
+honest recommendation is a rule plus a battery rather than an optimisation
+deployment. Out of scope for v2; worth flagging in Future Work rather than
+leaving a reviewer to raise it.
 
 ---
 
-## Also outstanding, not code
+## Retired from v1
 
-- **Price data**: only 2025 ships with the repo. Volatility regimes are
-  currently terciles of 2025 windows, not different years. Drop additional
-  year CSVs into `instance_generator/` and list them in `EXTRA_PRICE_CSVS`.
-- **Economic parameters** in `config/economics.py` are placeholders and need a
-  citable source before any payback number is published.
-- **Machine archetypes** for E6 (`EXPERIMENTAL_PLAN.md` §3.3) are invented and
-  need calibration against published machine energy profiles.
-- **`BATTERY_ON_RATIO`** may need revising downward once E2 reports the
-  NPV-optimal size — see README limitation 3.
+* **GAP and H1P.** v1's E0 showed GAP worse than GA at every budget tested and
+  not gap-stable across battery levels. Removed from the design and from the
+  paper; the scheduling-policy factor goes with them.
+* **The LBBD family** (`LBBD`, `StateLBBD`, `Benders`, experiments E8/E9). Still
+  in the solver and still the subject of the methods paper; not part of this
+  campaign, which is about managerial questions rather than about how the
+  problem is solved.
+* **`analysis/analyses.py`** remains, and `05_analyse.py` still dispatches to
+  it for any E0–E9 rows in the results table, so v1 results stay reproducible.

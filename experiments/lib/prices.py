@@ -1,24 +1,42 @@
 """
 Price-series library.
 
-Three families, all reduced to a common representation: a named series of
-hourly EUR/MWh values plus four descriptors used as covariates throughout the
-analysis (mean, mean intra-day spread, coefficient of variation, negative-hour
-share).
+Four families, all reduced to a common representation: a named series of hourly
+EUR/MWh values, a family, a regime, and the descriptors used as covariates
+throughout the analysis.
 
-DATA AVAILABILITY. Only Czech 2025 day-ahead data ships with the repository.
-The multi-year design in EXPERIMENTAL_PLAN.md 3.2 is therefore approximated by
-stratifying 2025 windows into volatility terciles. This is stated in
-STATUS.md and must be stated in the paper: it is a real limitation, not a
-detail. Additional years can be added through design.EXTRA_PRICE_CSVS without
-touching this module.
+    contractual   flat, two-block TOU. Shape is imposed, not observed.
+    spot          windows drawn from ONE reference year, stratified into
+                  volatility terciles. Internally ordered, externally weak.
+    real          windows drawn from SEVERAL market-years (a calm year, the
+                  2022 crisis, a recent high-renewable year, a second bidding
+                  zone). This is what carries external validity.
+    synthetic     a controlled sinusoid family with orthogonal (spread, noise,
+                  negative-hour share). This is what carries identification.
+
+WHY BOTH `spot` AND `real`. They are not redundant and the distinction is the
+main methodological repair of campaign v2. Terciles of a single year vary the
+*window*, holding the market's price formation fixed; different market-years
+vary the price formation itself. v1 had only the former, and the consequence
+was measured: the spread coefficient was +0.554 (se 0.026) on synthetic
+tariffs and -0.061 (se 0.108) on real ones. A screening rule fitted to that is
+a description of the generator's sinusoid, not of a market. Keeping the two
+families separately labelled is what lets the analysis estimate the same
+regression on each and show the reader the difference rather than average over
+it.
+
+WHY SYNTHETIC SURVIVES ANYWAY. Real tariffs confound spread with mean, with
+CV, and with negative-hour share (v1 measured VIF around 9.5). The synthetic
+family is the only place where those three move independently, so it is the
+only place the *shape* of the response can be identified. Its role is stated
+accordingly: identification, never an external threshold on its own.
 """
 
 from __future__ import annotations
 
 import csv
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +48,10 @@ class Series:
     name: str
     regime: str
     values: list[float]
+    family: str = "spot"
+    # Free-form provenance, written into the instance manifest so that every
+    # analysis can group by market and year without re-parsing series names.
+    meta: dict = field(default_factory=dict)
 
     def descriptors(self) -> dict:
         return price_descriptors(self.values)
@@ -68,6 +90,12 @@ def load_year_csv(path: Path) -> list[float]:
 
     Handles the DST artefacts the original InstanceGenerator.py handled (23- and
     25-hour days) and fills gaps from the same hour on the adjacent day.
+
+    Files produced by bin/00b_fetch_prices.py are already clean (24 h per day,
+    no gaps), so for those this is a straight read. The repair path is kept
+    because the reference year that ships with the repository has not been
+    through that script, and because a silently mis-shaped year would corrupt
+    every window drawn from it in a way that is very hard to see downstream.
     """
     by_day: dict[datetime, list[float | None]] = {}
     order: list[datetime] = []
@@ -116,6 +144,12 @@ def spot_windows(year: list[float], horizon: int, regime: str,
     volatility. Draws are without replacement and deterministic in the master
     seed, so the same regime always yields the same windows for a given
     horizon.
+
+    A note on what this factor means. Because all three terciles come from one
+    year, "high volatility" here is a volatile WEEK of an ordinary year, not a
+    volatile YEAR. That is a legitimate factor — a plant does face volatile and
+    calm weeks — but it is not the same experiment as comparing 2019 with 2022,
+    and the two must not be conflated in the write-up. See real_windows().
     """
     starts = _midnight_windows(year, horizon)
     if not starts:
@@ -137,8 +171,44 @@ def spot_windows(year: list[float], horizon: int, regime: str,
     pool = [s for _, s in band]
     rng.shuffle(pool)
     picks = pool[:min(n_draws, len(pool))]
-    return [Series(name=f"{regime}_w{i:02d}", regime=regime,
-                   values=year[s:s + horizon])
+    return [Series(name=f"{regime}_w{i:02d}", regime=regime, family="spot",
+                   values=year[s:s + horizon],
+                   meta={"market": "", "year": "", "label": regime.replace("spot_", ""),
+                         "window_start_hour": s})
+            for i, s in enumerate(picks)]
+
+
+def real_windows(year: list[float], key: str, market: str, year_label: int,
+                 label: str, horizon: int, n_draws: int,
+                 seed_key: str) -> list[Series]:
+    """Draw `n_draws` midnight-aligned windows spread across a market-year.
+
+    UNSTRATIFIED, ON PURPOSE. spot_windows() picks windows by their volatility
+    so that the tercile factor is clean; doing the same here would defeat the
+    point. The claim this family supports is "a plant facing the 2022 market
+    saw a different return than one facing 2019", and that requires windows
+    representative of each year as it actually was, tails included. Stratifying
+    would replace the between-year contrast with a within-year one and quietly
+    remove exactly the variation being paid for.
+
+    Windows are spread evenly over the year rather than drawn at random, so
+    that a small `n_draws` still covers all four seasons: with n_draws = 5 the
+    picks land near the start, and at 1/5, 2/5, 3/5 and 4/5 of the year, each
+    jittered within its block. Seasonality is a first-order driver of both
+    price level and spread, and five random draws can easily miss winter.
+    """
+    starts = _midnight_windows(year, horizon)
+    if not starts:
+        raise ValueError(f"horizon {horizon}h exceeds the {len(year)}h series for {key}")
+    n = min(n_draws, len(starts))
+    rng = substream(f"real|{key}|{horizon}|{seed_key}")
+    blocks = [starts[i * len(starts) // n:(i + 1) * len(starts) // n]
+              for i in range(n)]
+    picks = [rng.choice(b) for b in blocks if b]
+    return [Series(name=f"real_{key}_w{i:02d}", regime=f"real_{key}", family="real",
+                   values=year[s:s + horizon],
+                   meta={"market": market, "year": year_label, "label": label,
+                         "window_start_hour": s})
             for i, s in enumerate(picks)]
 
 
@@ -147,9 +217,15 @@ def spot_windows(year: list[float], horizon: int, regime: str,
 # ---------------------------------------------------------------------------
 
 def flat_series(year: list[float], horizon: int) -> Series:
-    """Constant price at the annual mean. Falsification control."""
+    """Constant price at the annual mean. Falsification control.
+
+    Under a constant price no schedule and no battery can create arbitrage
+    value, so every saving measured here is solver noise. That number is the
+    resolution floor of the whole campaign and is read before any other result.
+    """
     mean = sum(year) / len(year)
-    return Series("flat", "flat", [round(mean, 4)] * horizon)
+    return Series("flat", "flat", [round(mean, 4)] * horizon, family="contractual",
+                  meta={"market": "", "year": "", "label": "flat"})
 
 
 def two_block_series(year: list[float], horizon: int,
@@ -169,7 +245,8 @@ def two_block_series(year: list[float], horizon: int,
     off = 24 * mean / (off_len + peak_ratio * peak_len)
     peak = peak_ratio * off
     vals = [round(peak if a <= (h % 24) < b else off, 4) for h in range(horizon)]
-    return Series("tou2", "tou2", vals)
+    return Series("tou2", "tou2", vals, family="contractual",
+                  meta={"market": "", "year": "", "label": "two-block"})
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +261,13 @@ def synthetic_series(horizon: int, mean: float, spread: float, noise: float,
     shape of European day-ahead prices. `neg_share` is realised by subtracting
     a constant offset from the cheapest `neg_share` fraction of hours, which
     creates genuinely negative prices without distorting the spread.
+
+    NOMINAL VS REALISED SPREAD. Noise inflates the realised intra-day spread,
+    and at low nominal spreads it dominates it: on a 168 h series, nominal
+    spread 1 realises 18.3 at noise 0.05 but 3.6 at noise 0.01. Any statement
+    about "the spread below which storage stops paying" must therefore be read
+    off the REALISED descriptor in the manifest, never off the nominal level
+    requested here.
     """
     rng = substream(f"synth|{horizon}|{mean}|{spread}|{noise}|{neg_share}|{draw}|{seed_key}")
     vals = []
@@ -202,4 +286,7 @@ def synthetic_series(horizon: int, mean: float, spread: float, noise: float,
 
     name = (f"synth_s{int(spread)}_n{int(noise*100):02d}"
             f"_g{int(neg_share*100):02d}_d{draw}")
-    return Series(name, "synthetic", [round(v, 4) for v in vals])
+    return Series(name, "synthetic", [round(v, 4) for v in vals], family="synthetic",
+                  meta={"market": "", "year": "", "label": "synthetic",
+                        "synth_spread": spread, "synth_noise": noise,
+                        "synth_neg": neg_share})
