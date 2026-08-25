@@ -316,6 +316,22 @@ class Run:
         return "?"
 
 
+def first_error(stderr: str, limit: int = 320) -> str:
+    """Keep the FRONT of a solver error, not the back.
+
+    Truncating from the end is what produced
+
+        1_1.txt/MILP: ch file), '/System/.../libgurobi130.dylib' (no such file)
+
+    from a dyld failure whose first line, "Library not loaded:
+    @rpath/libgurobi130.dylib", is the entire diagnosis. Loader errors, Gurobi
+    licence errors and C++ exceptions all state the cause first and elaborate
+    afterwards, so the head is what to keep.
+    """
+    s = " ".join((stderr or "").split())
+    return s if len(s) <= limit else s[:limit] + " [...]"
+
+
 def run_pinned(solver: Path, arm: str, instance: Path, battery: int, tl: int,
                seed: int | None, mem_gb: int, cpu: int | None,
                workdir: Path, keep_json: Path | None = None) -> Run:
@@ -343,7 +359,7 @@ def run_pinned(solver: Path, arm: str, instance: Path, battery: int, tl: int,
     except subprocess.TimeoutExpired:
         return Run(False, -9, f"hard timeout at {tl + 300}s (solver ignored --tl)")
     if proc.returncode != 0 or not out_json.exists():
-        why = (proc.stderr or "").strip()[-300:]
+        why = first_error(proc.stderr)
         if not why:
             why = (f"exit {proc.returncode}" if proc.returncode
                    else "exit 0 but no output file")

@@ -384,28 +384,38 @@ def explain(inst: Instance, sols: dict[str, dict], battery: int) -> None:
         inc = diag.get("inconclusive")
         proved = (gap is not None and float(gap) <= 1e-6
                   and not (inc is not None and float(inc) > 0))
-        table[arm] = (raw, e, o, proved)
+        table[arm] = (raw, e, o, proved, t)
         note = "" if not problem else f"  <- {problem}"
         print(f"  {arm:11s} {raw:12.2f} {e:13.2f} {raw - e:9.2f} "
               f"{t:10.2f} {o:12.2f} {str(proved):>7s}{note}")
 
     winner = min((v[2], k) for k, v in table.items() if math.isfinite(v[2]))[1]
     print(f"\n  best objective: {winner}")
-    for arm, (raw, _e, o, proved) in sorted(table.items()):
+    for arm, (raw, _e, o, proved, tard) in sorted(table.items()):
         if arm == winner or not proved or not math.isfinite(raw):
             continue
-        rawv = table[winner][0]
-        if not math.isfinite(rawv):
+        rawv, tardv = table[winner][0], table[winner][4]
+        if not (math.isfinite(rawv) and math.isfinite(tard) and math.isfinite(tardv)):
             continue
-        if raw <= rawv + ABS_TOL:
-            print(f"  {arm}: raw {raw:.2f} <= {winner}'s raw {rawv:.2f}. It DID "
-                  f"find the battery-free\n      optimum; the entire "
-                  f"{o - table[winner][2]:.2f} gap is battery coordination. "
-                  f"Proposition 4, not a bug.")
+        # The battery-free objective is raw ENERGY PLUS TARDINESS, not energy
+        # alone. Comparing energy by itself would credit an arm that bought a
+        # cheaper bill with due-date slack, which is precisely the trade the
+        # objective is supposed to price. On 1_2 the two comparisons agree, but
+        # they need not: LBBD takes 23.07 of tardiness there, so energy alone
+        # overstates its margin by 23.07.
+        free_a, free_w = raw + tard, rawv + tardv
+        if free_a <= free_w + ABS_TOL:
+            print(f"  {arm}: battery-free objective {free_a:.2f} <= {winner}'s "
+                  f"{free_w:.2f}, so it DID\n      find the battery-free optimum "
+                  f"(better by {free_w - free_a:.2f}). The {winner} schedule "
+                  f"then\n      extracts {table[winner][0] - table[winner][1] - (raw - _e):.2f} "
+                  f"more from storage, and the two net to the {o - table[winner][2]:.2f} "
+                  f"gap.\n      Proposition 4, not a bug.")
         else:
-            print(f"  {arm}: raw {raw:.2f} > {winner}'s raw {rawv:.2f}. It certifies "
-                  f"optimality of the\n      battery-free problem but is NOT "
-                  f"battery-free optimal. THIS IS A BUG.")
+            print(f"  {arm}: battery-free objective {free_a:.2f} > {winner}'s "
+                  f"{free_w:.2f}. It certifies\n      optimality of the "
+                  f"battery-free problem but is NOT battery-free optimal.\n"
+                  f"      THIS IS A BUG.")
 
 
 def cross_check(results: dict, rep: Report):
@@ -448,6 +458,22 @@ def cross_check(results: dict, rep: Report):
 # running
 # ==========================================================================
 
+def first_error(stderr: str, limit: int = 320) -> str:
+    """Keep the FRONT of a solver error, not the back.
+
+    Truncating from the end is what produced
+
+        1_1.txt/MILP: ch file), '/System/.../libgurobi130.dylib' (no such file)
+
+    from a dyld failure whose first line, "Library not loaded:
+    @rpath/libgurobi130.dylib", is the entire diagnosis. Loader errors, Gurobi
+    licence errors and C++ exceptions all state the cause first and elaborate
+    afterwards, so the head is what to keep.
+    """
+    s = " ".join((stderr or "").split())
+    return s if len(s) <= limit else s[:limit] + " [...]"
+
+
 def run(solver: Path, arm: str, inst: Instance, battery: int, tl: int,
         mem: int, workdir: Path, keep: Path | None):
     out = workdir / f"{inst.path.stem}__{arm}.json"
@@ -458,7 +484,7 @@ def run(solver: Path, arm: str, inst: Instance, battery: int, tl: int,
     except subprocess.TimeoutExpired:
         return None, f"hard timeout at {tl + 300}s"
     if p.returncode != 0 or not out.exists():
-        return None, (p.stderr or "").strip()[-200:] or f"exit {p.returncode}"
+        return None, first_error(p.stderr) or f"exit {p.returncode}"
     try:
         sol = json.loads(out.read_text())
     except ValueError as exc:
