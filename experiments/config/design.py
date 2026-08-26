@@ -188,8 +188,21 @@ LAMBDA_LEVELS = [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
 REFERENCE_YEAR_CSV = "electricity_cost_eur_mwh_2025.csv"   # ships with the repo
 
 # Additional market-years. Each entry needs a CSV with the same schema as the
-# reference (columns day,hour,cost; day as DD/MM/YYYY; EUR/MWh) dropped into
-# instance_generator/. bin/00b_fetch_prices.py builds them from ENTSO-E or OTE
+# reference (columns day,hour,cost; day as D/M/YYYY; EUR/MWh) dropped into
+# instance_generator/.
+#
+# WHAT THE FOUR CZ YEARS BUY, measured rather than assumed (see
+# data/prices/real_years_report.txt):
+#   cz2019  mean  40 EUR/MWh, spread  28, 0.7 % negative hours -- a calm market
+#   cz2022  mean 247,          spread 183, 0.1 % negative      -- the crisis
+#   cz2024  mean  85,          spread 113, 3.6 % negative      -- high renewables
+#   cz2025  mean  97,          spread 129, 3.7 % negative      -- the reference
+#
+# 2024 and 2025 are near-twins: same regime, and that is useful (an effect that
+# reproduces across two adjacent years is a stronger claim than one measured on
+# one), but it is replication rather than new variation. The variation still
+# missing is a SECOND BIDDING ZONE -- a different price formation rather than a
+# different year of the same one -- which is what de2025 is for. bin/00b_fetch_prices.py builds them from ENTSO-E or OTE
 # downloads. Entries whose file is absent are skipped with a warning, so the
 # campaign degrades to "2025 only" rather than failing — but M2's real-tariff
 # arm is then not interpretable and the analysis says so.
@@ -198,6 +211,8 @@ REAL_MARKET_YEARS: dict[str, dict] = {
                "market": "CZ", "year": 2019, "label": "calm"},
     "cz2022": {"file": "electricity_cost_eur_mwh_cz_2022.csv",
                "market": "CZ", "year": 2022, "label": "crisis"},
+    "cz2024": {"file": "electricity_cost_eur_mwh_cz_2024.csv",
+               "market": "CZ", "year": 2024, "label": "high-renewable"},
     "cz2025": {"file": REFERENCE_YEAR_CSV,
                "market": "CZ", "year": 2025, "label": "recent"},
     "de2025": {"file": "electricity_cost_eur_mwh_de_2025.csv",

@@ -432,6 +432,186 @@ def _market_from(area: str, filename: str) -> str | None:
 # mode 2 — OTE-CR exports (one row per day, 24 hourly columns)
 # ---------------------------------------------------------------------------
 
+def parse_ote_annual_dir(d: Path) -> dict[tuple[str, int], list[tuple[date, int, float]]]:
+    """OTE-CR *Annual market report* workbooks -- the 'DAM' sheet.
+
+    A different animal from the wide yearly export parse_ote_dir handles. The
+    annual report is a 20-odd sheet workbook covering the whole market
+    (imbalances, reserves, exports, intraday); the day-ahead auction lives on
+    one sheet called 'DAM', in LONG form -- one row per delivered hour, with the
+    header on row 6.
+
+    THREE THINGS THAT WILL BITE ANYONE WRITING THIS BY HAND, all met in the real
+    files and all handled here:
+
+    1. THE PRICE COLUMN MOVES. 2019 has no 'Saldo DM' column, so its EUR price
+       sits at index 7; 2022 and 2024 have it and theirs sits at 8. Columns are
+       therefore located by NAME, never by position.
+
+    2. .xls STORES DATES AS EXCEL SERIALS. 2019 and 2022 ship as legacy .xls and
+       their Day column reads 43466.0, not a date. 2024 ships as .xlsx and gives
+       a real datetime. Both are handled; xlrd is imported lazily because it is
+       not a dependency of this package.
+
+    3. THE FILE IS ALREADY IN LOCAL CLOCK TIME, DST AND ALL. The spring day
+       carries 23 rows and the autumn day 25, labelled hour 1..23 and 1..25 --
+       exactly the shape of the reference year that ships with the repository.
+       So the rows are written through UNCHANGED and the repair is left to
+       lib.prices.load_year_csv, which every year in this campaign already goes
+       through. Repairing here as well would mean two implementations of one
+       calendar rule, and the day they disagree is the day two market-years stop
+       being comparable.
+
+    The EUR price is taken as published. It is NOT derived from the CZK column:
+    OTE settles the auction in EUR and converts to CZK at the CNB rate, so EUR
+    is the primary figure and CZK the derived one. The two are cross-checked
+    (EUR x rate == CZK) as an integrity test rather than used as a fallback --
+    see validate_ote_annual.
+    """
+    import re as _re
+    store: dict[tuple[str, int], list[tuple[date, int, float]]] = {}
+    files = sorted(p for p in d.rglob("*")
+                   if p.is_file() and p.suffix.lower() in (".xls", ".xlsx", ".xlsm"))
+    if not files:
+        report(FAIL, "ote-annual input", f"no XLS/XLSX under {d}")
+        return store
+
+    def _find(hdr: list, *needles: str) -> int | None:
+        for i, h in enumerate(hdr):
+            t = _re.sub(r"\s+", " ", str(h or "")).lower()
+            if all(n in t for n in needles):
+                return i
+        return None
+
+    for f in files:
+        try:
+            hdr, body, to_date = _open_dam(f)
+        except BuildError as exc:
+            report(WARN, f"ote-annual {f.name}", str(exc))
+            continue
+        i_h = _find(hdr, "hour")
+        i_e = _find(hdr, "marginal", "eur")
+        i_c = _find(hdr, "marginal", "czk")
+        i_r = _find(hdr, "rate")
+        if i_h is None or i_e is None:
+            report(FAIL, f"ote-annual {f.name}",
+                   "no 'Hour' or 'Marginal price ... (EUR/MWh)' column on the "
+                   "DAM sheet; is this an Annual market report?")
+            continue
+        rows, skipped, xerr = [], 0, 0.0
+        for raw in body:
+            dt = to_date(raw[0])
+            if dt is None:
+                continue
+            try:
+                hour = int(float(raw[i_h]))
+                eur = float(raw[i_e])
+            except (TypeError, ValueError, IndexError):
+                skipped += 1
+                continue
+            if i_c is not None and i_r is not None:
+                try:
+                    xerr = max(xerr, abs(eur * float(raw[i_r]) - float(raw[i_c])))
+                except (TypeError, ValueError, IndexError):
+                    pass
+            rows.append((dt, hour, eur))
+        if not rows:
+            report(FAIL, f"ote-annual {f.name}", "DAM sheet parsed to zero rows")
+            continue
+        year = rows[0][0].year
+        if skipped:
+            report(WARN, f"ote-annual {f.name}",
+                   f"{skipped} row(s) had an unparseable hour or price")
+        # The cross-check is the reason to prefer this source over a scraped
+        # price list: the workbook carries the same number twice, in two
+        # currencies, with the rate that links them.
+        if i_c is not None and i_r is not None:
+            if xerr > 0.01:
+                report(FAIL, f"ote-annual {f.name}",
+                       f"EUR x CNB rate disagrees with the CZK column by up to "
+                       f"{xerr:.4f}; the sheet is not internally consistent")
+            else:
+                report(OK, f"ote-annual {year}",
+                       f"EUR x rate == CZK to {xerr:.4f} over {len(rows)} rows")
+        store[("CZ", year)] = rows
+        log(f"   {f.name}: DAM sheet, {len(rows)} hours, EUR column at index "
+            f"{i_e} (located by name)")
+    return store
+
+
+def _open_dam(path: Path):
+    """Return (header row 6, body rows, date converter) for the DAM sheet."""
+    if path.suffix.lower() in (".xlsx", ".xlsm"):
+        try:
+            import openpyxl
+        except ImportError as exc:
+            raise BuildError("openpyxl is needed to read .xlsx; "
+                             "pip install openpyxl") from exc
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        if "DAM" not in wb.sheetnames:
+            raise BuildError(f"no 'DAM' sheet (found: {', '.join(wb.sheetnames[:8])})")
+        rows = list(wb["DAM"].iter_rows(values_only=True))
+        if len(rows) < 7:
+            raise BuildError("DAM sheet is too short to hold a header at row 6")
+        hdr = [("" if c is None else str(c)) for c in rows[5]]
+        return hdr, rows[6:], (lambda v: v.date() if hasattr(v, "date") else None)
+
+    try:
+        import xlrd
+    except ImportError as exc:
+        raise BuildError(
+            "xlrd is needed to read the legacy .xls annual reports "
+            "(pip install 'xlrd>=2.0' -- note xlrd 2.x dropped .xlsx support, "
+            "which is fine here because openpyxl covers that). Alternatively "
+            "open the workbook and save the DAM sheet as .xlsx.") from exc
+    wb = xlrd.open_workbook(str(path))
+    if "DAM" not in wb.sheet_names():
+        raise BuildError(f"no 'DAM' sheet (found: {', '.join(wb.sheet_names()[:8])})")
+    ws = wb.sheet_by_name("DAM")
+    dm = wb.datemode
+    hdr = [str(ws.cell_value(5, c)) for c in range(ws.ncols)]
+    body = [[ws.cell_value(r, c) for c in range(ws.ncols)]
+            for r in range(6, ws.nrows)]
+
+    def to_date(v):
+        if v in ("", None):
+            return None
+        try:
+            import xlrd as _x
+            return datetime(*_x.xldate_as_tuple(float(v), dm)).date()
+        except (TypeError, ValueError):
+            return None
+    return hdr, body, to_date
+
+
+def write_day_rows(path: Path, rows: list[tuple[date, int, float]]) -> None:
+    """Write day,hour,cost preserving the source's own day lengths.
+
+    write_year_csv() assumes 24 hours per day and derives the date by counting;
+    that is right for a source normalised to UTC, and wrong for this one, where
+    a 23-hour and a 25-hour day are the correct local-time representation. Hours
+    are renumbered 1..N within each day so the column stays a sequence rather
+    than inheriting whatever labelling the workbook used.
+
+    The date format matches the reference year byte for byte -- '1/1/2019', no
+    leading zeros -- so the four market-year files are visibly one format.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    by_day: dict[date, list[float]] = {}
+    order: list[date] = []
+    for d_, _h, v in rows:
+        if d_ not in by_day:
+            by_day[d_] = []
+            order.append(d_)
+        by_day[d_].append(v)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh, lineterminator="\n")
+        w.writerow(["day", "hour", "cost"])
+        for d_ in order:
+            for i, v in enumerate(by_day[d_], start=1):
+                w.writerow([f"{d_.day}/{d_.month}/{d_.year}", i, _fmt_cost(v)])
+
+
 def parse_ote_dir(d: Path, market: str | None, year: int | None
                   ) -> dict[tuple[str, int], Collected]:
     """OTE yearly reports: a wide table, one row per day, hours across columns.
@@ -760,6 +940,45 @@ def write_year_csv(path: Path, year: int, values: list[float]) -> None:
             w.writerow([d.strftime("%d/%m/%Y"), i % 24 + 1, _fmt_cost(v)])
 
 
+def cmd_build_annual(annual: dict[tuple[str, int], list[tuple[date, int, float]]],
+                     raw: Path, force: bool) -> int:
+    """Write one market-year CSV per parsed workbook, then validate it.
+
+    Validation is deliberately the SAME function the --check path uses: a file
+    written here and a file found on disk are held to one standard, so a source
+    that produces something subtly different from the reference year is caught
+    at the moment it is created rather than four days into a campaign.
+    """
+    rc = 0
+    for (market, year), rows in sorted(annual.items()):
+        key = design_key_for(market, year)
+        if key is None:
+            report(WARN, f"{market} {year}",
+                   f"parsed but not in design.REAL_MARKET_YEARS -- add an entry "
+                   f"for it, or the campaign will not use it. Nothing written.")
+            continue
+        out = raw / design.REAL_MARKET_YEARS[key]["file"]
+        if out.exists() and not force:
+            report(SKIP, key, f"{out.name} already exists (use --force)")
+            continue
+        rows = sorted(rows, key=lambda t: (t[0], t[1]))
+        write_day_rows(out, rows)
+        report(OK, key, f"wrote {out.name} ({len(rows)} hours)")
+        vals, problems = load_and_check(out)
+        for pr in problems[:3]:
+            report(WARN, f"{key} file", pr)
+        if not vals:
+            try:
+                vals = load_year_csv(out)
+            except (OSError, ValueError) as exc:
+                report(FAIL, key, f"unreadable after writing: {exc}")
+                rc = 1
+                continue
+        d = price_descriptors(vals)
+        log(desc_row(key, design.REAL_MARKET_YEARS[key]["label"], len(vals), d))
+    return rc
+
+
 def design_key_for(market: str, year: int) -> str | None:
     for key, spec in design.REAL_MARKET_YEARS.items():
         if spec["market"] == market and spec["year"] == year:
@@ -815,6 +1034,18 @@ def check_label_consistency(desc: dict[str, dict]) -> None:
                "calm < crisis on both sd and mean intra-day spread")
 
 
+def _is_last_sunday(d: date, month: int) -> bool:
+    """True on the last Sunday of `month` -- the European clock-change dates.
+
+    Written out rather than hard-coding the six dates of the four years in the
+    design: the campaign is meant to accept a market-year nobody has thought of
+    yet, and a hard-coded list would silently start flagging it.
+    """
+    if d.month != month or d.weekday() != 6:
+        return False
+    return (d + timedelta(days=7)).month != month
+
+
 def load_and_check(path: Path) -> tuple[list[float], list[str]]:
     """Re-read a written file exactly as the pipeline will, and confirm it is
     already clean: 24 rows per day, hours 0..23, no empty cost. If any of this
@@ -864,9 +1095,29 @@ def load_and_check(path: Path) -> tuple[list[float], list[str]]:
                 problems.append(f"row {i+2}: unparseable cost '{row['cost']}'")
                 break
             vals.append(c)
-    bad_days = [d for d in order if per_day[d] != 24]
+    # A 23- or 25-hour day is CORRECT on the two European clock-change dates and
+    # is exactly how the reference year that ships with the repository stores
+    # them. Flagging it would train the reader to ignore this check, so the day
+    # length is validated against the calendar instead: 23 hours on the last
+    # Sunday of March, 25 on the last Sunday of October, 24 everywhere else.
+    bad_days = []
+    for d in order:
+        n = per_day[d]
+        if n == 24:
+            continue
+        try:
+            dt = datetime.strptime(d, "%d/%m/%Y").date()
+        except ValueError:
+            bad_days.append(f"{d} ({n} rows, unparseable date)")
+            continue
+        if n == 23 and _is_last_sunday(dt, 3):
+            continue
+        if n == 25 and _is_last_sunday(dt, 10):
+            continue
+        bad_days.append(f"{d} ({n} rows)")
     if bad_days:
-        problems.append(f"{len(bad_days)} day(s) without 24 rows, e.g. {bad_days[:3]}")
+        problems.append(f"{len(bad_days)} day(s) with an unexplained row count, "
+                        f"e.g. {bad_days[:3]}")
     if vals:
         y = datetime.strptime(order[0], "%d/%m/%Y").year
         if len(vals) != _expected_hours(y):
@@ -1064,6 +1315,9 @@ def main() -> int:
                      help="directory of ENTSO-E Day-ahead Prices exports")
     src.add_argument("--from-ote", type=Path, metavar="DIR",
                      help="directory of OTE-CR day-ahead exports (XLSX/CSV)")
+    src.add_argument("--from-ote-annual", type=Path, metavar="DIR",
+                     help="directory of OTE-CR *Annual market report* workbooks "
+                          "(reads the 'DAM' sheet; .xls and .xlsx both work)")
     src.add_argument("--from-csv", type=Path, metavar="FILE",
                      help="any CSV with a timestamp column and a price column")
     ap.add_argument("--market", choices=MARKETS,
@@ -1086,7 +1340,8 @@ def main() -> int:
 
     if args.check:
         rc = cmd_check(raw)
-    elif not (args.from_entsoe or args.from_ote or args.from_csv):
+    elif not (args.from_entsoe or args.from_ote or args.from_ote_annual
+              or args.from_csv):
         # Deliberately exit 0: "no data yet" is a normal state of a fresh
         # checkout, not a failure. run_all.sh must not stop here. Nothing is
         # written either -- the report is a validation artefact, and an
@@ -1096,6 +1351,7 @@ def main() -> int:
     else:
         store: dict[tuple[str, int], Collected] = {}
         bad = False
+        rc, handled_annual = 0, False
         if args.from_entsoe:
             if args.from_entsoe.is_dir():
                 _merge(store, parse_entsoe_dir(args.from_entsoe, args.market, args.year))
@@ -1107,6 +1363,23 @@ def main() -> int:
                 _merge(store, parse_ote_dir(args.from_ote, args.market, args.year))
             else:
                 report(FAIL, "--from-ote", f"{args.from_ote} is not a directory")
+                bad = True
+        if args.from_ote_annual:
+            # Handled on its own path rather than merged into `store`: this
+            # source is already in local clock time with real 23- and 25-hour
+            # days, and pushing it through the timestamp/gap-fill pipeline the
+            # other modes use would normalise away exactly the structure the
+            # reference year has. See parse_ote_annual_dir's docstring.
+            if args.from_ote_annual.is_dir():
+                annual = parse_ote_annual_dir(args.from_ote_annual)
+                if annual:
+                    rc = cmd_build_annual(annual, raw, args.force) or rc
+                    handled_annual = True
+                else:
+                    bad = True
+            else:
+                report(FAIL, "--from-ote-annual",
+                       f"{args.from_ote_annual} is not a directory")
                 bad = True
         if args.from_csv:
             if not args.market or not args.year:
@@ -1129,10 +1402,11 @@ def main() -> int:
         if bad and not store:
             rc = 1
         elif not store:
-            report(FAIL, "input", "nothing parsed from the given input")
-            rc = 1
+            if not handled_annual:
+                report(FAIL, "input", "nothing parsed from the given input")
+                rc = 1
         else:
-            rc = cmd_build(store, raw, args.force)
+            rc = cmd_build(store, raw, args.force) or rc
 
     log("")
     fails = [w for w in _warnings if w.startswith("[ FAIL")]
