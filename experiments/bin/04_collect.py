@@ -34,7 +34,7 @@ import json
 import math
 import os
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from itertools import pairwise
 from pathlib import Path
 
@@ -69,6 +69,41 @@ def battery_stats(levels: list[float], capacity: float) -> dict:
     return {"batt_charge": round(chg, 6), "batt_discharge": round(dis, 6),
             "batt_efc": round(efc, 6), "batt_peak": round(peak, 6),
             "batt_used": int(dis > TOL_ABS)}
+
+
+def _failure_breakdown(rows: list[dict], n_meta: int) -> list[str]:
+    """A first cut at WHERE the failures are, inline in the integrity report.
+
+    The pre-registration says a failure rate above 2 % must be investigated
+    before anything is interpreted. Printing only the rate leaves the reader
+    with an instruction and no instrument, so the two or three cells carrying
+    the failures are named right here. `bin/04b_diagnose_failures.py` does the
+    full job -- stderr messages, paired-comparison damage, what to re-run.
+    """
+    bad = [r for r in rows if r.get("status") not in ("ok", None, "")]
+    if not bad:
+        return []
+    out = ["", "  failures by kind:"]
+    for st, n in Counter(r.get("status") for r in bad).most_common():
+        out.append(f"    {str(st):<12s} {n:6d}")
+    for f in ("experiment", "method", "size_class"):
+        att = Counter(str(r.get(f, "")) for r in rows if str(r.get(f, "")) != "")
+        fl = Counter(str(r.get(f, "")) for r in bad if str(r.get(f, "")) != "")
+        if len(att) <= 1 or not fl:
+            continue
+        out.append(f"  failures by {f} (failed / attempted):")
+        for lv in sorted(att, key=lambda x: -(fl.get(x, 0) / max(1, att[x]))):
+            if fl.get(lv):
+                out.append(f"    {lv:<16s} {fl[lv]:6d} / {att[lv]:6d}   "
+                           f"{100*fl[lv]/att[lv]:6.2f} %")
+    rate = 100 * len(bad) / max(1, n_meta)
+    if rate > 2.0:
+        out += ["",
+                f"  *** {rate:.2f} % exceeds the 2 % investigation threshold in",
+                "      PREREGISTRATION.md section 5. Run",
+                "          python3 bin/04b_diagnose_failures.py",
+                "      before interpreting any analysis below. ***"]
+    return out
 
 
 def _flat_percentiles(v: list[float]) -> str:
@@ -272,6 +307,7 @@ def main() -> int:
         f"  parsed successfully    {n_ok}",
         f"  failed / missing       {n_missing}",
         f"  failure rate           {100*n_missing/max(1,n_meta):.2f} %",
+        *_failure_breakdown(rows, n_meta),
         "",
         "  checks:",
     ]
