@@ -74,12 +74,22 @@ def _profile(rho: float, **overrides) -> dict:
 ARCHETYPES: dict[str, dict] = {
     # T1 — the falsification corner. Switching is free and idling costs
     # nothing, so state management is a pure gain and storage competes with a
-    # perfect substitute. If storage still pays here, it is not paying merely
-    # because the machine is inflexible.
+    # near-perfect substitute. If storage still pays here, it is not paying
+    # merely because the machine is inflexible.
+    #
+    # NOTE ON THE DURATIONS. They are 1, not 0. The solver reserves a transition
+    # duration of 0 to mean "this transition does not exist", so a genuinely
+    # instantaneous switch is not expressible; the closest expressible corner is
+    # "free but not instantaneous" — one time unit, zero energy. T1 is therefore
+    # a lower bound on the ideal machine, not the ideal machine itself, which
+    # only strengthens the falsification argument: a still-positive return on
+    # storage at T1 would be at least as positive at a truly instantaneous
+    # machine. Say this in Threats to Validity; do not describe T1 as
+    # "instantaneous" in the paper.
     "T1_ideal": _profile(
         0.00,
-        off_proc={"time": 0, "cost": 0.0}, proc_off={"time": 0, "cost": 0.0},
-        proc_idle={"time": 0, "cost": 0.0}, idle_proc={"time": 0, "cost": 0.0}),
+        off_proc={"time": 1, "cost": 0.0}, proc_off={"time": 1, "cost": 0.0},
+        proc_idle={"time": 1, "cost": 0.0}, idle_proc={"time": 1, "cost": 0.0}),
 
     # T2 — fast electric load (CNC, induction heating). Cheap to stop and
     # start, low standby draw. The plant type most often used to argue that
@@ -147,6 +157,73 @@ RESTART_LEVELS: dict[str, dict] = {
 def grid_profile(rho: float, restart: str) -> dict:
     """One (rho, restart) cell of the orthogonal surface."""
     return _profile(rho, off_proc=dict(RESTART_LEVELS[restart]))
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+# This section exists because of a real failure. The first campaign run lost
+# 918 of 6 786 runs — 13.5 %, every one of them on T1 — to a single solver
+# message: "Machine profile transition durations must be >= 1 (0 is reserved to
+# mean 'no such transition')". The profile was syntactically fine, the runlist
+# was fine, the harness was fine; the numbers were simply outside the solver's
+# domain, and nothing between this file and the compute node checked. Six
+# core-hours of a five-day campaign is a cheap lesson, but only if the check
+# now runs at import, where it costs microseconds and fails before a single
+# instance is generated.
+
+TRANSITION_KEYS = ("off_proc", "proc_off", "proc_idle", "idle_proc")
+
+
+def validate_profile(profile: dict, label: str = "profile") -> None:
+    """Raise if `profile` is outside the solver's accepted domain.
+
+    Mirrors the checks in the C++ `Instance` constructor. Keep the two in step:
+    a check that exists only here will not stop a hand-written command line,
+    and a check that exists only there costs a campaign.
+    """
+    e_proc, e_idle = profile["e_proc"], profile["e_idle"]
+    if e_proc <= 0:
+        raise ValueError(f"{label}: e_proc must be > 0, got {e_proc}")
+    if not 0 <= e_idle <= e_proc:
+        raise ValueError(
+            f"{label}: e_idle must lie in [0, e_proc] = [0, {e_proc}], "
+            f"got {e_idle}. Idling above the processing load is not a machine, "
+            f"it is a typo.")
+    for k in TRANSITION_KEYS:
+        if k not in profile:
+            raise ValueError(f"{label}: missing transition '{k}'")
+        t, c = profile[k]["time"], profile[k]["cost"]
+        if not isinstance(t, int) or t < 1:
+            raise ValueError(
+                f"{label}: transition '{k}' has time={t!r}. Durations must be "
+                f"integers >= 1 — the solver reserves 0 to mean 'no such "
+                f"transition', so a free switch is expressed as time=1, "
+                f"cost=0.0, not time=0.")
+        if c < 0:
+            raise ValueError(
+                f"{label}: transition '{k}' has cost={c}. Negative transition "
+                f"energy would let the schedule earn energy by switching.")
+
+
+def validate_all() -> int:
+    """Validate every profile this file can emit. Returns how many it checked."""
+    n = 0
+    for name, p in ARCHETYPES.items():
+        validate_profile(p, f"ARCHETYPES[{name}]")
+        n += 1
+    for rho in RHO_LEVELS:
+        for restart in RESTART_LEVELS:
+            validate_profile(grid_profile(rho, restart),
+                             f"grid_profile(rho={rho}, restart={restart!r})")
+            n += 1
+    return n
+
+
+# Runs on import. Every entry point — runlist generation, preflight, analysis,
+# an interactive `python3 -c 'import config.machines'` — pays for this check,
+# and none of them can skip it.
+validate_all()
 
 
 # ---------------------------------------------------------------------------

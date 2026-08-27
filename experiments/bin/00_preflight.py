@@ -9,6 +9,8 @@ Checks, in order of how expensive the mistake is if you skip it:
      run needs this; discovering it after 40 hours is the worst outcome here)
   3. the solver actually completes one real instance end-to-end and produces a
      JSON with the fields 04_collect.py expects
+  3b. every machine profile the design can emit is accepted by that binary —
+     a profile the solver rejects kills 100 % of its cells, not a few percent
   4. python version and numpy
   5. cores, RAM and free disk against the configured design
   6. PSPLIB source structures present for the configured size classes
@@ -191,6 +193,68 @@ def main() -> int:
         else:
             report(WARN, "end-to-end solve",
                    "no instances yet — run 01_build_instances.py, then re-run preflight")
+
+    # 3b every machine profile, through the real solver -------------------
+    # THE FAILURE THIS EXISTS FOR. The first campaign lost 918 runs — 13.5 %,
+    # all of them on T1_ideal — because that profile set its transition
+    # durations to 0 and the solver reserves 0 to mean "no such transition".
+    # config/machines.py now refuses such a profile at import, but that check is
+    # a MIRROR of the solver's domain and mirrors drift. This one is not a
+    # mirror: it hands each profile to the actual binary and reads the actual
+    # exit code. Fifteen probes of a few seconds each, once per machine, against
+    # a factor level silently killing a third of an experiment.
+    if not args.skip_solve and s.exists() and os.access(s, os.X_OK):
+        from config import machines as M
+
+        man = DATA / "manifest_instances.csv"
+        inst = None
+        if man.exists():
+            import csv
+            rows = list(csv.DictReader(man.open()))
+            small = sorted(rows, key=lambda r: int(r["n"]))
+            inst = DATA / small[0]["path"] if small else None
+
+        if not (inst and inst.exists()):
+            report(WARN, "machine profiles (solver)",
+                   "no instances yet — re-run preflight after "
+                   "01_build_instances.py; until then the profiles are only "
+                   "checked against config/machines.py's own rules")
+        else:
+            probes = [(f"ARCHETYPES[{n}]", p) for n, p in M.ARCHETYPES.items()]
+            probes += [(f"grid(rho={r}, {k})", M.grid_profile(r, k))
+                       for r in M.RHO_LEVELS for k in M.RESTART_LEVELS]
+            rejected = []
+            with tempfile.TemporaryDirectory() as td:
+                for label, prof in probes:
+                    out = Path(td) / "probe.json"
+                    cmd = ([str(s), "-i", str(inst), "-m", "H1", "-b", "8",
+                            "--tl", "10", "--thl", "1", "-o", str(out)]
+                           + M.solver_args(prof))
+                    try:
+                        p = subprocess.run(cmd, capture_output=True, text=True,
+                                           timeout=90)
+                        if p.returncode != 0:
+                            tail = (p.stderr or p.stdout or "").strip()
+                            last = tail.splitlines()[-1][:140] if tail else \
+                                f"exit {p.returncode}, no output"
+                            rejected.append((label, last))
+                    except subprocess.TimeoutExpired:
+                        pass          # slow is not the same as invalid
+                    except Exception as exc:
+                        rejected.append((label, f"{type(exc).__name__}: {exc}"))
+            if rejected:
+                for label, why in rejected:
+                    report(FAIL, f"machine profile {label}", why)
+                report(FAIL, "machine profiles (solver)",
+                       f"{len(rejected)} of {len(probes)} profile(s) rejected by "
+                       f"the solver. Every run at those levels will fail "
+                       f"deterministically — fix config/machines.py before "
+                       f"generating the runlist, not after.")
+            else:
+                report(OK, "machine profiles (solver)",
+                       f"all {len(probes)} accepted "
+                       f"({len(M.ARCHETYPES)} archetypes + "
+                       f"{len(probes)-len(M.ARCHETYPES)} grid cells)")
 
     # 4 python ------------------------------------------------------------
     if sys.version_info < (3, 9):

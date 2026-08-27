@@ -75,6 +75,26 @@ def main() -> int:
         print("mock solver 0.0.0")
         return 0
 
+    # --- domain checks, mirroring the real solver ---------------------------
+    # A mock that accepts arguments the real binary refuses is worse than no
+    # mock: it certifies a runlist that will fail on the cluster. This exact
+    # gap cost 918 runs — the mock's `max(1, off_proc_time)` below silently
+    # rescued a zero duration that the C++ Instance constructor rejects. If you
+    # add a flag to the real solver's validation, add it here the same day.
+    for flag, val in (("--off-proc-time", a.off_proc_time),
+                      ("--proc-off-time", a.proc_off_time),
+                      ("--proc-idle-time", a.proc_idle_time),
+                      ("--idle-proc-time", a.idle_proc_time)):
+        if val < 1:
+            print("Machine profile transition durations must be >= 1 "
+                  "(0 is reserved to mean 'no such transition'). "
+                  f"{flag}={val}", file=sys.stderr)
+            return 2
+    if a.e_proc <= 0 or not 0 <= a.e_idle <= a.e_proc:
+        print(f"Machine profile invalid: need 0 <= e_idle <= e_proc, "
+              f"got e_idle={a.e_idle}, e_proc={a.e_proc}", file=sys.stderr)
+        return 2
+
     inst = read_extended(Path(a.inp))
     rng = random.Random(a.seed * 7919 + len(inst.tasks))
     es = earliest_starts(inst)
