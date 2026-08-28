@@ -101,6 +101,57 @@ def check_pipeline_imports() -> None:
            f"and will fail after every solver hour has been spent.")
 
 
+def check_checkout_complete() -> None:
+    """Warn about files that exist here but never travelled through git.
+
+    THIS HAS NOW COST TWICE. First a pilot that ran 1 h 54 and died at the
+    analysis because `analysis/managerial.py` was untracked and `git push` left
+    it behind. Then a diagnostic script that was "deployed" to the server while
+    the server kept running the previous version, so a newly added section
+    simply never appeared in the output and the absence looked like a result.
+
+    Both are the same failure: a file exists on the machine it was written on,
+    is absent from the machine that runs it, and nothing says so. `git status`
+    knows. Nobody runs `git status`.
+
+    `--no-optional-locks` matters: preflight is read-only by contract, and a
+    plain `git status` writes `.git/index.lock`, which will collide with an
+    editor or another shell working in the same clone.
+    """
+    try:
+        p = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(ROOT),
+             "status", "--porcelain"],
+            capture_output=True, text=True, timeout=30)
+    except Exception:
+        report(WARN, "checkout completeness", "git not available; skipped")
+        return
+    if p.returncode != 0:
+        report(WARN, "checkout completeness", "not a git checkout; skipped")
+        return
+
+    untracked, modified = [], []
+    for line in p.stdout.splitlines():
+        code, _, path = line[:2], line[2:3], line[3:]
+        if not path.endswith((".py", ".md", ".tex", ".csv")):
+            continue
+        (untracked if code == "??" else modified).append(path)
+
+    if untracked:
+        report(WARN, "checkout completeness",
+               f"{len(untracked)} file(s) exist here but are NOT in git and "
+               f"will not reach any other machine: {untracked[:6]}"
+               f"{' …' if len(untracked) > 6 else ''}. If this is the machine "
+               f"you push FROM, `git add` them now.")
+    if modified:
+        report(WARN, "checkout completeness",
+               f"{len(modified)} tracked file(s) modified and uncommitted: "
+               f"{modified[:6]}{' …' if len(modified) > 6 else ''}. Whatever "
+               f"runs on the other machine is not what you are reading here.")
+    if not untracked and not modified:
+        report(OK, "checkout completeness", "working tree clean")
+
+
 def report(status: str, name: str, detail: str = "") -> None:
     global _hard_fail
     if status == FAIL:
@@ -122,6 +173,7 @@ def main() -> int:
     # analysis modules never arrived, and the campaign would then run to
     # completion before discovering it.
     check_pipeline_imports()
+    check_checkout_complete()
 
     # 1 solver ------------------------------------------------------------
     s = args.solver

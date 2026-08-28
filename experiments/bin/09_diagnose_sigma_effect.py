@@ -73,10 +73,37 @@ VALUES = [
 
 def load() -> list[dict]:
     p = DATA / "results.csv"
-    if not p.exists():
-        print(f"FATAL: {p} not found — run 04_collect.py first", file=sys.stderr)
-        sys.exit(1)
-    return list(csv.DictReader(p.open()))
+    if p.exists():
+        return list(csv.DictReader(p.open()))
+
+    # "run 04_collect.py first" is the right advice exactly once. When the data
+    # directory is simply not the one that holds the campaign -- a fresh shell
+    # that lost the export, a login node instead of the compute node, a
+    # relative RCPSP_EXP_DATA resolved against a different cwd -- that advice
+    # sends you to re-run a stage that will fail for the same reason. So say
+    # what was actually looked at.
+    print(f"FATAL: {p} not found", file=sys.stderr)
+    print(f"  RCPSP_EXP_DATA = {os.environ.get('RCPSP_EXP_DATA', '(unset)')}",
+          file=sys.stderr)
+    print(f"  resolved to      {DATA.resolve()}", file=sys.stderr)
+    if DATA.exists():
+        kids = sorted(x.name for x in DATA.iterdir())[:12]
+        print(f"  that directory exists and contains: "
+              f"{kids if kids else '(empty)'}", file=sys.stderr)
+    else:
+        print("  that directory DOES NOT EXIST", file=sys.stderr)
+    here = [c for c in (ROOT / "data", ROOT.parent / "data_v2",
+                        Path.home() / "data_v2")
+            if (c / "manifest_instances.csv").exists()]
+    if here:
+        print("\n  a campaign directory WAS found elsewhere:", file=sys.stderr)
+        for c in here:
+            print(f"    export RCPSP_EXP_DATA={c.resolve()}", file=sys.stderr)
+    else:
+        print("\n  no manifest_instances.csv in the usual places either. Locate "
+              "it with:\n    find $HOME -maxdepth 4 -name manifest_instances.csv "
+              "2>/dev/null", file=sys.stderr)
+    sys.exit(1)
 
 
 def describe(x: np.ndarray) -> str:
@@ -277,13 +304,21 @@ def main() -> int:
         L.append(f"  value = {value},  contrast {a} vs {b}")
         L.append(f"    {'stratum':<34s} {'n':>5s} {'zeros':>7s} "
                  f"{'mean':>10s} {'sd':>9s}")
+        # Placebo strata are EXCLUDED from the pooled figure. A stratum whose
+        # SD is structurally zero (flat tariff: no arbitrage exists) is not a
+        # low-variance sample of the same population, it is a different
+        # population. Pooling it in drags the planning sigma down and
+        # under-powers the design -- on the first campaign it turned 30.2 into
+        # 24.6, a 19 % under-statement of what has to be resolved.
         pooled_within, tot_n = 0.0, 0
         for name, x in sorted(by_stratum.items()):
             z = int(np.sum(np.abs(x) < 1e-9))
             sd = float(np.std(x, ddof=1)) if x.size > 1 else float("nan")
+            placebo = math.isfinite(sd) and sd < 1e-6 and abs(x.mean()) < 1e-6
             L.append(f"    {name:<34s} {x.size:5d} {100*z/x.size:6.1f}% "
-                     f"{x.mean():+10.3f} {sd:9.3f}")
-            if x.size > 1 and math.isfinite(sd):
+                     f"{x.mean():+10.3f} {sd:9.3f}"
+                     + ("   [placebo, excluded]" if placebo else ""))
+            if x.size > 1 and math.isfinite(sd) and not placebo:
                 pooled_within += (x.size - 1) * sd ** 2
                 tot_n += x.size - 1
         if tot_n:
@@ -291,8 +326,8 @@ def main() -> int:
             allx = np.concatenate(list(by_stratum.values()))
             sd_all = float(np.std(allx, ddof=1))
             L += ["",
-                  f"    sd pooled WITHIN strata   {sd_within:9.3f}",
-                  f"    sd across the whole set   {sd_all:9.3f}",
+                  f"    sd pooled WITHIN treated strata {sd_within:9.3f}",
+                  f"    sd across the whole set         {sd_all:9.3f}",
                   f"    between-strata share      "
                   f"{100*max(0.0, 1 - sd_within**2/sd_all**2):8.1f} % of the variance"]
             if sd_all > 0 and 1 - sd_within ** 2 / sd_all ** 2 > 0.25:

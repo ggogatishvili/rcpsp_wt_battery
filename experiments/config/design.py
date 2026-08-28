@@ -119,10 +119,19 @@ _PROFILES: dict[str, _Profile] = {
               # double the pilot to buy resolution nobody reads at this scale.
               "m1_archetypes": ["T1_ideal", "T3_baseline", "T5_continuous"],
               "synth_spreads": [1.0, 15.0, 80.0], "synth_noise": [0.01, 0.25]},
+    # spot_windows was 2 until MR measured what two windows actually are. The
+    # two windows of `spot_midvol` returned mean effects of -38.9 % and -56.3 %
+    # with SDs of 14.3 and 40.2 -- a factor 2.8 in dispersion between two draws
+    # of the SAME regime. With two windows there is no way to separate "this
+    # regime has a large effect" from "this window does": the regime factor and
+    # the window are confounded with one degree of freedom, and M2's entire
+    # claim is a comparison between regimes. Three windows makes the window a
+    # random factor with an estimable variance component, which is what lets
+    # M2 say anything about regimes rather than about the sample it drew.
     "full":  {"valid_reps": 5, "core_reps": 2, "scale_reps": 5,
               "core_size_classes": [2, 4], "scale_size_classes": [1, 2, 4, 8, 16],
               "valid_size_classes": [1, 2, 4], "seeds": 5, "m2_shops": 24,
-              "spot_windows": 2, "real_windows": 5, "tl_ga": 300,
+              "spot_windows": 3, "real_windows": 5, "tl_ga": 300,
               "mr_shops": 12, "mr_seeds": 12,
               "m1_archetypes": None, "synth_spreads": None, "synth_noise": None},
 }
@@ -578,12 +587,35 @@ MR_ARCHETYPES = [machines.BEST_CASE_ARCHETYPE, machines.BASELINE_ARCHETYPE,
 # The smallest effect the campaign is meant to resolve, as a percentage of the
 # naive energy bill (the norm_scale denominator used throughout).
 #
-# 0.5 pp is not arbitrary: v1's pre-registration used the same figure as the
-# admissibility threshold for the flat-tariff resolution floor, and effects
-# below it were already going to be reported as unresolvable. Setting the
-# replication target to the same number keeps one definition of "too small to
-# matter" instead of two.
-MDE_TARGET_PCT = 0.5
+# REVISED AFTER MR, AND THE REVISION IS THE POINT OF MR. The original value was
+# 0.5 pp, inherited from v1, where it was the admissibility threshold for the
+# flat-tariff resolution floor. Reusing it as a replication target kept one
+# definition of "too small to matter" instead of two, which was tidy and wrong:
+# it was chosen before any variance had been measured.
+#
+# What MR then measured:
+#
+#   effect of storage (b=1 vs b=0)   -38.9 % to -56.3 % of the naive bill
+#   sigma_effect, within spot strata   30.2 % (40.2 % on the worst window)
+#   sigma_seed (energy)                 3.6-4.2 %
+#
+# A target of 0.5 pp asks the campaign to resolve an effect two orders of
+# magnitude below the phenomenon, against an instance-to-instance spread of
+# 30 pp. No seed count reaches it -- which is exactly what MR reported, as
+# `k = inf` and `MORE INSTANCES` on every experiment. That verdict was
+# arithmetic about the target, not a finding about the design.
+#
+# 5.0 pp is set from the decision the paper actually needs: distinguish the
+# machine archetypes from one another, not merely show that storage pays. At
+# sigma = 30.2 and the post-revision instance counts, M0, M1, M2, M3 and M5
+# clear it; M4 does not, and must declare its own resolvable effect rather than
+# pretend to this one. bin/09_diagnose_sigma_effect.py section D prints the
+# per-experiment figures -- quote those in the paper, not this constant.
+#
+# WHEN TO CHANGE IT AGAIN: only from a re-measured sigma, and record the
+# reason in PREREGISTRATION.md. Changing it to make a verdict table look
+# better is the failure mode this comment exists to prevent.
+MDE_TARGET_PCT = 5.0
 
 # Power convention for required_seeds(): two-sided alpha = 5 %, power = 80 %.
 # (z_{0.975} + z_{0.80}) = 1.96 + 0.84 = 2.80.

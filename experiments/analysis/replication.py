@@ -396,11 +396,150 @@ def paired_effect_sd(rows: list[dict], factor: str, level_a, level_b,
             "rho_hi": rho_hi, "note": note}
 
 
+def stratified_effect_sd(rows: list[dict], factor: str, level_a, level_b,
+                         k: int, value: str = "objective",
+                         strata_cols=("tariff_family", "price_regime",
+                                      "price_name")) -> dict:
+    """The effect SD to PLAN against, computed within tariff strata.
+
+    WHY THIS IS NOT `paired_effect_sd` OVER EVERYTHING. MR pools every tariff
+    into one variance, and one of those tariffs is `flat` -- the falsification
+    control, where no arbitrage exists and the paired difference is exactly
+    zero on every cell. Pooling a structurally-zero population with a treated
+    one does not estimate the variability of an effect; it estimates the
+    DISTANCE between a group that has one and a group that does not. On the
+    first measured campaign that distance was 47 % of the total variance, and
+    it drove `sigma_effect` to 95 % and every seed count to infinity.
+
+    Two numbers come back, and they answer different questions:
+
+      sd_within   pooled across the treated strata only. What the campaign
+                  must resolve if the tariff strata are analysed separately,
+                  which is how M1-M5 report.
+
+      sd_worst    the largest single stratum. What to plan against when the
+                  strata are heteroscedastic, because a design sized on the
+                  pooled figure under-powers the noisiest stratum -- and the
+                  noisiest stratum is usually the interesting one.
+
+    A stratum counts as placebo, and is excluded from both, when its SD is
+    negligible AND its mean is ~0. That is a statement about the tariff, not a
+    convenient filter: `flat` cannot produce arbitrage by construction, so a
+    non-zero effect there would be a bug, and the analysis says so elsewhere.
+    """
+    sc = _scales(rows)
+    cols = [c for c in strata_cols if any(r.get(c) for r in rows)]
+    other = [c for c in ("instance", "battery_ratio", "machine_profile",
+                         "state_policy", "time_limit", "price_name")
+             if c != factor]
+    cells: dict[tuple, dict] = defaultdict(lambda: defaultdict(list))
+    stratum: dict[tuple, str] = {}
+    for r in rows:
+        s = sc.get(r.get("instance", ""), float("nan"))
+        v = _num(r, value)
+        if not (math.isfinite(s) and s > 0 and math.isfinite(v)):
+            continue
+        key = tuple(str(r.get(c, "")) for c in other)
+        cells[key][str(r.get(factor, ""))].append(100.0 * v / s)
+        stratum.setdefault(key, " / ".join(str(r.get(c, "")) for c in cols)
+                           or "(all)")
+
+    by: dict[str, list] = defaultdict(list)
+    for key, lv in cells.items():
+        a, b = lv.get(str(level_a)), lv.get(str(level_b))
+        if a and b:
+            by[stratum[key]].append(float(np.mean(a) - np.mean(b)))
+
+    out, treated, placebo = [], [], []
+    for name, xs in sorted(by.items()):
+        if len(xs) < 2:
+            continue
+        x = np.asarray(xs)
+        sd = float(np.std(x, ddof=1))
+        mean = float(x.mean())
+        is_placebo = sd < 1e-6 and abs(mean) < 1e-6
+        rec = {"stratum": name, "n": int(x.size), "mean": mean, "sd": sd,
+               "zeros": int(np.sum(np.abs(x) < 1e-9)), "placebo": is_placebo}
+        out.append(rec)
+        (placebo if is_placebo else treated).append(rec)
+
+    if not treated:
+        return {"strata": out, "sd_within": float("nan"),
+                "sd_worst": float("nan"), "n_placebo": len(placebo),
+                "note": "no treated stratum found"}
+    num = sum((r["n"] - 1) * r["sd"] ** 2 for r in treated)
+    den = sum(r["n"] - 1 for r in treated)
+    return {"strata": out, "n_placebo": len(placebo),
+            "sd_within": math.sqrt(num / den) if den else float("nan"),
+            "sd_worst": max(r["sd"] for r in treated),
+            "worst_stratum": max(treated, key=lambda r: r["sd"])["stratum"],
+            "note": ""}
+
+
+def window_homogeneity(rows: list[dict], factor: str, level_a, level_b,
+                       value: str = "objective") -> list[str]:
+    """Are two windows of the same tariff regime interchangeable?
+
+    THE DESIGN QUESTION THIS ANSWERS. A regime (`spot_midvol`) is materialised
+    as several sampled windows of the reference year. The campaign treats the
+    REGIME as the factor, which is only meaningful if windows within a regime
+    behave alike. On the first measured campaign they did not: two windows of
+    spot_midvol gave mean effects of -38.9 % and -56.3 % with SDs of 14.3 and
+    40.2. With two windows per regime that heterogeneity is inseparable from
+    the regime effect itself -- which is why the design now materialises three.
+
+    Reported, never silently corrected: if windows within a regime differ more
+    than regimes differ from each other, M2's factor is the window and the
+    paper must say so.
+    """
+    st = stratified_effect_sd(rows, factor, level_a, level_b, k=1, value=value)
+    L = ["  window homogeneity within a tariff regime:", ""]
+    groups: dict[str, list] = defaultdict(list)
+    for r in st["strata"]:
+        if r["placebo"]:
+            continue
+        # "family / regime / series" -> group by regime
+        parts = [p.strip() for p in r["stratum"].split("/")]
+        groups[parts[1] if len(parts) > 2 else r["stratum"]].append(r)
+    any_multi = False
+    for regime, rs in sorted(groups.items()):
+        if len(rs) < 2:
+            continue
+        any_multi = True
+        sds = [r["sd"] for r in rs]
+        means = [r["mean"] for r in rs]
+        L.append(f"    {regime:<20s} {len(rs)} windows   "
+                 f"means {min(means):+8.2f} .. {max(means):+8.2f}   "
+                 f"SDs {min(sds):6.2f} .. {max(sds):6.2f}   "
+                 f"SD ratio {max(sds)/max(1e-9, min(sds)):5.2f}x")
+        if max(sds) / max(1e-9, min(sds)) > 2.0:
+            L.append("      ^ windows of one regime differ by more than 2x in "
+                     "dispersion. The regime is not a homogeneous population;")
+            L.append("        plan against the worst window, and report the "
+                     "window as a random factor rather than a nuisance.")
+    if not any_multi:
+        L.append("    (only one window per regime present — homogeneity is not "
+                 "testable, which is itself the reason to materialise more)")
+    return L + [""]
+
+
 # ---------------------------------------------------------------------------
 # the report
 # ---------------------------------------------------------------------------
 
-def mr(rows: list[dict], out: Path, **kw) -> str:
+def mr(rows: list[dict], out: Path, value: str = "energy_cost",
+       **kw) -> str:
+    """`value` defaults to energy_cost, not objective.
+
+    MR sizes the campaign, and every managerial claim in M1-M5 is about
+    the ENERGY bill. Sizing against `objective` measures energy plus
+    lambda x tardiness against an energy denominator, and on the first
+    measured campaign the two happened to agree -- which is luck, not a
+    reason to keep depending on it. It also mattered in one place: the
+    flat-tariff placebo is exactly zero on energy and only 80 % zero on
+    the objective, because storage reshuffles the schedule without
+    changing the bill. The falsification control is only clean on energy.
+    """
     R = [r for r in rows if r.get("experiment") == "MR"
          and r.get("status", "ok") == "ok" and r.get("method") == "GA"]
     L = [_rule(), "MR - seed replication: how noisy is the GA, and how many "
@@ -423,7 +562,7 @@ def mr(rows: list[dict], out: Path, **kw) -> str:
 
     # ---- 1. how big is sigma_seed -----------------------------------------
     L += _sec("1. sigma_seed: the GA's run-to-run spread")
-    sd_all, df_all, per_cell = sigma_seed(R)
+    sd_all, df_all, per_cell = sigma_seed(R, value=value)
     L.append(f"  pooled over every cell:  sigma_seed = {sd_all:.4f} %   "
              f"(df = {df_all}, {len(per_cell)} cells)")
     if per_cell:
@@ -437,7 +576,7 @@ def mr(rows: list[dict], out: Path, **kw) -> str:
     # so the whole spread is algorithmic.
     flat = [r for r in R if r.get("price_regime") == "flat"]
     if flat:
-        sd_f, df_f, _ = sigma_seed(flat)
+        sd_f, df_f, _ = sigma_seed(flat, value=value)
         L.append(f"  under the FLAT tariff (pure noise, no signal): "
                  f"sigma_seed = {sd_f:.4f} %  (df = {df_f})")
         L.append("    This is the cleanest estimate available: with a constant")
@@ -472,7 +611,7 @@ def mr(rows: list[dict], out: Path, **kw) -> str:
         sds, resid_groups = {}, []
         for lv in levels:
             sub = [r for r in R if str(r.get(factor, "")) == lv]
-            sd_lv, df_lv, cells_lv = sigma_seed(sub)
+            sd_lv, df_lv, cells_lv = sigma_seed(sub, value=value)
             sds[lv] = sd_lv
             # residuals about the cell median, for Brown-Forsythe
             sc = _scales(sub)
@@ -542,7 +681,7 @@ def mr(rows: list[dict], out: Path, **kw) -> str:
     for factor, a, b, label in contrasts:
         # sigma from the two cells being differenced, not the global pool --
         # see paired_effect_sd's docstring for why that matters here.
-        st = paired_effect_sd(R, factor, a, b, k_run)
+        st = paired_effect_sd(R, factor, a, b, k_run, value=value)
         if not math.isfinite(st["sd_observed"]):
             continue
         rho_txt = ("  n/a" if not math.isfinite(st.get("rho_crn", float("nan")))
@@ -604,10 +743,55 @@ def mr(rows: list[dict], out: Path, **kw) -> str:
         L.append("  (MR ran alone, so instance counts come from the design, not "
                  "from the results table.)")
 
-    # The effect SD to plan against: the largest across the contrasts measured,
-    # which is the conservative choice.
-    sd_eff = max([c["sd_effect"] for c in csv_rows
-                  if math.isfinite(c["sd_effect"])] or [float("nan")])
+    # The effect SD to plan against.
+    #
+    # NOT the pooled figure over every tariff. The first measured campaign
+    # pooled the flat-tariff placebo -- where the paired difference is exactly
+    # zero on every cell, by construction -- with the spot strata where it is
+    # -39 % to -56 %. That put 47 % of the "effect variance" into the gap
+    # between a population with an effect and one without, reported
+    # sigma_effect = 95 %, and made every seed count infinite. The quantity the
+    # campaign has to resolve is the spread WITHIN a treated stratum.
+    strat = {}
+    for factor, a, b, label in contrasts:
+        s = stratified_effect_sd(R, factor, a, b, k_run, value=value)
+        if math.isfinite(s.get("sd_worst", float("nan"))):
+            strat[label] = s
+    if strat:
+        # Worst treated stratum across contrasts: the strata are
+        # heteroscedastic (windows of one regime differed 2.8x on the first
+        # campaign), so the pooled figure under-powers the noisiest one.
+        pick = max(strat.values(), key=lambda s: s["sd_worst"])
+        sd_eff = pick["sd_worst"]
+        sd_eff_pooled = pick["sd_within"]
+        L += _sec("3b. EFFECT SD, WITHIN TARIFF STRATA")
+        L += ["  Pooling the flat-tariff placebo with the spot strata does not",
+              "  measure the variability of an effect, it measures the distance",
+              "  between a population that has one and a population that does",
+              "  not. Placebo strata are identified (SD ~ 0 and mean ~ 0) and",
+              "  excluded; what remains is what the campaign must resolve.",
+              ""]
+        for label, s in strat.items():
+            L.append(f"  {label}")
+            for r in s["strata"]:
+                tag = "  [placebo, excluded]" if r["placebo"] else ""
+                L.append(f"    {r['stratum']:<34s} n={r['n']:4d} "
+                         f"zeros={100*r['zeros']/max(1,r['n']):5.1f}% "
+                         f"mean={r['mean']:+9.3f} sd={r['sd']:8.3f}{tag}")
+            L.append(f"    -> pooled within treated strata {s['sd_within']:8.3f}"
+                     f"   worst stratum {s['sd_worst']:8.3f} "
+                     f"({s.get('worst_stratum', '?')})")
+            L.append("")
+        L += window_homogeneity(R, *contrasts[0][:3], value=value)
+        L += [f"  planning on the worst treated stratum: "
+              f"sigma_effect = {sd_eff:.4f} %",
+              f"  (pooled across treated strata would be "
+              f"{sd_eff_pooled:.4f} %; the difference is the",
+              "   heteroscedasticity between windows, and planning on the",
+              "   pooled figure under-powers the window that matters most.)"]
+    else:
+        sd_eff = max([c["sd_effect"] for c in csv_rows
+                      if math.isfinite(c["sd_effect"])] or [float("nan")])
     # Planning rho: the SMALLEST measured correlation across contrasts, so the
     # seed count is sized for the contrast that benefits least from common
     # random numbers rather than for the luckiest one.
@@ -628,7 +812,9 @@ def mr(rows: list[dict], out: Path, **kw) -> str:
                 f"estimates {min(pts):.3f}-{max(pts):.3f})" if pts
                 else "(not measurable; assuming independent seeds)"))
     L.append(f"  planning sigma_effect = {sd_eff:.4f} %  "
-             f"(largest measured, the conservative choice)")
+             + ("(worst treated tariff stratum; placebo strata excluded — "
+                "see 3b)" if strat else "(largest measured, the conservative "
+                "choice)"))
     L.append("")
     L.append(f"  {'experiment':<10s} {'instances':>9s} {'k req':>10s} "
              f"{'k exact-t':>9s} {'k raw':>9s} {'k config':>12s} {'verdict':>14s}")

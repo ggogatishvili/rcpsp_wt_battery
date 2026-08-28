@@ -1,7 +1,7 @@
 # Runbook — executing campaign v2 on the 64-core server
 
 Target: 64 physical cores, 380 GB RAM, Linux. Expect **5 days** of wall clock
-at 60 workers for 85,476 runs — of which the first 5 hours are MR, which
+at 60 workers for 88,716 runs — of which the first 5 hours are MR, which
 decides the seed counts for everything after it.
 
 Every stage is idempotent and `03_run.py` resumes, so an interrupted campaign
@@ -25,10 +25,41 @@ Put that export in the shell profile of whatever session runs the campaign, or
 in the systemd unit / tmux session. A single stage run without it writes into
 `data/` and mixes the two campaigns.
 
-Disk: instances 17 MB, results roughly 2 GB (one JSON per run, plus the meta
+Disk: instances 20 MB, results roughly 2 GB (one JSON per run, plus the meta
 files). Check there is 10 GB free.
 
 ---
+
+## 0b. Check the checkout is complete — 2 seconds, saves 2 hours
+
+```bash
+python3 bin/00_preflight.py --skip-solve
+```
+
+The first line must read `pipeline imports -- all 10 modules import`. If it
+does not, **stop**: the analysis runs last, so a missing analysis module lets
+the whole campaign complete and then dies at the final stage.
+
+This is not hypothetical. A pilot ran 1 h 54 min, completed all 5,704 solver
+runs, collected them, and died with
+
+```
+ImportError: cannot import name 'managerial' from 'analysis' (unknown location)
+```
+
+because `analysis/managerial.py` and `analysis/replication.py` had never been
+`git add`ed on the machine the push came from. Untracked files do not travel
+with git, and `git push` says nothing about them.
+
+Before pushing to the compute server, on the machine you push FROM:
+
+```bash
+git status --porcelain | grep '^??'    # anything here will NOT arrive
+```
+
+`data/` and `__pycache__/` are ignored on purpose (instances regenerate from
+`MASTER_SEED`); everything else in that list is either missing from the server
+or should be.
 
 ## 1. Build the solver, and prove it is not stale
 
@@ -85,11 +116,13 @@ campaign and rests entirely on this.
 ```bash
 I=data_v2/instances/core/$(ls "$RCPSP_EXP_DATA/instances/core" | head -1)
 B=./build/rcpsp_wt_battery
-# T1 ideal: free switching, no idle draw
+# T1 ideal: free switching, no idle draw.
+# Durations are 1, not 0: the solver reserves 0 to mean "no such transition"
+# and rejects the profile outright. See config/machines.py.
 $B -m GA -i "$I" -b 0 --tl 30 -s 1 -o /tmp/t1.json \
    --e-proc 4 --e-idle 0 --e-off 0 \
-   --off-proc-time 0 --off-proc-cost 0 --proc-off-time 0 --proc-off-cost 0 \
-   --proc-idle-time 0 --proc-idle-cost 0 --idle-proc-time 0 --idle-proc-cost 0
+   --off-proc-time 1 --off-proc-cost 0 --proc-off-time 1 --proc-off-cost 0 \
+   --proc-idle-time 1 --proc-idle-cost 0 --idle-proc-time 1 --idle-proc-cost 0
 # T5 continuous: shutdown effectively unavailable
 $B -m GA -i "$I" -b 0 --tl 30 -s 1 -o /tmp/t5.json \
    --e-proc 4 --e-idle 3 --e-off 0 \
@@ -132,6 +165,21 @@ regression on synthetic and on real tariffs — is vacuous with one market-year.
 python3 bin/00b_fetch_prices.py            # prints exactly what to download
 python3 bin/00b_fetch_prices.py --check    # what is present now
 ```
+
+**The four Czech years are already built** from OTE-CR *Annual market report*
+workbooks, version 2 (the final monthly evaluation — the only version that will
+never be revised, which is what makes the campaign reproducible). To rebuild
+them from the workbooks:
+
+```bash
+python3 bin/00b_fetch_prices.py --from-ote-annual <dir-with-the-xls-files> --force
+```
+
+That mode reads the `DAM` sheet, locates the EUR price column **by name** (it
+sits at index 7 in 2019 and 8 in 2022/2024 — 2019 has no `Saldo DM` column),
+and cross-checks every row against the CZK column and the CNB rate. It needs
+`xlrd` for the legacy `.xls` files and `openpyxl` for `.xlsx`; both imports are
+local and say so if missing.
 
 Downloads are manual (the node is offline and an ENTSO-E token is personal):
 ENTSO-E Transparency → Transmission → Day-ahead Prices, bidding zone `BZN|CZ`
@@ -190,7 +238,7 @@ sed -i 's/^PROFILE = "pilot"/PROFILE = "full"/' config/design.py
 ```bash
 export RCPSP_EXP_DATA=$PWD/data_v2
 python3 bin/00_preflight.py
-python3 bin/01_build_instances.py          # ~2,460 instances, 17 MB
+python3 bin/01_build_instances.py          # ~2,820 instances, 20 MB
 python3 bin/02_make_runlist.py             # refuses on holes or over budget
 ```
 
@@ -212,7 +260,7 @@ Read four files before going further:
   and the low-spread support warning. If it says fewer than 2 % of instances
   have a realised spread below 10 EUR/MWh, M2's threshold is extrapolation.
 * `balance_report.txt` — every block must read `complete 100.0 %`.
-* `budget_report.txt` — expect ≈ 85,476 runs and ≈ 7,042 core-h. If it is much
+* `budget_report.txt` — expect ≈ 88,716 runs and ≈ 7,298 core-h. If it is much
   larger, something in `config/design.py` moved.
 * `DESIGN_CONTRACT.md` — the per-block factor decomposition, with every count
   recomputed and checked. This is the file to cite in the paper and in the
@@ -322,7 +370,7 @@ The memory risk is not the MILP; it is the largest M3 cells (n = 512 with a
 horizon up to 2,064 h build a SPACES graph and a battery LP over 2,064
 periods). `MEM_LIMIT_GB = 6` and one core per process is what keeps two of
 those from landing together. If RSS climbs past ~200 GB, drop to 48 workers —
-the campaign then takes 6.1 days instead of 4.89 and still fits.
+the campaign then takes 6.3 days instead of 5.07 and still fits.
 
 ---
 
@@ -387,6 +435,7 @@ manifest does, because it records the sha256 of each one.
 | every block 100 % but `M2.real` tiny | only one market-year present | step 4; re-run stages 1–2, then M2 in full |
 | GA solve time far below `--tl` | stagnation binding, not the clock | step 2 (irace at 300 s), or raise `stagLimit` |
 | T1 and T5 give identical objectives | machine flags parsed and ignored | step 3(a); do not run M1 until fixed |
+| all runs at one machine profile fail, others clean | that profile is outside the solver's domain (this happened: T1 had transition durations of 0, which the model reserves for "no such transition") | fix `config/machines.py`, re-run `02_make_runlist.py` — **argv is frozen in `runlist.csv`, so fixing the config alone changes nothing** — then `03_run.py --rerun-failed`. Preflight 3b now probes every profile against the real binary and catches this at stage 0 |
 | flat-tariff floor > 0.5 % | metaheuristic too noisy at this budget | raise `TL_GA` or seed replication, and re-run — do not report the effects anyway |
 | MR says `HETEROGENEOUS` on battery level | the GA's variance moves with the treatment | not fatal: report across that factor against the larger sigma, and log it in `PREREGISTRATION.md` §8 |
 | MR says `MORE INSTANCES` | sigma_effect alone exceeds the power budget | seeds cannot fix it — widen the shop pool or raise the declared MDE |

@@ -46,7 +46,7 @@ running at all.
 | | v1 | v2 |
 |---|---|---|
 | Methods | H1, H1P, GA, GAP, MILP (+ LBBD family) | GA, H1, MILP |
-| Runs | 266,150 (GAP = 88 % of them) | 85,476 |
+| Runs | 266,150 (GAP = 88 % of them) | 88,716 |
 | Metaheuristic budget | 60 s, derived from the compute envelope | 300 s, with an irace re-tune at that budget as a prerequisite |
 | Managerial factors | measured separately (E2 capacity, E3 tariff, E6 machine) | **fully crossed** in one cube (M1) |
 | Tariffs | terciles of one year (CZ 2025) + synthetic | + four real market-years, and the synthetic-vs-real diagnostic promoted to a headline |
@@ -218,7 +218,7 @@ switchable:
 
 | id | reading | ρ = e_idle/e_proc | Off→Proc |
 |---|---|---|---|
-| T1 | ideal — switching is free | 0.00 | 0 h / 0 |
+| T1 | ideal — switching is free | 0.00 | 1 h / 0 |
 | T2 | fast electric (CNC, induction) | 0.25 | 1 h / 2 |
 | T3 | **the paper's baseline** — matches `include/instance.h` | 0.50 | 2 h / 5 |
 | T4 | thermal mass (oven, furnace) | 0.50 | 4 h / 20 |
@@ -227,7 +227,16 @@ switchable:
 
 T1 and T5 are falsification corners. T1 must dominate every other profile at
 every capacity; if it does not, the machine factor is not wired through
-correctly and nothing else in M1 is readable. T6 against T3 moves only ρ; T2
+correctly and nothing else in M1 is readable.
+
+T1's transitions cost **zero energy but still take one time unit**. The model
+reserves a transition duration of 0 to mean "this transition does not exist",
+so a truly instantaneous switch is not expressible; T1 is therefore the closest
+expressible approximation of the ideal machine, and a *lower* bound on it. That
+direction is the safe one for the falsification argument — a positive return on
+storage at T1 would be at least as positive at a machine that switched
+instantaneously — but the paper must say "free to switch", never
+"instantaneous". Recorded in Threats to Validity. T6 against T3 moves only ρ; T2
 against T3 moves mainly the transitions — that pairing is what separates
 "idling is beneficial" from "switching off is cheap", which the archetypes
 alone confound.
@@ -258,12 +267,20 @@ The library is 43 series **as the repository stands today**: 2 contractual,
 windows — five because only the reference market-year is present, and
 `REAL_WINDOWS_PER_YEAR = 5`.
 
-**Runs.** 24 × 43 × 3 × 3 = **9,288** — 735 core-h.
+**Runs.** 24 × 58 × 3 × 3 = **12,528** — 992 core-h.
 
-**With all four market-years built** the real family becomes 4 × 5 = 20 series,
-the library 58, and M2 becomes 24 × 58 × 3 × 3 = **12,528** runs (+256 core-h).
-Note that `REAL_MARKET_YEARS` has four entries *including* the reference year,
-so building the missing data adds three years, not four.
+The library is 58 series: 2 contractual, 36 synthetic (6 spreads × 3 noise
+levels × 2 negative-hour shares), and 20 real windows — four Czech market-years
+at `REAL_WINDOWS_PER_YEAR = 5` each. The four were built from OTE-CR annual
+reports (version 2, the final monthly evaluation) and span the variation M2
+needs: mean price 40 → 247 EUR/MWh, mean intra-day spread 28 → 184, negative
+hours 0.1 % → 3.7 %.
+
+**Still missing: a second bidding zone.** `de2025` would add price *formation*
+that differs, rather than another year of the same market. 2024 and 2025 are
+near-twins (mean 85 vs 97, spread 113 vs 129, negative hours 3.6 % vs 3.7 %),
+which is useful as replication — an effect that reproduces across two adjacent
+years is a stronger claim — but it is not new variation.
 
 **The headline output is a diagnostic, not a coefficient.** The same regression
 of saving on (intra-day spread, CV, negative-hour share, mean) is estimated
@@ -356,18 +373,18 @@ of their agreed output — regenerate rather than trust it.
 | MR replication | 3,888 | 308 |
 | M0 validation | 8,400 | 940 |
 | M1 ROI cube | 42,120 | 3,335 |
-| M2 volatility | 9,288 | 735 |
+| M2 volatility | 12,528 | 992 |
 | M3 scaling | 8,100 | 641 |
 | M4 substitution | 8,640 | 684 |
 | M5 frontier | 5,040 | 399 |
-| **total** | **85,476** | **7,042** |
+| **total** | **88,716** | **7,298** |
 
-**4.89 days on 60 workers**, 70 % of a one-week envelope. The remaining 30 % is
+**5.07 days on 60 workers**, 72 % of a one-week envelope. The remaining 28 % is
 not slack to spend — it is the reruns, the failed cells, and the second pass
 that every campaign of this size needs. Adding the three missing market-years
 brings M2 to roughly 12,500 runs (+256 core-h), still inside the envelope.
 
-2,460 instance files, 17 MB.
+2,820 instance files, 20 MB.
 
 **Seed replication is set by MR, not by intuition.** The counts in `design.py`
 today (M0 5, M1–M3 3, M4–M5 5) are placeholders reflecting a plausible guess:
@@ -376,7 +393,7 @@ seed there would cost 1,400 core-h to shrink a variance component that *may*
 already be second-order — but whether it is depends on σ_seed, which is exactly
 what nobody has measured. MR measures it, the formula converts it into a k per
 experiment, and the runlist is regenerated before the campaign runs. If MR says
-M1 needs 5 seeds, the campaign costs 8,500 core-h instead of 7,042 and still
+M1 needs 5 seeds, the campaign costs 8,700 core-h instead of 7,298 and still
 fits; if it says 2, the saving pays for MR several times over.
 
 ---
