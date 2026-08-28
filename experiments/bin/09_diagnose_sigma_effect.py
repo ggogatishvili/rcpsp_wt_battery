@@ -252,6 +252,59 @@ def main() -> int:
                          "population one.")
         L.append("")
 
+    # ---- C2: is the spread one population or two? ------------------------
+    # THE SIGNATURE THAT PROVOKED THIS SECTION. The energy contrast came back
+    # with p75 = p95 = p99 = max = +0.00 -- more than a quarter of the cells
+    # differ by EXACTLY zero, and nothing is above zero. A metaheuristic does
+    # not return bit-identical costs by accident twelve seeds running; an exact
+    # zero means the battery was never cycled. MR_TARIFFS includes `flat`,
+    # where no arbitrage exists by construction, so the obvious candidate is
+    # that MR is averaging a placebo population and a treated one together.
+    #
+    # If so, `sigma_effect` is not the variability of an effect. It is mostly
+    # the DISTANCE between a group with no effect and a group with a large one,
+    # and sizing a campaign against it is sizing against a design choice.
+    L += ["-" * 78,
+          "C2. Exact zeros, and whether the sample is one population or two",
+          "-" * 78, ""]
+    strata_cols = [c for c in ("tariff_family", "price_regime", "price_name")
+                   if any(r.get(c) for r in src)]
+    for value in ("energy_cost", "objective"):
+        factor, a, b = CONTRASTS[1]
+        by_stratum = _diffs_by(src, factor, a, b, value, strata_cols)
+        if not by_stratum:
+            continue
+        L.append(f"  value = {value},  contrast {a} vs {b}")
+        L.append(f"    {'stratum':<34s} {'n':>5s} {'zeros':>7s} "
+                 f"{'mean':>10s} {'sd':>9s}")
+        pooled_within, tot_n = 0.0, 0
+        for name, x in sorted(by_stratum.items()):
+            z = int(np.sum(np.abs(x) < 1e-9))
+            sd = float(np.std(x, ddof=1)) if x.size > 1 else float("nan")
+            L.append(f"    {name:<34s} {x.size:5d} {100*z/x.size:6.1f}% "
+                     f"{x.mean():+10.3f} {sd:9.3f}")
+            if x.size > 1 and math.isfinite(sd):
+                pooled_within += (x.size - 1) * sd ** 2
+                tot_n += x.size - 1
+        if tot_n:
+            sd_within = math.sqrt(pooled_within / tot_n)
+            allx = np.concatenate(list(by_stratum.values()))
+            sd_all = float(np.std(allx, ddof=1))
+            L += ["",
+                  f"    sd pooled WITHIN strata   {sd_within:9.3f}",
+                  f"    sd across the whole set   {sd_all:9.3f}",
+                  f"    between-strata share      "
+                  f"{100*max(0.0, 1 - sd_within**2/sd_all**2):8.1f} % of the variance"]
+            if sd_all > 0 and 1 - sd_within ** 2 / sd_all ** 2 > 0.25:
+                L += ["",
+                      "    -> a quarter or more of `sigma_effect` is the gap",
+                      "       BETWEEN tariff strata, not variability of the",
+                      "       effect within any of them. Size the campaign on",
+                      "       the within-stratum sigma; report the placebo",
+                      "       stratum as the falsification check it is, and",
+                      "       never pool the two into one variance."]
+        L.append("")
+
     # ---- what the campaign can actually resolve --------------------------
     L += ["-" * 78,
           "D. What each experiment can resolve, at the sigma you decide to use",
@@ -330,6 +383,43 @@ def _diffs(rows: list[dict], factor: str, a: str, b: str,
         if lv.get(a) and lv.get(b):
             out.append(float(np.mean(lv[a]) - np.mean(lv[b])))
     return np.asarray(out)
+
+
+def _diffs_by(rows: list[dict], factor: str, a: str, b: str, value: str,
+              strata_cols: list[str]) -> dict[str, np.ndarray]:
+    """Paired differences, split by tariff stratum.
+
+    Same construction as `_diffs`, but each cell also carries the stratum it
+    came from so the pooled variance can be decomposed into within and between.
+    """
+    import analysis.analyses as A
+    scales: dict[str, float] = {}
+    for r in rows:
+        i = r.get("instance", "")
+        if i not in scales:
+            scales[i] = A.norm_scale(r)
+    other = [c for c in ("instance", "battery_ratio", "machine_profile",
+                         "state_policy", "time_limit", "price_name")
+             if c != factor]
+    cells: dict[tuple, dict] = defaultdict(lambda: defaultdict(list))
+    stratum_of: dict[tuple, str] = {}
+    for r in rows:
+        s = scales.get(r.get("instance", ""), float("nan"))
+        try:
+            v = float(r.get(value, ""))
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(s) and s > 0 and math.isfinite(v)):
+            continue
+        key = tuple(str(r.get(c, "")) for c in other)
+        cells[key][str(r.get(factor, ""))].append(100.0 * v / s)
+        stratum_of.setdefault(
+            key, " / ".join(str(r.get(c, "")) for c in strata_cols) or "(all)")
+    out: dict[str, list] = defaultdict(list)
+    for key, lv in cells.items():
+        if lv.get(a) and lv.get(b):
+            out[stratum_of[key]].append(float(np.mean(lv[a]) - np.mean(lv[b])))
+    return {k: np.asarray(v) for k, v in out.items() if len(v) >= 2}
 
 
 def _seeds_per_cell(rows: list[dict]) -> int:
