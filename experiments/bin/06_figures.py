@@ -465,7 +465,7 @@ def f6_substitution() -> None:
     real = [r for r in rows if str(r.get("placebo", "")).lower()
             in ("", "false", "0", "none")]
     rows = real or rows
-    regimes = sorted({r.get("regime", "") for r in rows}, key=level_key)
+    regimes = sorted({r.get("regime", "") for r in rows}, key=regime_key)
     if not regimes:
         return skip("F6", "no regime column")
 
@@ -485,12 +485,17 @@ def f6_substitution() -> None:
                    color=PALETTE[i], label=lab)
         ax.axhline(0, color=MUTED, lw=0.8)
         ax.set_xticks(range(len(bs)), [f"{b:g}" for b in bs])
-        ax.set_xlabel("capacity $b$")
         ax.set_title(reg)
     axes[0][0].set_ylabel("value  (% of naive energy bill)")
-    axes[0][-1].legend(loc="best")
+    fig.tight_layout()
+    fig.supxlabel("capacity  $b$", fontsize=9, y=-0.02)
+    # Below the axes, not inside them: at the capacities where substitution is
+    # strongest the bars reach exactly where a "best" legend wants to sit.
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3,
+               bbox_to_anchor=(0.5, 0.0))
     fig.suptitle("Storage and state management are partial substitutes: the "
-                 "interaction is negative", y=1.04, fontsize=10)
+                 "interaction is negative", y=1.05, fontsize=10)
     save(fig, "f6_substitution")
 
 
