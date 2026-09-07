@@ -336,7 +336,6 @@ def paired_summary(d, label: str) -> dict:
         st["cohens_dz"] = float("nan")
     return st
 
-
 def _holm(pvals: dict[str, float]) -> dict[str, float]:
     """A.holm, but non-finite p-values are excluded instead of becoming zero.
 
@@ -725,6 +724,25 @@ def _prep(rows: list[dict], experiments: tuple[str, ...]) -> list[dict]:
         d["battery_ratio"] = _num(d, "battery_ratio", 0.0)
         keep.append(d)
     return keep
+
+
+# Tariff regimes have a MEANING order -- increasing price dispersion -- and it
+# is NOT the alphabetical one, which puts spot_highvol before spot_midvol and
+# before tou2. Any report that reads a trend ACROSS regimes has to sort by
+# this, or it reads the trend backwards. (M6 did, until a planted-effect test
+# caught it: the relative efficiency effect fell with volatility exactly as
+# predicted, and the report announced the opposite because the rows were in
+# alphabetical order.)
+_REGIME_VOLATILITY = ["flat", "contractual", "tou1", "tou2",
+                      "spot_lowvol", "spot_midvol", "spot_highvol"]
+
+
+def _regime_key(x) -> tuple:
+    s = str(x)
+    for i, name in enumerate(_REGIME_VOLATILITY):
+        if s == name or s.startswith(name):
+            return (0, i, s)
+    return (1, 0, s)          # real market-years and anything new, after
 
 
 def _meta(R: list[dict]) -> dict[str, dict]:
@@ -1313,7 +1331,7 @@ def m1(rows: list[dict], out: Path, econ: dict | None = None, **kw) -> str:
         L.append("  No paired cube cells yet.")
     else:
         archs = sorted({r["machine_profile"] for r in cube_recs}, key=_lvlkey)
-        tars = sorted({r["regime"] for r in cube_recs}, key=_lvlkey)
+        tars = sorted({r["regime"] for r in cube_recs}, key=_regime_key)
         brs = sorted({r["battery_ratio"] for r in cube_recs})
         L.append(f"  {'archetype':18s} {'tariff':>13s} " +
                  "".join(f"{('b=' + _g(b)):>11s}" for b in brs) + f" {'n':>6s}")
@@ -1424,7 +1442,7 @@ def m1(rows: list[dict], out: Path, econ: dict | None = None, **kw) -> str:
         L.append("  No cube data; ROI surface unavailable.")
     else:
         archs = sorted({r["machine_profile"] for r in cube_recs}, key=_lvlkey)
-        tars = sorted({r["regime"] for r in cube_recs}, key=_lvlkey)
+        tars = sorted({r["regime"] for r in cube_recs}, key=_regime_key)
         for sname, sec_ in scen.items():
             recs_s = [dict(r) for r in cube_recs]
             _npv_block(recs_s, meta, sec_)
@@ -2192,7 +2210,8 @@ def m4(rows: list[dict], out: Path, **kw) -> str:
 
     cells = _cells(R, ("instance", "state_policy", "battery_ratio"))
     ratios = [b for b in sorted({r["battery_ratio"] for r in R}) if b > 0]
-    regimes = sorted({meta[i]["regime"] for i in {r["instance"] for r in R}})
+    regimes = sorted({meta[i]["regime"] for i in {r["instance"] for r in R}},
+                     key=_regime_key)
 
     def decomp(insts, b):
         """Paired arrays for one (regime, capacity) cell; list-wise complete."""
@@ -2690,6 +2709,221 @@ _TRUTH = dict(
     real_spread_coef=0.0,    # ... and none at all on real tariffs
     restart_effect=0.30,     # storage is worth 30 % more when restart is costly
 )
+
+
+
+# ---------------------------------------------------------------------------
+# M6 -- round-trip efficiency
+# ---------------------------------------------------------------------------
+
+def m6(rows: list[dict], out: Path, **kw) -> str:
+    """Where the arbitrage threshold sits, and how much it moves the return.
+
+    THE CLAIM UNDER TEST. A full charge/discharge cycle returns
+    eta_c * eta_d of what it took in, so shifting energy from hour t to hour
+    t' only pays when p_t' / p_t > 1 / (eta_c eta_d). Efficiency does not
+    scale the saving, it moves a THRESHOLD on which pairs of hours are worth
+    arbitraging. Two predictions follow, and this report tests both rather
+    than illustrating either:
+
+      (1) the saving rises with eta, monotonically;
+      (2) the RELATIVE effect of eta is larger on narrow-spread tariffs than
+          on volatile ones, because a volatile series clears the threshold by
+          a wide margin everywhere while a narrow one sits astride it.
+
+    Prediction (2) is the interesting one and the easy one to get backwards.
+    In ABSOLUTE points a volatile tariff will always move more, simply because
+    its saving is larger; the prediction is about the effect RELATIVE to that
+    tariff's own saving, and the table below reports it that way.
+
+    TWO FALSIFICATION CONTROLS, both cheap and both load-bearing:
+
+      * the zero-battery cost must not depend on eta at all. The flag reaches
+        only the battery; if the b = 0 cost moves, it is reaching something
+        else and every number here is measuring that instead.
+      * under the flat tariff no eta may produce a saving, because no price
+        ratio anywhere in a constant series exceeds 1 / eta^2.
+    """
+    R = _prep(rows, ("M6",))
+    L = _hdr("M6 - round-trip efficiency and the arbitrage threshold")
+    if not R:
+        return _emit(out, "m6_efficiency.txt", L + ["", "  NO M6 DATA."])
+
+    meta = _meta(R)
+    etas = sorted({_num(r, "eta") for r in R if r.get("eta") not in ("", None)})
+    etas = [e for e in etas if math.isfinite(e)]
+    if len(etas) < 2:
+        return _emit(out, "m6_efficiency.txt",
+                     L + ["", "  Fewer than two efficiency levels; nothing to "
+                          "compare. Check that the runlist carries `eta` and "
+                          "that the solver accepted the flags."])
+
+    L += [f"  runs {len(R)}   instances {len({r['instance'] for r in R})}",
+          f"  efficiencies  {', '.join(f'{e:g}' for e in etas)} "
+          f"(applied to both directions)",
+          f"  round-trip    {', '.join(f'{e*e:.3f}' for e in etas)}",
+          f"  threshold     {', '.join(f'{1/(e*e):.3f}' for e in etas)}  "
+          f"<- price ratio a pair of hours must clear to be worth arbitraging",
+          ""]
+
+    # ---- control 1: eta must not touch the zero-battery cost --------------
+    L += _sec("0. FALSIFICATION: does eta reach anything but the battery?")
+    L += ["  The b = 0 cell has no battery to charge, so its cost cannot",
+          "  depend on efficiency. Any spread here is the flag reaching",
+          "  something it should not, and it bounds every number below.",
+          ""]
+    base_cells = _cells([r for r in R if _num(r, "battery_ratio") == 0.0],
+                        ("instance", "eta"))
+    by_inst: dict[str, dict[float, float]] = defaultdict(dict)
+    for (inst, eta), v in base_cells.items():
+        by_inst[inst][_num({"eta": eta}, "eta")] = v
+    spreads = []
+    for inst, d in by_inst.items():
+        vals = [v for v in d.values() if math.isfinite(v)]
+        sc = meta[inst]["scale"]
+        if len(vals) >= 2 and math.isfinite(sc) and sc > 0:
+            spreads.append(100.0 * (max(vals) - min(vals)) / sc)
+    if spreads:
+        a = np.asarray(spreads)
+        L += [f"  instances with >= 2 eta levels at b = 0 : {a.size}",
+              f"  max spread of the zero-battery cost      : {a.max():.5f} % "
+              f"of the naive bill",
+              f"  median                                   : {np.median(a):.5f} %",
+              ""]
+        L.append("  VERDICT: OK -- eta does not reach the no-battery cost."
+                 if a.max() < 0.01 else
+                 "  VERDICT: *** FAILED *** the zero-battery cost moves with "
+                 "eta. Stop: the flag is reaching more than the battery.")
+    else:
+        L.append("  (no instance carries two eta levels at b = 0)")
+
+    # ---- the main table ---------------------------------------------------
+    L += _sec("1. Saving by efficiency, tariff and capacity")
+    L += ["  saving % of the naive bill, paired against the b = 0 cell of the",
+          "  SAME instance and the SAME eta. CI: 95 % bootstrap over instances.",
+          ""]
+    recs = _saving_records(R, meta, ("eta", "price_regime"))
+    if not recs:
+        return _emit(out, "m6_efficiency.txt",
+                     L + ["", "  No paired cells: every capacity is missing its "
+                          "zero-battery twin."])
+    for r in recs:
+        r["eta"] = _num(r, "eta")
+    _write_csv(out, "m6_savings.csv", recs)
+
+    regimes = sorted({r["price_regime"] for r in recs}, key=_regime_key)
+    ratios = sorted({r["battery_ratio"] for r in recs})
+    hdr = f"  {'tariff':<14s} {'b':>5s}" + "".join(
+        f"  eta={e:g}".rjust(12) for e in etas)
+    L.append(hdr)
+    table: dict[tuple, float] = {}
+    for reg in regimes:
+        for b in ratios:
+            cells = []
+            for e in etas:
+                v = [r["saving"] for r in recs if r["price_regime"] == reg
+                     and r["battery_ratio"] == b and r["eta"] == e]
+                m = float(np.mean(v)) if v else float("nan")
+                table[(reg, b, e)] = m
+                cells.append(f"{m:12.4f}" if math.isfinite(m) else f"{'--':>12s}")
+            L.append(f"  {reg:<14s} {b:5g}" + "".join(cells))
+    L.append("")
+
+    # ---- control 2: the flat tariff --------------------------------------
+    flat = [r for r in recs if r["price_regime"] == "flat"]
+    if flat:
+        mx = max(abs(r["saving"]) for r in flat)
+        L += [f"  FALSIFICATION (flat tariff): max |saving| over {len(flat)} "
+              f"cells = {mx:.5f} %",
+              "  A constant series has no price ratio above 1, so no eta can",
+              "  clear its own threshold and every cell must be ~0.",
+              "  VERDICT: OK." if mx < 0.15 else
+              "  VERDICT: *** the flat control is not zero ***", ""]
+
+    # ---- the interaction, which is the point ------------------------------
+    L += _sec("2. DECISIVE: does efficiency matter more where the spread is "
+              "narrow?")
+    L += ["  For each tariff, the saving gained by moving from the lowest to",
+          "  the highest efficiency, in absolute points and as a share of that",
+          "  tariff's own saving at the baseline efficiency. The prediction is",
+          "  that the RELATIVE column falls as the tariff gets more volatile.",
+          "  If it is flat instead, efficiency is a uniform discount and the",
+          "  threshold story is wrong.",
+          ""]
+    lo, hi = etas[0], etas[-1]
+    base_eta = min(etas, key=lambda e: abs(e - design.M6_ETA_BASELINE))
+    b_ref = max(r for r in ratios if r > 0) if any(r > 0 for r in ratios) else None
+    L.append(f"  read at b = {b_ref:g}, eta {lo:g} -> {hi:g}"
+             f", baseline eta = {base_eta:g}")
+    L.append(f"  {'tariff':<14s} {'saving@lo':>10s} {'saving@hi':>10s} "
+             f"{'delta pp':>9s} {'relative':>9s}")
+    inter_rows = []
+    for reg in regimes:
+        s_lo = table.get((reg, b_ref, lo), float("nan"))
+        s_hi = table.get((reg, b_ref, hi), float("nan"))
+        s_bs = table.get((reg, b_ref, base_eta), float("nan"))
+        d_abs = s_hi - s_lo
+        rel = d_abs / s_bs if math.isfinite(s_bs) and abs(s_bs) > 1e-9 else float("nan")
+        inter_rows.append(dict(price_regime=reg, battery_ratio=b_ref,
+                               eta_lo=lo, eta_hi=hi, saving_lo=s_lo,
+                               saving_hi=s_hi, delta_pp=d_abs, relative=rel))
+        L.append(f"  {reg:<14s} {s_lo:10.4f} {s_hi:10.4f} {d_abs:9.4f} "
+                 + (f"{100*rel:8.1f} %" if math.isfinite(rel) else f"{'--':>9s}"))
+    _write_csv(out, "m6_interaction.csv", inter_rows)
+
+    treated = [r for r in inter_rows if r["price_regime"] != "flat"
+               and math.isfinite(r["relative"])]
+    if len(treated) >= 2:
+        order = sorted(treated, key=lambda r: _regime_key(r["price_regime"]))
+        rels = [r["relative"] for r in order]
+        L += ["",
+              f"  relative effect, least to most volatile: "
+              + " -> ".join(f"{100*x:.1f} %" for x in rels)]
+        if rels[0] > rels[-1] * 1.25:
+            L.append("  VERDICT: the relative effect FALLS with volatility, as "
+                     "predicted. Efficiency moves a threshold; it does not")
+            L.append("           scale the saving. Report the interaction.")
+        elif rels[-1] > rels[0] * 1.25:
+            L.append("  VERDICT: the relative effect RISES with volatility -- "
+                     "the opposite of the prediction. Do not report the")
+            L.append("           threshold story; something else is happening "
+                     "and it needs explaining before publication.")
+        else:
+            L.append("  VERDICT: the relative effect is FLAT across tariffs. "
+                     "Efficiency acts as a uniform discount on the saving,")
+            L.append("           which is a simpler and weaker result than the "
+                     "threshold prediction. Report it as such.")
+
+    # ---- what it does to the investment -----------------------------------
+    econ = kw.get("econ") or economics.SENSITIVITY["central"]
+    L += _sec("3. What efficiency does to the investment case")
+    _npv_block(recs, meta, econ)
+    L += ["  Median NPV (kEUR) at each efficiency, at the capacity the",
+          "  investment analysis selects. A battery that pays at 0.99 and not",
+          "  at 0.85 is a battery whose business case is an efficiency",
+          "  assumption, and the paper should say so.",
+          ""]
+    L.append(f"  {'tariff':<14s}" + "".join(f"  eta={e:g}".rjust(12) for e in etas))
+    npv_rows = []
+    for reg in regimes:
+        cells = []
+        for e in etas:
+            v = [r.get("npv") for r in recs if r["price_regime"] == reg
+                 and r["battery_ratio"] == b_ref and r["eta"] == e]
+            v = [x for x in v if x is not None and math.isfinite(x)]
+            m = float(np.median(v)) / 1000.0 if v else float("nan")
+            npv_rows.append(dict(price_regime=reg, eta=e, battery_ratio=b_ref,
+                                 median_npv_kEUR=m, n=len(v)))
+            cells.append(f"{m:12.1f}" if math.isfinite(m) else f"{'--':>12s}")
+        L.append(f"  {reg:<14s}" + "".join(cells))
+    _write_csv(out, "m6_npv.csv", npv_rows)
+
+    L += ["",
+          "  Efficiency is the one parameter here a plant does not choose: it",
+          "  is a property of the hardware it can buy. Where the sign of the",
+          "  NPV changes across this row, the recommendation is conditional on",
+          "  a procurement decision and not on the schedule."]
+    return _emit(out, "m6_efficiency.txt", L)
 
 
 def _selftest(tmp: Path) -> int:                 # pragma: no cover - dev tool

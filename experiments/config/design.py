@@ -330,7 +330,8 @@ DETERMINISTIC_METHODS = ("H1", "MILP")
 # Leaving them at the values below without reading MR is the same mistake v1
 # made with its time limit -- a design constant chosen because it fit the
 # budget, and then reported as though it had been chosen for a reason.
-SEEDS_PER_EXP = {"MR": 99, "M0": 5, "M1": 3, "M2": 3, "M3": 3, "M4": 5, "M5": 5}
+SEEDS_PER_EXP = {"MR": 99, "M0": 5, "M1": 3, "M2": 3, "M3": 3, "M4": 5,
+                 "M5": 5, "M6": 3}
 
 
 def seeds(exp: str) -> list[int]:
@@ -503,6 +504,7 @@ ENABLED = {
     "M3": True,   # scaling in the number of tasks
     "M4": True,   # machine-state ladder x storage (substitution)
     "M5": True,   # service-energy frontier (lambda sweep)
+    "M6": True,   # round-trip efficiency: where the arbitrage threshold sits
 }
 
 # --- M0: validation ---------------------------------------------------------
@@ -541,6 +543,66 @@ M4_BATTERY_RATIOS = [0.0, 0.1, 0.25, 1.0]
 
 # --- M5: frontier -----------------------------------------------------------
 M5_BATTERY_RATIOS = [0.0, BATTERY_ON_RATIO]
+
+# --- M6: round-trip efficiency ----------------------------------------------
+#
+# WHY THIS BLOCK EXISTS. Every other experiment holds charge and discharge
+# efficiency at 0.95, so every euro figure in the paper is conditional on that
+# one value and the campaign cannot say how conditional. M6 varies it.
+#
+# THE HYPOTHESIS, AND IT IS SHARP. A full cycle returns eta_c * eta_d of what
+# it took in, so moving one unit of energy from hour t to hour t' only pays if
+#
+#     p_{t'} / p_t  >  1 / (eta_c * eta_d).
+#
+# Efficiency therefore does not scale the return, it moves a THRESHOLD: it
+# decides which pairs of hours are worth arbitraging at all. Two predictions
+# follow, and they are what the block is designed to test rather than
+# illustrate:
+#
+#   (1) the return rises with eta, monotonically;
+#   (2) the effect of eta is LARGER on low-spread tariffs than on volatile
+#       ones. Under high volatility most hour pairs clear the threshold by a
+#       wide margin and a few points of efficiency change little; under a
+#       narrow spread the threshold sits inside the price distribution and
+#       moving it gains or loses whole hours of arbitrage.
+#
+# Prediction (2) is an interaction, and it is the reason the tariff ladder is
+# crossed in rather than fixed. If it fails -- if eta acts uniformly across
+# tariffs -- then efficiency is a simple discount on the saving and the
+# threshold story is wrong, which is worth knowing and worth reporting.
+#
+# The threshold at each level, for reference in the analysis:
+#     eta = 0.85 -> ratio 1.384    eta = 0.95 -> ratio 1.108
+#     eta = 0.90 -> ratio 1.235    eta = 0.99 -> ratio 1.020
+M6_ETAS = [0.85, 0.90, 0.95, 0.99]        # applied to BOTH directions
+M6_ETA_BASELINE = 0.95                    # what every other experiment uses
+M6_BATTERY_RATIOS = [0.0, 0.1, 0.25, 1.0]
+M6_TARIFFS = ["flat", "tou2", "spot_midvol", "spot_highvol"]
+M6_SHOPS = 6                              # drawn from the core pool
+
+# b = 0 is re-run at every efficiency level even though the battery is idle
+# there and the cost cannot depend on eta. That redundancy is deliberate and
+# cheap: it is a falsification control. If the zero-battery cost moves with
+# eta, the flag is reaching something it should not, and every M6 number is
+# measuring that instead.
+
+
+def efficiency_args(eta: float) -> list[str]:
+    """Solver flags for one round-trip efficiency level.
+
+    Both directions are set to the same value, so `eta` in the analysis means
+    the one-way efficiency and the round trip is eta^2. Stating it once here
+    keeps the paper's arithmetic and the runlist's flags from drifting apart.
+    """
+    return ["--charging-efficiency", f"{eta:g}",
+            "--discharging-efficiency", f"{eta:g}"]
+
+
+# Flags the runlist generator probes for before activating M6. A binary that
+# predates them would otherwise run the whole block at its compiled-in default
+# and produce a perfectly flat, perfectly meaningless efficiency curve.
+M6_REQUIRED_FLAGS = {"--charging-efficiency", "--discharging-efficiency"}
 
 # ---------------------------------------------------------------------------
 # 8b. MR — seed replication, and how many seeds the campaign actually needs

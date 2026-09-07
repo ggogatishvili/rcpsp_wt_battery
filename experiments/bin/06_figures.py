@@ -53,6 +53,8 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                          # noqa: E402
+import matplotlib.ticker                                 # noqa: E402
+import matplotlib.transforms                             # noqa: E402
 import numpy as np                                       # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm  # noqa: E402
 
@@ -379,7 +381,7 @@ def f4_volatility() -> None:
         ax.axhline(0, color=MUTED, lw=0.8, ls=":")
         ax.set_xlabel("intra-day price spread  (EUR/MWh)")
         ax.set_ylabel("saving  (% of naive energy bill)")
-        ax.set_title("synthetic tariffs, by spread decile")
+        ax.set_title("real tariffs, by price-spread decile")
         ax.legend(loc="best")
     else:
         ax.set_axis_off()
@@ -590,6 +592,93 @@ def f8_validation() -> None:
 
 
 # ---------------------------------------------------------------------------
+# F8B — the GA's gap to the MILP as the instance grows
+# ---------------------------------------------------------------------------
+
+# The M0 size classes are named by a task multiplier; the base shop has 32
+# tasks. Kept as a dict so a class that appears later (256, 512) still lands on
+# the right abscissa without touching the plot code.
+_M0_CLASS_TASKS = {"1": 32, "2": 64, "4": 128, "8": 256, "16": 512}
+
+
+def f8b_scaling() -> None:
+    """Companion to F8: the same paired GA-minus-MILP gap, now read against
+    instance size. On the small class the MILP is the proven optimum and the
+    GA sits just above it; by the large class the MILP has stopped closing
+    anything and the GA is the better feasible solution, so the curve crosses
+    zero. H1 is not shown --- this panel is only about GA vs the benchmark."""
+    rows = read("m0_gaps.csv")
+    if not rows:
+        return skip("F8B", "m0_gaps.csv not found")
+    ga = [r for r in rows if r.get("method") == "GA"]
+    if not ga:
+        return skip("F8B", "no GA rows")
+
+    # MILP proven-optimality share per class, for the annotation that tells the
+    # reader when "gap to the MILP" stops meaning "gap to the optimum".
+    proven_share = {r["size_class"]: num(r, "share_pct")
+                    for r in read("m0_milp_optimality.csv")}
+
+    by_class = defaultdict(list)
+    for r in ga:
+        g = num(r, "norm")
+        if math.isfinite(g):
+            by_class[r["size_class"]].append(g)
+    classes = sorted(by_class, key=level_key)
+    pts = [(cls, _M0_CLASS_TASKS.get(cls)) for cls in classes]
+    pts = [(cls, t) for cls, t in pts if t is not None]
+    if len(pts) < 2:
+        return skip("F8B", "fewer than two size classes with a task count")
+
+    xs = [t for _, t in pts]
+    stats = [mean_ci(by_class[cls]) for cls, _ in pts]
+    y = [s[0] for s in stats]
+    lo = [s[0] - s[1] if math.isfinite(s[1]) else 0.0 for s in stats]
+    hi = [s[2] - s[0] if math.isfinite(s[2]) else 0.0 for s in stats]
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.1))
+    ax.axhline(0, color=MUTED, lw=0.9, ls=":")
+    ax.errorbar(xs, y, yerr=[lo, hi], capsize=2, elinewidth=0.8,
+                label="GA", **style(0))
+    for (_, t), yi in zip(pts, y):
+        ax.annotate(f"{yi:+.1f}", (t, yi), textcoords="offset points",
+                    xytext=(9, 0), ha="left", va="center", fontsize=7.5,
+                    color=INK)
+
+    ax.set_xscale("log")
+    ax.set_xticks(xs)
+    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.minorticks_off()
+    ax.set_xlabel("tasks per shop  (log scale)")
+    ax.set_ylabel("GA gap to the MILP\n(% of naive energy bill, lower is better)")
+    ax.grid(axis="x", visible=False)
+
+    # Headroom for the value labels and the proven-optimality row.
+    lo_lim, hi_lim = ax.get_ylim()
+    ax.set_ylim(lo_lim, hi_lim + 0.12 * (hi_lim - lo_lim))
+    lo_lim, _ = ax.get_ylim()
+    ax.axhspan(lo_lim, 0, color=PALETTE[0], alpha=0.06, zorder=0)
+    ax.set_ylim(bottom=lo_lim)
+    ax.text(0.03, 0.05, "GA beats the MILP incumbent", transform=ax.transAxes,
+            fontsize=7.5, color=PALETTE[0], va="bottom")
+
+    # How often the MILP actually proves optimality, so the reader knows the
+    # reference weakens from left (the optimum) to right (a stalled incumbent).
+    blend = matplotlib.transforms.blended_transform_factory(
+        ax.transData, ax.transAxes)
+    aligns = ["left"] + ["center"] * (len(pts) - 2) + ["right"]
+    for ((cls, t), _), ha in zip(zip(pts, y), aligns):
+        sh = proven_share.get(cls)
+        if sh is not None and math.isfinite(sh):
+            ax.text(t, 0.95, f"MILP proves\nopt. {sh:.0f}%", transform=blend,
+                    ha=ha, va="top", fontsize=6.5, color=MUTED)
+
+    ax.set_title("The GA's edge over the MILP widens with instance size",
+                 fontsize=9.5)
+    save(fig, "f8b_ga_scaling")
+
+
+# ---------------------------------------------------------------------------
 # F9 — seed replication
 # ---------------------------------------------------------------------------
 
@@ -623,9 +712,77 @@ def f9_replication() -> None:
     save(fig, "f9_replication")
 
 
+
+# ---------------------------------------------------------------------------
+# F10 — round-trip efficiency
+# ---------------------------------------------------------------------------
+
+def f10_efficiency() -> None:
+    """Saving against efficiency, one line per tariff.
+
+    The claim is an interaction, so the figure has to make a difference of
+    slopes visible rather than four separate levels. Left panel: the saving
+    itself. Right panel: the same lines rescaled to each tariff's own baseline,
+    which is where the prediction lives -- efficiency should matter more where
+    the spread is narrow, and that is invisible on the left because the
+    volatile tariff dominates the axis.
+    """
+    rows = read("m6_savings.csv")
+    if not rows:
+        return skip("F10", "m6_savings.csv not found")
+    bs = sorted({num(r, "battery_ratio") for r in rows
+                 if math.isfinite(num(r, "battery_ratio")) and num(r, "battery_ratio") > 0})
+    if not bs:
+        return skip("F10", "no non-zero capacity")
+    b = bs[-1]
+    sub = [r for r in rows if num(r, "battery_ratio") == b]
+    regimes = sorted({r.get("price_regime", "") for r in sub if r.get("price_regime")},
+                     key=regime_key)
+    etas = sorted({num(r, "eta") for r in sub if math.isfinite(num(r, "eta"))})
+    if len(etas) < 2 or not regimes:
+        return skip("F10", "fewer than two efficiency levels")
+
+    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.1))
+    for i, reg in enumerate(regimes):
+        ys, los, his = [], [], []
+        for e in etas:
+            v = [num(r, "saving") for r in sub
+                 if r.get("price_regime") == reg and num(r, "eta") == e]
+            m, lo, hi = mean_ci(v)
+            ys.append(m)
+            los.append(m - lo if math.isfinite(lo) else 0.0)
+            his.append(hi - m if math.isfinite(hi) else 0.0)
+        axes[0].errorbar(etas, ys, yerr=[los, his], capsize=2, elinewidth=.8,
+                         label=reg, **style(i))
+        # right panel: relative to this tariff's own baseline efficiency
+        ref = next((y for e, y in zip(etas, ys) if abs(e - 0.95) < 1e-9), None)
+        if ref is None or abs(ref) < 1e-9:
+            continue
+        axes[1].plot(etas, [100.0 * (y - ref) / abs(ref) for y in ys],
+                     label=reg, **style(i))
+
+    axes[0].set_ylabel("saving  (% of naive energy bill)")
+    axes[0].set_title("absolute")
+    axes[1].axhline(0, color=MUTED, lw=.8, ls=":")
+    axes[1].set_ylabel("change vs $\\eta$ = 0.95  (% of that tariff's saving)")
+    axes[1].set_title("relative to each tariff's own baseline")
+    for ax in axes:
+        ax.set_xlabel("one-way efficiency  $\\eta$")
+        ax.set_xticks(etas, [f"{e:g}" for e in etas])
+    fig.tight_layout()
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=len(labels),
+               bbox_to_anchor=(0.5, 0.02))
+    fig.suptitle(f"Efficiency moves a threshold, it does not scale the saving "
+                 f"($b$ = {b:g})", y=1.04, fontsize=10)
+    save(fig, "f10_efficiency")
+
+
 FIGURES = {"F1": f1_capacity, "F2": f2_roi_surface, "F3": f3_machine_grid,
            "F4": f4_volatility, "F5": f5_scaling, "F6": f6_substitution,
-           "F7": f7_frontier, "F8": f8_validation, "F9": f9_replication}
+           "F7": f7_frontier, "F8": f8_validation, "F8B": f8b_scaling,
+           "F9": f9_replication,
+           "F10": f10_efficiency}
 
 
 def main() -> int:

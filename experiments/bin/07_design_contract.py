@@ -99,7 +99,7 @@ def predict(man: list[dict]) -> list[dict]:
         P.append({"block": block, "factors": factors, "predicted": n, "note": note})
 
     n_seeds = {e: len(design.seeds(e)) for e in
-               ("MR", "M0", "M1", "M2", "M3", "M4", "M5")}
+               ("MR", "M0", "M1", "M2", "M3", "M4", "M5", "M6")}
 
     # ---- MR -------------------------------------------------------------
     if design.ENABLED.get("MR"):
@@ -248,6 +248,23 @@ def predict(man: list[dict]) -> list[dict]:
             ("seeds", n_seeds["M5"], "design.seeds('M5')"),
         ], "lambda is baked into the instance file, so it multiplies the SHOP "
            "count rather than appearing as a separate factor")
+
+    # ---- M6 -------------------------------------------------------------
+    # The shop count is CAPPED at design.M6_SHOPS rather than taken from the
+    # pool: efficiency is a solver flag, so the block reuses existing instances
+    # and its size is a deliberate choice, not a consequence of the pool.
+    if design.ENABLED.get("M6"):
+        m6_series = series_names(man, design.M6_TARIFFS)
+        m6_shops = min(design.M6_SHOPS, len(shops_in(man, "core")))
+        add("M6.efficiency", [
+            ("shops", m6_shops,
+             f"min(design.M6_SHOPS = {design.M6_SHOPS}, core pool)"),
+            ("tariff series", len(m6_series), "M6_TARIFFS resolved"),
+            ("efficiencies", len(design.M6_ETAS), "design.M6_ETAS"),
+            ("capacities", len(design.M6_BATTERY_RATIOS), "M6_BATTERY_RATIOS"),
+            ("seeds", n_seeds["M6"], "design.seeds('M6')"),
+        ], "b = 0 is repeated at every efficiency on purpose -- it is the "
+           "falsification control that eta reaches only the battery")
     return P
 
 

@@ -53,7 +53,7 @@ COLUMNS = [
     "size_class", "ei_density_level", "due_tightness_level", "lam",
     "price_name", "price_regime", "tariff_family", "price_market", "price_year",
     "price_label", "synth_spread", "synth_noise", "synth_neg",
-    "machine_profile", "rho", "restart_level", "m1_subdesign", "argv",
+    "machine_profile", "rho", "restart_level", "m1_subdesign", "eta", "argv",
 ]
 
 
@@ -450,6 +450,41 @@ def main() -> int:
                 for s in seeds_for("GA", "M5"):
                     add("M5", r, "GA", ratio, seed=s, extra=baseline_machine,
                         cols=baseline_cols, block="M5.frontier")
+
+    # =====================================================================
+    # M6 — round-trip efficiency: where the arbitrage threshold sits.
+    # =====================================================================
+    # Efficiency is a solver flag, not an instance property, so the same shops
+    # and the same price series are reused across levels and the contrast is
+    # as tightly paired as the design allows: same instance, same seed, same
+    # machine, only eta differs.
+    #
+    # The tariff ladder is crossed IN rather than fixed, because the whole
+    # hypothesis is an interaction (design.py, M6 block): efficiency should
+    # matter more where the price spread is narrow. A block run at one tariff
+    # could not distinguish that from a uniform discount.
+    #
+    # b = 0 is repeated at every eta on purpose -- see the design note. It
+    # costs a quarter of the block and buys a falsification control.
+    if enabled.get("M6"):
+        missing_eff = design.M6_REQUIRED_FLAGS - flags
+        if missing_eff:
+            blocked.append({"experiment": "M6", "instance": "", "method": "GA",
+                            "detail": "efficiency sweep",
+                            "reason": f"solver lacks {sorted(missing_eff)}"})
+        else:
+            pool = by_tariff(core, design.M6_TARIFFS)
+            shops = sorted({r["shop_id"] for r in pool})[:design.M6_SHOPS]
+            rows = [r for r in pool if r["shop_id"] in set(shops)]
+            for r in rows:
+                for eta in design.M6_ETAS:
+                    eff = design.efficiency_args(eta)
+                    for ratio in design.M6_BATTERY_RATIOS:
+                        for s_ in seeds_for("GA", "M6"):
+                            add("M6", r, "GA", ratio, seed=s_,
+                                extra=baseline_machine + eff,
+                                cols={**baseline_cols, "eta": f"{eta:g}"},
+                                tag=f"eta{eta:g}", block="M6.efficiency")
 
     if not runs:
         print("FATAL: the design expanded to zero runs. Check ENABLED, the "

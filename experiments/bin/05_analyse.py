@@ -30,7 +30,7 @@ from config import economics                # noqa: E402
 
 DATA = Path(os.environ.get("RCPSP_EXP_DATA", ROOT / "data"))
 
-V2 = ["MR", "M0", "M1", "M2", "M3", "M4", "M5"]
+V2 = ["MR", "M0", "M1", "M2", "M3", "M4", "M5", "M6"]
 V1 = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E8", "E9"]
 
 
@@ -103,6 +103,9 @@ def main() -> int:
         parts.append(_with_noise(M.m4(rows, out), "M4"))
     if "M5" in want:
         parts.append(_with_noise(M.m5(rows, out), "M5"))
+    if "M6" in want:
+        parts.append(_with_noise(
+            M.m6(rows, out, econ=economics.SENSITIVITY[econ_keys[0]]), "M6"))
 
     # --- campaign v1, kept for the methods paper ---------------------------
     legacy = {"E0": A.e0, "E1": None, "E2": None, "E3": A.e3, "E4": A.e4,
